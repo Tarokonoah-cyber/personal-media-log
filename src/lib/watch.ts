@@ -2,12 +2,12 @@ import { classifyItem } from "./taxonomy";
 import type { ItemInput, ItemStatus, MediaItem, WatchProgress, WatchStatus } from "../types";
 
 export const watchStatuses: Array<{ value: WatchStatus; label: string; legacy: ItemStatus }> = [
-  { value: "plan_to_watch", label: "Plan to Watch", legacy: "raw" },
-  { value: "watching", label: "Watching", legacy: "partial" },
-  { value: "completed", label: "Completed", legacy: "complete" },
-  { value: "paused", label: "Paused", legacy: "partial" },
-  { value: "dropped", label: "Dropped", legacy: "archived" },
-  { value: "rewatching", label: "Rewatching", legacy: "partial" }
+  { value: "plan_to_watch", label: "待觀看", legacy: "raw" },
+  { value: "watching", label: "觀看中", legacy: "partial" },
+  { value: "completed", label: "已完成", legacy: "complete" },
+  { value: "paused", label: "暫停", legacy: "partial" },
+  { value: "dropped", label: "已放棄", legacy: "archived" },
+  { value: "rewatching", label: "重看中", legacy: "partial" }
 ];
 
 export function getWatchProgress(item: MediaItem): WatchProgress {
@@ -40,8 +40,7 @@ export function updateWatchProgress(item: MediaItem, patch: WatchProgress): Part
 }
 
 export function isSeriesLike(item: MediaItem) {
-  const type = classifyItem(item).type;
-  return type === "Series";
+  return classifyItem(item).type === "影集";
 }
 
 export function progressLabel(item: MediaItem) {
@@ -51,8 +50,8 @@ export function progressLabel(item: MediaItem) {
     ? `S${progress.current_season || 1} E${progress.current_episode || 0}`
     : "";
   const totals = [
-    progress.total_seasons ? `${progress.total_seasons} seasons` : "",
-    progress.total_episodes ? `${progress.total_episodes} episodes` : ""
+    progress.total_seasons ? `共 ${progress.total_seasons} 季` : "",
+    progress.total_episodes ? `共 ${progress.total_episodes} 集` : ""
   ].filter(Boolean).join(" · ");
   return [current, totals].filter(Boolean).join(" / ");
 }

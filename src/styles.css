@@ -159,7 +159,7 @@ h2 {
 .app-shell {
   width: 100%;
   margin: 0;
-  padding: 12px 14px 86px;
+  padding: 12px 14px 28px;
 }
 
 .topbar,
@@ -177,22 +177,19 @@ h2 {
 
 .topbar {
   display: grid;
-  grid-template-columns: minmax(170px, auto) minmax(280px, 1fr) auto;
-  align-items: start;
-  margin-bottom: 6px;
-}
-
-.title-block {
-  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  margin-bottom: 10px;
 }
 
 .header-tools {
   min-width: 0;
+  grid-column: 1 / 3;
   display: grid;
-  grid-template-columns: minmax(220px, 420px) minmax(160px, 260px) auto;
+  grid-template-columns: minmax(220px, 420px) minmax(160px, 260px);
   gap: 8px;
   align-items: center;
-  justify-content: end;
+  justify-content: start;
 }
 
 .eyebrow {
@@ -324,7 +321,7 @@ h2 {
 
 .database-sidebar.mobile-open .sidebar-group {
   display: grid;
-  gap: 3px;
+  gap: 2px;
 }
 
 .database-sidebar.mobile-open .sidebar-group p {
@@ -347,17 +344,6 @@ h2 {
   background: var(--hover);
 }
 
-.database-sidebar.mobile-open .tree-children {
-  display: grid;
-  gap: 1px;
-  margin-left: 18px;
-}
-
-.database-sidebar.mobile-open .tree-children button {
-  min-height: 27px;
-  font-size: 12px;
-}
-
 .sidebar-scrim.open {
   display: block;
   position: fixed;
@@ -368,6 +354,50 @@ h2 {
 
 .database-main {
   min-width: 0;
+}
+
+.sidebar-brand {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.sidebar-brand p {
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.sidebar-brand strong {
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.sidebar-primary button {
+  min-height: 34px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.sidebar-secondary button {
+  min-height: 28px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.sidebar-tags button,
+.sidebar-tools button {
+  min-height: 27px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sidebar-more {
+  color: var(--faint) !important;
+}
+
+.tag-prefix {
+  color: var(--faint);
 }
 
 .database-toolbar {
@@ -722,16 +752,7 @@ h2 {
 
 @media (max-width: 819px) {
   .topbar {
-    grid-template-columns: 1fr auto;
-  }
-
-  .title-block {
-    grid-column: 1 / 2;
-  }
-
-  .topbar > .icon-button {
-    grid-column: 2 / 3;
-    grid-row: 1;
+    grid-template-columns: auto 1fr auto;
   }
 
   .header-tools {
@@ -746,7 +767,7 @@ h2 {
   }
 
   .mobile-sidebar-button {
-    grid-column: 2;
+    grid-column: 1;
     grid-row: 1;
   }
 }
@@ -951,45 +972,16 @@ h2 {
   padding-top: 10px;
 }
 
-.utility-tabs {
-  display: none;
-}
-
-.bottom-tabs {
-  position: fixed;
-  left: 10px;
-  right: 10px;
-  bottom: 10px;
-  z-index: 40;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  padding: 5px;
-  border-radius: 10px;
-  background: var(--panel);
-  border: 1px solid var(--line-strong);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.24);
-}
-
-.bottom-tabs button {
-  min-width: 0;
-  min-height: 46px;
-  display: grid;
-  gap: 2px;
-  padding: 4px 0;
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.bottom-tabs .active {
-  color: var(--text);
-  background: var(--hover);
-}
-
 .stats-grid,
 .data-grid {
   display: grid;
   gap: 12px;
+}
+
+.settings-panel {
+  display: grid;
+  gap: 14px;
+  max-width: 560px;
 }
 
 .stats-grid section,
@@ -1138,10 +1130,10 @@ h2 {
 
   .sidebar-top {
     display: flex;
-    align-items: center;
+    align-items: start;
     justify-content: space-between;
     gap: 6px;
-    min-height: 30px;
+    min-height: 58px;
     color: var(--muted);
     font-size: 12px;
   }
@@ -1156,14 +1148,14 @@ h2 {
 
   .sidebar-group {
     display: grid;
-    gap: 3px;
+    gap: 2px;
   }
 
   .sidebar-group p {
     display: flex;
     align-items: center;
     gap: 5px;
-    margin: 8px 0 4px;
+    margin: 8px 0 3px;
     color: var(--faint);
     font-size: 12px;
   }
@@ -1183,6 +1175,46 @@ h2 {
     width: 100%;
   }
 
+  .sidebar-primary {
+    gap: 3px;
+  }
+
+  .sidebar-primary button {
+    min-height: 34px;
+    font-size: 14px;
+  }
+
+  .sidebar-secondary {
+    gap: 1px;
+  }
+
+  .sidebar-secondary button {
+    min-height: 28px;
+    color: var(--muted);
+  }
+
+  .sidebar-secondary button svg,
+  .sidebar-tags button svg,
+  .sidebar-tools button svg {
+    color: var(--faint);
+  }
+
+  .sidebar-tags {
+    gap: 1px;
+  }
+
+  .sidebar-tags button,
+  .sidebar-tools button {
+    min-height: 27px;
+    font-size: 12px;
+  }
+
+  .sidebar-tools {
+    margin-top: auto;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+  }
+
   .database-sidebar.collapsed .sidebar-group button {
     width: 32px;
     padding: 0;
@@ -1194,69 +1226,9 @@ h2 {
     background: var(--hover);
   }
 
-  .dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 999px;
-    background: var(--faint);
-  }
-
-  .tree-node {
-    display: grid;
-    gap: 2px;
-  }
-
-  .tree-node > button {
-    position: relative;
-  }
-
-  .tree-chevron {
-    margin-left: auto;
-    color: var(--faint);
-    transform: rotate(-90deg);
-    transition: transform 120ms ease;
-  }
-
-  .tree-chevron.open {
-    transform: rotate(0deg);
-  }
-
-  .tree-children {
-    display: grid;
-    gap: 1px;
-    margin-left: 18px;
-  }
-
-  .tree-children button {
-    font-size: 12px;
-    min-height: 26px;
-  }
-
-  .tree-branch {
-    width: 7px;
-    height: 1px;
-    background: var(--faint);
-  }
-
   .mobile-view-switch,
-  .bottom-tabs,
   .mobile-sidebar-button {
     display: none;
-  }
-
-  .utility-tabs {
-    display: flex;
-    gap: 6px;
-    margin: 14px 0 12px;
-  }
-
-  .utility-tabs button {
-    color: var(--muted);
-  }
-
-  .utility-tabs .active {
-    color: var(--text);
-    background: var(--hover);
   }
 
   .filter-sheet {

@@ -25,11 +25,11 @@ export function MetadataLookupModal({
 
   return (
     <div className="metadata-backdrop">
-      <section className="metadata-modal" role="dialog" aria-modal="true" aria-label="補資料候選結果">
+      <section className="metadata-modal" role="dialog" aria-modal="true" aria-label="補資料候選清單">
         <header className="metadata-head">
           <div>
-            <p className="eyebrow">TMDb lookup</p>
-            <h2>補資料：{item.official_title || item.raw_title}</h2>
+            <p className="eyebrow">TMDb 補資料</p>
+            <h2>{item.official_title || item.raw_title}</h2>
           </div>
           <button className="row-icon" onClick={onClose} aria-label="關閉"><X size={17} /></button>
         </header>
@@ -39,16 +39,16 @@ export function MetadataLookupModal({
         </form>
         {error && <div className="notice danger">{error}</div>}
         {loading && <div className="empty">正在搜尋 TMDb...</div>}
-        {!loading && candidates.length === 0 && !error && <div className="empty">找不到候選結果，仍可保留手動輸入流程。</div>}
+        {!loading && candidates.length === 0 && !error && <div className="empty">沒有找到候選結果，可以保留原本資料手動整理。</div>}
         <div className="candidate-list">
           {candidates.map((candidate) => (
             <button className="candidate-row" key={`${candidate.media_type}-${candidate.tmdb_id}`} onClick={() => onApply(candidate)}>
-              {candidate.poster_url ? <img src={candidate.poster_url} alt="" /> : <span className="poster-placeholder">No poster</span>}
+              {candidate.poster_url ? <img src={candidate.poster_url} alt="" /> : <span className="poster-placeholder">無海報</span>}
               <span className="candidate-main">
                 <strong>{candidate.title}</strong>
                 <em>{candidate.original_title || "-"}</em>
                 <span className="candidate-meta">
-                  <b>{candidate.media_type}</b>
+                  <b>{candidate.media_type === "tv" ? "影集" : "電影"}</b>
                   {candidate.year && <span>{candidate.year}</span>}
                   {candidate.country.length > 0 && <span>{candidate.country.join(", ")}</span>}
                 </span>

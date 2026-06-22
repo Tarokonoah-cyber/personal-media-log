@@ -22,7 +22,7 @@ export function StatsPanel() {
       watchedTo: "",
       page: 1,
       pageSize: 100
-    }).then((result) => setItems(result.items)).catch((err) => setError(err instanceof Error ? err.message : "Failed to load stats"));
+    }).then((result) => setItems(result.items)).catch((err) => setError(err instanceof Error ? err.message : "讀取統計失敗"));
   }, []);
 
   const stats = useMemo(() => {
@@ -45,20 +45,20 @@ export function StatsPanel() {
   }, [items]);
 
   if (error) return <div className="notice danger">{error}</div>;
-  if (items.length === 0) return <div className="empty">No records yet.</div>;
+  if (items.length === 0) return <div className="empty">還沒有紀錄。</div>;
 
   return (
     <div className="stats-grid">
-      <Metric label="Total" value={stats.total} />
-      <Metric label="Plan to Watch" value={stats.plan} />
-      <Metric label="Watching" value={stats.watching} />
-      <Metric label="Completed" value={stats.completed} />
-      <Metric label="Added This Month" value={stats.monthAdded} />
-      <Metric label="Average Rating" value={stats.average} />
-      <Metric label="Watching Series" value={stats.watchingSeries} />
-      <Panel title="High Rated Top 10" rows={stats.top.map((item) => `${item.rating ?? "-"} · ${item.official_title || item.raw_title}`)} />
-      <Panel title="By Type" rows={Object.entries(stats.typeCounts).map(([name, count]) => `${name} · ${count}`)} />
-      <Panel title="By Watch Status" rows={Object.entries(stats.statusCounts).map(([name, count]) => `${name} · ${count}`)} />
+      <Metric label="總數" value={stats.total} />
+      <Metric label="待觀看" value={stats.plan} />
+      <Metric label="觀看中" value={stats.watching} />
+      <Metric label="已完成" value={stats.completed} />
+      <Metric label="本月新增" value={stats.monthAdded} />
+      <Metric label="平均評分" value={stats.average} />
+      <Metric label="追劇中" value={stats.watchingSeries} />
+      <Panel title="高分 Top 10" rows={stats.top.map((item) => `${item.rating ?? "-"} · ${item.official_title || item.raw_title}`)} />
+      <Panel title="各類型數量" rows={Object.entries(stats.typeCounts).map(([name, count]) => `${name} · ${count}`)} />
+      <Panel title="各觀看狀態數量" rows={Object.entries(stats.statusCounts).map(([name, count]) => `${name} · ${count}`)} />
     </div>
   );
 }
@@ -73,7 +73,7 @@ function Panel({ title, rows }: { title: string; rows: string[] }) {
 
 function countBy(items: MediaItem[], fn: (item: MediaItem) => string) {
   return items.reduce<Record<string, number>>((acc, item) => {
-    const key = fn(item) || "Other";
+    const key = fn(item) || "其他";
     acc[key] = (acc[key] || 0) + 1;
     return acc;
   }, {});

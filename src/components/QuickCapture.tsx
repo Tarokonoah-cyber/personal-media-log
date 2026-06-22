@@ -27,7 +27,7 @@ export function QuickCapture({
         onKeyDown={handleKeyDown}
         placeholder="快速新增：標題 4.5 一句心得 #標籤"
       />
-      <button className="primary compact-add" disabled={loading || !value.trim()} onClick={onSubmit} title="新增到 Inbox">
+      <button className="primary compact-add" disabled={loading || !value.trim()} onClick={onSubmit} title="新增到待觀看">
         <Plus size={16} />
         新增
       </button>

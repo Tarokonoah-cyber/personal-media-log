@@ -2,7 +2,7 @@ import { Sparkles, Star, Trash2 } from "lucide-react";
 import { MouseEvent } from "react";
 import { displayDate } from "../lib/date";
 import { classifyItem, libraryTree } from "../lib/taxonomy";
-import { displayDateForItem, getWatchProgress, getWatchStatus, isSeriesLike, progressLabel, updateWatchProgress, watchStatusLabel, watchStatuses } from "../lib/watch";
+import { displayDateForItem, getWatchStatus, isSeriesLike, progressLabel, updateWatchProgress, watchStatusLabel, watchStatuses } from "../lib/watch";
 import type { ItemInput, MediaItem, WatchStatus } from "../types";
 
 const typeOptions = libraryTree.map((entry) => entry.label);
@@ -11,7 +11,7 @@ export function ItemList({
   items,
   view,
   loading,
-  emptyMessage = "No records yet. Add one quickly from the top bar.",
+  emptyMessage = "還沒有紀錄，先從上方快速新增一筆就好。",
   onSelect,
   onToggleFavorite,
   onDelete,
@@ -28,7 +28,7 @@ export function ItemList({
   onMetadata?: (item: MediaItem) => void;
   onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
 }) {
-  if (loading) return <div className="empty">Loading...</div>;
+  if (loading) return <div className="empty">讀取中...</div>;
   if (items.length === 0) return <div className="empty">{emptyMessage}</div>;
   if (view === "poster") return <PosterWall items={items} onSelect={onSelect} />;
 
@@ -39,18 +39,18 @@ export function ItemList({
           <table className="database-table">
             <thead>
               <tr>
-                <th className="title-col">Title</th>
-                <th>Type</th>
-                <th>Watch Status</th>
-                <th>Progress</th>
-                <th>Rating</th>
-                <th>Category / Region</th>
-                <th>Platform</th>
-                <th>Tags</th>
-                <th>Year</th>
-                <th>Date</th>
-                <th>Favorite</th>
-                <th>Actions</th>
+                <th className="title-col">標題</th>
+                <th>類型</th>
+                <th>觀看狀態</th>
+                <th>進度</th>
+                <th>評分</th>
+                <th>分類 / 地區</th>
+                <th>平台</th>
+                <th>標籤</th>
+                <th>年份</th>
+                <th>日期</th>
+                <th>收藏</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -76,7 +76,7 @@ export function ItemList({
                     <td className="muted-cell">{item.release_year || "-"}</td>
                     <td className="muted-cell">{displayDate(displayDateForItem(item))}</td>
                     <td>
-                      <button className={item.favorite ? "row-icon active" : "row-icon"} onClick={(event) => action(event, () => onToggleFavorite?.(item))} title="Toggle favorite">
+                      <button className={item.favorite ? "row-icon active" : "row-icon"} onClick={(event) => action(event, () => onToggleFavorite?.(item))} title="切換收藏">
                         <Star size={15} fill={item.favorite ? "currentColor" : "none"} />
                       </button>
                     </td>
@@ -108,7 +108,7 @@ export function ItemList({
             </div>
             <div className="compact-actions">
               <RatingStars item={item} onQuickUpdate={onQuickUpdate} compact />
-              <button className="row-icon" onClick={(event) => action(event, () => onMetadata?.(item))} title="Lookup metadata">
+              <button className="row-icon" onClick={(event) => action(event, () => onMetadata?.(item))} title="補資料">
                 <Sparkles size={15} />
               </button>
             </div>
@@ -121,7 +121,7 @@ export function ItemList({
 
 function PosterWall({ items, onSelect }: { items: MediaItem[]; onSelect: (item: MediaItem) => void }) {
   const posterItems = items.filter((item) => item.cover_url);
-  if (posterItems.length === 0) return <div className="empty">No posters yet. Use TMDb lookup to add cover URLs.</div>;
+  if (posterItems.length === 0) return <div className="empty">目前沒有海報。可以用「補資料」從 TMDb 補上封面連結。</div>;
   return (
     <div className="poster-wall">
       {posterItems.map((item) => (
@@ -130,7 +130,7 @@ function PosterWall({ items, onSelect }: { items: MediaItem[]; onSelect: (item: 
           <span>
             <strong>{item.official_title || item.raw_title}</strong>
             <em>{item.release_year || "-"} · {watchStatusLabel(getWatchStatus(item))}</em>
-            <em>{item.rating ? `${item.rating}/5` : "Unrated"}{isSeriesLike(item) && progressLabel(item) ? ` · ${progressLabel(item)}` : ""}</em>
+            <em>{item.rating ? `${item.rating}/5` : "尚未評分"}{isSeriesLike(item) && progressLabel(item) ? ` · ${progressLabel(item)}` : ""}</em>
           </span>
         </button>
       ))}
@@ -160,7 +160,7 @@ function RatingStars({ item, compact, onQuickUpdate }: { item: MediaItem; compac
           key={rating}
           className={value >= rating ? "filled" : ""}
           onClick={(event) => action(event, () => onQuickUpdate?.(item, { rating }))}
-          title={`${rating} stars`}
+          title={`${rating} 星`}
         >
           <Star size={compact ? 13 : 16} fill={value >= rating ? "currentColor" : "none"} />
         </button>
@@ -172,12 +172,12 @@ function RatingStars({ item, compact, onQuickUpdate }: { item: MediaItem; compac
 function RowActions({ item, onDelete, onMetadata }: { item: MediaItem; onDelete?: (id: string) => Promise<void>; onMetadata?: (item: MediaItem) => void }) {
   return (
     <div className="row-actions">
-      <button className="row-icon danger-button" onClick={(event) => action(event, () => onDelete?.(item.id))} title="Delete">
+      <button className="row-icon danger-button" onClick={(event) => action(event, () => onDelete?.(item.id))} title="刪除">
         <Trash2 size={15} />
       </button>
-      <button className="row-action" onClick={(event) => action(event, () => onMetadata?.(item))} title="Lookup metadata">
+      <button className="row-action" onClick={(event) => action(event, () => onMetadata?.(item))} title="補資料">
         <Sparkles size={14} />
-        Lookup
+        補資料
       </button>
     </div>
   );

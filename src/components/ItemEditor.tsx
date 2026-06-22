@@ -17,14 +17,14 @@ export function ItemEditor({ item, onClose, onSave, onDelete }: { item: MediaIte
     try {
       await onSave(toInput(form));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save");
+      setError(err instanceof Error ? err.message : "儲存失敗");
     } finally {
       setSaving(false);
     }
   }
 
   async function remove() {
-    if (!window.confirm("Delete this record?")) return;
+    if (!window.confirm("確定要刪除這筆紀錄嗎？")) return;
     setSaving(true);
     await onDelete(item.id);
   }
@@ -34,81 +34,81 @@ export function ItemEditor({ item, onClose, onSave, onDelete }: { item: MediaIte
       <aside className="drawer">
         <header className="drawer-head">
           <div>
-            <p className="eyebrow">Edit item</p>
+            <p className="eyebrow">編輯紀錄</p>
             <h2>{item.official_title || item.raw_title}</h2>
           </div>
-          <button className="icon-button" onClick={onClose}><X size={18} /></button>
+          <button className="icon-button" onClick={onClose} aria-label="關閉"><X size={18} /></button>
         </header>
         {error && <div className="notice danger">{error}</div>}
 
         <div className="form-grid">
           <label className="wide">
-            Watch Status
+            觀看狀態
             <select value={form.watch_status} onChange={(event) => setForm({ ...form, watch_status: event.target.value as WatchStatus })}>
               {watchStatuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
             </select>
           </label>
 
-          <Field label="Title" value={form.raw_title} onChange={(value) => setForm({ ...form, raw_title: value })} required />
-          <Field label="Official Title" value={form.official_title} onChange={(value) => setForm({ ...form, official_title: value })} />
-          <Field label="Original Title" value={form.original_title} onChange={(value) => setForm({ ...form, original_title: value })} />
-          <Field label="Code" value={form.code} onChange={(value) => setForm({ ...form, code: value })} />
+          <Field label="原始標題" value={form.raw_title} onChange={(value) => setForm({ ...form, raw_title: value })} required />
+          <Field label="正式標題" value={form.official_title} onChange={(value) => setForm({ ...form, official_title: value })} />
+          <Field label="原文標題" value={form.original_title} onChange={(value) => setForm({ ...form, original_title: value })} />
+          <Field label="代碼" value={form.code} onChange={(value) => setForm({ ...form, code: value })} />
 
           <label>
-            Type
+            類型
             <select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}>
               {libraryTree.map((entry) => <option key={entry.label} value={entry.label}>{entry.label}</option>)}
             </select>
           </label>
-          <Field label="Category / Region" value={form.category} onChange={(value) => setForm({ ...form, category: value })} />
-          <Field label="Platform" value={form.platform} onChange={(value) => setForm({ ...form, platform: value })} />
-          <Field label="Year" value={form.release_year} onChange={(value) => setForm({ ...form, release_year: value })} inputMode="numeric" />
+          <Field label="分類 / 地區" value={form.category} onChange={(value) => setForm({ ...form, category: value })} />
+          <Field label="平台" value={form.platform} onChange={(value) => setForm({ ...form, platform: value })} />
+          <Field label="年份" value={form.release_year} onChange={(value) => setForm({ ...form, release_year: value })} inputMode="numeric" />
 
-          <Field label="Planned At" value={form.planned_at} onChange={(value) => setForm({ ...form, planned_at: value })} type="date" />
-          <Field label="Started At" value={form.started_at} onChange={(value) => setForm({ ...form, started_at: value })} type="date" />
-          <Field label="Completed At" value={form.completed_at} onChange={(value) => setForm({ ...form, completed_at: value })} type="date" />
-          <Field label="Record Date" value={form.watched_at} onChange={(value) => setForm({ ...form, watched_at: value })} type="date" />
+          <Field label="預計看" value={form.planned_at} onChange={(value) => setForm({ ...form, planned_at: value })} type="date" />
+          <Field label="開始看" value={form.started_at} onChange={(value) => setForm({ ...form, started_at: value })} type="date" />
+          <Field label="看完" value={form.completed_at} onChange={(value) => setForm({ ...form, completed_at: value })} type="date" />
+          <Field label="紀錄日期" value={form.watched_at} onChange={(value) => setForm({ ...form, watched_at: value })} type="date" />
 
           {seriesLike && (
             <section className="editor-section wide">
-              <h3>Progress</h3>
+              <h3>追劇進度</h3>
               <div className="form-grid nested">
-                <Field label="Current Season" value={form.current_season} onChange={(value) => setForm({ ...form, current_season: value })} inputMode="numeric" />
-                <Field label="Current Episode" value={form.current_episode} onChange={(value) => setForm({ ...form, current_episode: value })} inputMode="numeric" />
-                <Field label="Total Seasons" value={form.total_seasons} onChange={(value) => setForm({ ...form, total_seasons: value })} inputMode="numeric" />
-                <Field label="Total Episodes" value={form.total_episodes} onChange={(value) => setForm({ ...form, total_episodes: value })} inputMode="numeric" />
-                <Field label="Episode Runtime" value={form.episode_runtime} onChange={(value) => setForm({ ...form, episode_runtime: value })} inputMode="numeric" />
-                <Field label="Progress Note" value={form.progress_note} onChange={(value) => setForm({ ...form, progress_note: value })} />
+                <Field label="目前季數" value={form.current_season} onChange={(value) => setForm({ ...form, current_season: value })} inputMode="numeric" />
+                <Field label="目前集數" value={form.current_episode} onChange={(value) => setForm({ ...form, current_episode: value })} inputMode="numeric" />
+                <Field label="總季數" value={form.total_seasons} onChange={(value) => setForm({ ...form, total_seasons: value })} inputMode="numeric" />
+                <Field label="總集數" value={form.total_episodes} onChange={(value) => setForm({ ...form, total_episodes: value })} inputMode="numeric" />
+                <Field label="單集分鐘" value={form.episode_runtime} onChange={(value) => setForm({ ...form, episode_runtime: value })} inputMode="numeric" />
+                <Field label="進度備註" value={form.progress_note} onChange={(value) => setForm({ ...form, progress_note: value })} />
               </div>
             </section>
           )}
 
           <section className="editor-section wide">
-            <h3>Thoughts</h3>
+            <h3>觀看心得</h3>
             <div className="form-grid nested">
-              <Field label="Rating" value={form.rating} onChange={(value) => setForm({ ...form, rating: value })} inputMode="decimal" />
-              <Field label="Rewatch Score" value={form.rewatch_score} onChange={(value) => setForm({ ...form, rewatch_score: value })} inputMode="decimal" />
-              <label className="check"><input type="checkbox" checked={form.favorite} onChange={(event) => setForm({ ...form, favorite: event.target.checked })} />Favorite</label>
-              <Field label="Tags" value={form.tags} onChange={(value) => setForm({ ...form, tags: value })} />
-              <label className="wide">Quick Note<textarea value={form.quick_note} onChange={(event) => setForm({ ...form, quick_note: event.target.value })} rows={3} /></label>
-              <label className="wide">Long Note<textarea value={form.long_note} onChange={(event) => setForm({ ...form, long_note: event.target.value })} rows={6} /></label>
+              <Field label="評分" value={form.rating} onChange={(value) => setForm({ ...form, rating: value })} inputMode="decimal" />
+              <Field label="重看分數" value={form.rewatch_score} onChange={(value) => setForm({ ...form, rewatch_score: value })} inputMode="decimal" />
+              <label className="check"><input type="checkbox" checked={form.favorite} onChange={(event) => setForm({ ...form, favorite: event.target.checked })} />收藏</label>
+              <Field label="標籤" value={form.tags} onChange={(value) => setForm({ ...form, tags: value })} />
+              <label className="wide">快速筆記<textarea value={form.quick_note} onChange={(event) => setForm({ ...form, quick_note: event.target.value })} rows={3} /></label>
+              <label className="wide">長筆記<textarea value={form.long_note} onChange={(event) => setForm({ ...form, long_note: event.target.value })} rows={6} /></label>
             </div>
           </section>
 
-          <Field label="Source URL" value={form.source_url} onChange={(value) => setForm({ ...form, source_url: value })} />
-          <Field label="Cover URL" value={form.cover_url} onChange={(value) => setForm({ ...form, cover_url: value })} />
-          <Field label="People" value={form.people} onChange={(value) => setForm({ ...form, people: value })} />
-          <Field label="Collections" value={form.collections} onChange={(value) => setForm({ ...form, collections: value })} />
+          <Field label="來源網址" value={form.source_url} onChange={(value) => setForm({ ...form, source_url: value })} />
+          <Field label="封面網址" value={form.cover_url} onChange={(value) => setForm({ ...form, cover_url: value })} />
+          <Field label="人物" value={form.people} onChange={(value) => setForm({ ...form, people: value })} />
+          <Field label="清單" value={form.collections} onChange={(value) => setForm({ ...form, collections: value })} />
 
           <section className="editor-section wide">
-            <button type="button" onClick={() => setMetadataOpen((open) => !open)}>{metadataOpen ? "Hide" : "Show"} TMDb metadata</button>
+            <button type="button" onClick={() => setMetadataOpen((open) => !open)}>{metadataOpen ? "收合" : "展開"} TMDb 原始資料</button>
             {metadataOpen && <textarea value={form.metadata_json} onChange={(event) => setForm({ ...form, metadata_json: event.target.value })} rows={8} />}
           </section>
         </div>
 
         <footer className="drawer-actions">
-          <button className="danger-button" onClick={remove} disabled={saving}><Trash2 size={16} />Delete</button>
-          <button className="primary" onClick={submit} disabled={saving || !form.raw_title.trim()}><Save size={16} />Save</button>
+          <button className="danger-button" onClick={remove} disabled={saving}><Trash2 size={16} />刪除</button>
+          <button className="primary" onClick={submit} disabled={saving || !form.raw_title.trim()}><Save size={16} />儲存</button>
         </footer>
       </aside>
     </div>

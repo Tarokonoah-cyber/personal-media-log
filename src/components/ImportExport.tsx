@@ -45,19 +45,20 @@ export function ImportExport({ onImported }: { onImported: () => Promise<void> }
       rows = mapRows(parseCsvLocally(sourceContent), mapping);
     }
     const result = await commitImport(rows, sourceType, sourceName);
-    setMessage(`匯入 ${result.imported} 筆，略過 ${result.skipped} 筆`);
+    setMessage(`已匯入 ${result.imported} 筆，略過 ${result.skipped} 筆`);
     await onImported();
   }
 
   async function backupNow() {
     const result = await createBackup();
-    setMessage(`備份完成：${result.itemCount} 筆`);
+    setMessage(`備份已建立：${result.itemCount} 筆`);
     await refreshBackups();
   }
 
   async function restore(id: string) {
+    if (!window.confirm("確定要從這份備份還原嗎？")) return;
     const result = await restoreBackup(id);
-    setMessage(`還原匯入 ${result.imported} 筆，略過 ${result.skipped} 筆`);
+    setMessage(`已還原 ${result.imported} 筆，略過 ${result.skipped} 筆`);
     await onImported();
   }
 
@@ -66,9 +67,10 @@ export function ImportExport({ onImported }: { onImported: () => Promise<void> }
       {message && <div className="notice">{message}</div>}
       <section>
         <h2>匯出</h2>
+        <p className="muted-cell">完整備份建議使用 JSON，才能保留 TMDb metadata 與追劇進度。</p>
         <div className="button-row">
-          <a className="button primary" href={exportJsonUrl()} download><Download size={16} />JSON</a>
-          <a className="button" href={exportCsvUrl()} download><Download size={16} />CSV</a>
+          <a className="button primary" href={exportJsonUrl()} download><Download size={16} />匯出 JSON</a>
+          <a className="button" href={exportCsvUrl()} download><Download size={16} />匯出 CSV</a>
         </div>
       </section>
 
@@ -76,6 +78,7 @@ export function ImportExport({ onImported }: { onImported: () => Promise<void> }
         <h2>匯入</h2>
         <label className="file-input">
           <Upload size={16} />
+          選擇 CSV 或 JSON
           <input type="file" accept=".csv,.json,application/json,text/csv" onChange={selectFile} />
         </label>
         {preview && (
@@ -101,14 +104,14 @@ export function ImportExport({ onImported }: { onImported: () => Promise<void> }
                 </tbody>
               </table>
             </div>
-            <button className="primary" onClick={submitImport}>匯入</button>
+            <button className="primary" onClick={submitImport}>開始匯入</button>
           </div>
         )}
       </section>
 
       <section>
-        <h2>備份</h2>
-        <button className="primary" onClick={backupNow}><RotateCcw size={16} />手動備份</button>
+        <h2>R2 備份</h2>
+        <button className="primary" onClick={backupNow}><RotateCcw size={16} />立即備份</button>
         <div className="backup-list">
           {backups.map((backup) => (
             <div key={backup.id}>
@@ -116,6 +119,7 @@ export function ImportExport({ onImported }: { onImported: () => Promise<void> }
               <button onClick={() => restore(backup.id)}>還原</button>
             </div>
           ))}
+          {backups.length === 0 && <p className="muted-cell">尚無備份。</p>}
         </div>
       </section>
     </div>

@@ -1,19 +1,12 @@
 import type { MediaItem } from "../types";
 
 export const libraryTree = [
-  {
-    id: "movie",
-    label: "Movie",
-    children: ["Korea", "China", "Japan", "US", "Europe", "Taiwan", "Hong Kong", "Other"]
-  },
-  {
-    id: "series",
-    label: "Series",
-    children: ["K-Drama", "C-Drama", "J-Drama", "US Series", "TW Drama", "Anime Series", "Variety", "Other"]
-  },
-  { id: "anime", label: "Anime", children: [] },
+  { id: "movie", label: "電影", children: [] },
+  { id: "series", label: "影集", children: [] },
+  { id: "anime", label: "動畫", children: [] },
   { id: "youtube", label: "YouTube", children: [] },
-  { id: "other", label: "Other", children: [] }
+  { id: "adult", label: "成人", children: [] },
+  { id: "other", label: "其他", children: [] }
 ] as const;
 
 export function classifyItem(item: MediaItem) {
@@ -21,43 +14,43 @@ export function classifyItem(item: MediaItem) {
   const category = normalize(item.category || "");
 
   if (includesAny(haystack, ["adult", "nsfw", "jav", "av ", "18+", "r18", "xxx", "adult content", "成人"])) {
-    return { type: "Other", category: "" };
+    return { type: "成人", category: "" };
   }
   if (includesAny(haystack, ["youtube", "yt"])) return { type: "YouTube", category: "" };
-  if (includesAny(haystack, ["anime", "animation", "anime series", "動畫"])) {
-    if (includesAny(haystack, ["series", "tv", "season", "劇集"])) return { type: "Series", category: "Anime Series" };
-    return { type: "Anime", category: "" };
+  if (includesAny(haystack, ["anime", "animation", "anime series", "動畫", "動漫"])) {
+    if (includesAny(haystack, ["series", "tv", "season", "影集", "劇"])) return { type: "影集", category: "動畫影集" };
+    return { type: "動畫", category: "" };
   }
-  if (includesAny(haystack, ["series", "drama", "tv show", "k-drama", "c-drama", "j-drama", "variety", "韓劇", "陸劇", "日劇", "台劇", "美劇", "綜藝"])) {
-    return { type: "Series", category: seriesCategory(haystack || category) };
+  if (includesAny(haystack, ["series", "tv", "tv show", "drama", "k-drama", "c-drama", "j-drama", "variety", "影集", "劇集", "韓劇", "陸劇", "日劇", "台劇", "美劇", "綜藝"])) {
+    return { type: "影集", category: seriesCategory(haystack || category) };
   }
   if (includesAny(haystack, ["movie", "film", "cinema", "電影"])) {
-    return { type: "Movie", category: movieCategory(haystack || category) };
+    return { type: "電影", category: movieCategory(haystack || category) };
   }
 
-  return { type: "Other", category: "" };
+  return { type: "其他", category: "" };
 }
 
 function movieCategory(value: string) {
-  if (includesAny(value, ["korea", "korean", "韓"])) return "Korea";
-  if (includesAny(value, ["china", "chinese", "陸", "中"])) return "China";
-  if (includesAny(value, ["japan", "japanese", "日"])) return "Japan";
-  if (includesAny(value, ["us", "usa", "america", "美"])) return "US";
-  if (includesAny(value, ["europe", "euro", "歐"])) return "Europe";
-  if (includesAny(value, ["taiwan", "tw", "台", "臺"])) return "Taiwan";
-  if (includesAny(value, ["hong kong", "hk", "港"])) return "Hong Kong";
-  return "Other";
+  if (includesAny(value, ["korea", "korean", "韓國", "韓"])) return "韓國";
+  if (includesAny(value, ["china", "chinese", "中國", "大陸", "陸"])) return "中國";
+  if (includesAny(value, ["japan", "japanese", "日本", "日"])) return "日本";
+  if (includesAny(value, ["us", "usa", "america", "美國", "美"])) return "美國";
+  if (includesAny(value, ["europe", "euro", "歐洲", "歐"])) return "歐洲";
+  if (includesAny(value, ["taiwan", "tw", "台灣", "臺灣", "台"])) return "台灣";
+  if (includesAny(value, ["hong kong", "hk", "香港", "港"])) return "香港";
+  return "其他";
 }
 
 function seriesCategory(value: string) {
-  if (includesAny(value, ["k-drama", "korea", "korean", "韓劇", "韓"])) return "K-Drama";
-  if (includesAny(value, ["c-drama", "china", "chinese", "陸劇", "陸"])) return "C-Drama";
-  if (includesAny(value, ["j-drama", "japan", "japanese", "日劇", "日"])) return "J-Drama";
-  if (includesAny(value, ["us series", "usa", "america", "美劇", "美"])) return "US Series";
-  if (includesAny(value, ["tw drama", "taiwan", "台劇", "臺劇", "台", "臺"])) return "TW Drama";
-  if (includesAny(value, ["anime series", "anime", "動畫"])) return "Anime Series";
-  if (includesAny(value, ["variety", "綜藝"])) return "Variety";
-  return "Other";
+  if (includesAny(value, ["k-drama", "korea", "korean", "韓劇", "韓國"])) return "韓劇";
+  if (includesAny(value, ["c-drama", "china", "chinese", "陸劇", "中國", "大陸"])) return "陸劇";
+  if (includesAny(value, ["j-drama", "japan", "japanese", "日劇", "日本"])) return "日劇";
+  if (includesAny(value, ["us series", "usa", "america", "美劇", "美國"])) return "美劇";
+  if (includesAny(value, ["tw drama", "taiwan", "台劇", "台灣", "臺灣"])) return "台劇";
+  if (includesAny(value, ["anime series", "anime", "動畫", "動漫"])) return "動畫影集";
+  if (includesAny(value, ["variety", "綜藝"])) return "綜藝";
+  return "其他";
 }
 
 function normalize(value: string) {

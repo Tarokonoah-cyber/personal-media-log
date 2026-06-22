@@ -1,29 +1,32 @@
-import { ChevronDown, ChevronLeft, ChevronRight, Clapperboard, Film, Folder, Hash, Inbox, Layers, List, Pause, Play, RotateCcw, Star, Tags, TrendingUp, Tv, X, CheckCircle2, Grid2X2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { BarChart3, Clapperboard, ChevronLeft, ChevronRight, DatabaseBackup, Film, Folder, Hash, Heart, Home, Inbox, Layers, Play, Settings, Tags, Tv, X, CheckCircle2 } from "lucide-react";
+import { useState } from "react";
+import type { ReactNode } from "react";
 import { libraryTree } from "../lib/taxonomy";
-import type { ListFilters } from "../types";
+import type { ListFilters, MediaItem } from "../types";
+import { HomeDashboard } from "./HomeDashboard";
 
-const displayViews = [
-  { id: "table", label: "Table", icon: List },
-  { id: "list", label: "List", icon: List },
-  { id: "poster", label: "Poster Wall", icon: Grid2X2 }
+type DisplayView = "table" | "list" | "poster";
+type ToolTab = "stats" | "data" | "settings";
+
+const mainItems = [
+  { id: "home", label: "首頁", icon: Home },
+  { id: "favorites", label: "收藏", icon: Heart },
+  { id: "watching", label: "觀看中", icon: Play },
+  { id: "plan_to_watch", label: "待觀看", icon: Inbox },
+  { id: "completed", label: "已完成", icon: CheckCircle2 }
 ] as const;
 
-const statusViews = [
-  { id: "inbox", label: "Inbox", icon: Inbox },
-  { id: "plan_to_watch", label: "Plan to Watch", icon: Inbox },
-  { id: "watching", label: "Watching", icon: Play },
-  { id: "completed", label: "Completed", icon: CheckCircle2 },
-  { id: "paused", label: "Paused", icon: Pause },
-  { id: "dropped", label: "Dropped", icon: X },
-  { id: "rewatching", label: "Rewatching", icon: RotateCcw },
-  { id: "favorites", label: "Favorites", icon: Star },
-  { id: "highRated", label: "High Rated", icon: TrendingUp }
+const toolItems = [
+  { id: "stats", label: "統計", icon: BarChart3 },
+  { id: "data", label: "資料備份", icon: DatabaseBackup },
+  { id: "settings", label: "設定", icon: Settings }
 ] as const;
 
 export function ViewSidebar({
   activeView,
-  displayView,
+  activeTool,
+  summaryItems,
+  inboxTotal,
   tags,
   filters,
   collapsed,
@@ -31,12 +34,15 @@ export function ViewSidebar({
   onToggleCollapsed,
   onCloseMobile,
   onView,
-  onDisplayView,
   onLibrary,
-  onTag
+  onTag,
+  onTool
 }: {
   activeView: string;
-  displayView: "table" | "list" | "poster";
+  displayView: DisplayView;
+  activeTool: ToolTab | null;
+  summaryItems: MediaItem[];
+  inboxTotal: number;
   tags: string[];
   filters: ListFilters;
   collapsed: boolean;
@@ -44,117 +50,110 @@ export function ViewSidebar({
   onToggleCollapsed: () => void;
   onCloseMobile: () => void;
   onView: (view: string) => void;
-  onDisplayView: (view: "table" | "list" | "poster") => void;
+  onDisplayView: (view: DisplayView) => void;
   onLibrary: (type: string, category?: string) => void;
   onTag: (tag: string) => void;
+  onTool: (tab: ToolTab) => void;
 }) {
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("libraryOpenGroups") || "{}") as Record<string, boolean>;
-    } catch {
-      return {};
-    }
-  });
+  const [showAllTags, setShowAllTags] = useState(false);
   const showText = !collapsed || mobileOpen;
-  const activeParent = useMemo(() => activeView.split("/")[0], [activeView]);
-
-  useEffect(() => {
-    localStorage.setItem("libraryOpenGroups", JSON.stringify(openGroups));
-  }, [openGroups]);
-
-  function toggleGroup(label: string) {
-    setOpenGroups((current) => ({ ...current, [label]: !(current[label] ?? activeParent === label) }));
-  }
-
-  function selectParent(label: string, hasChildren: boolean) {
-    onLibrary(label);
-    if (hasChildren) toggleGroup(label);
-  }
+  const visibleTags = showAllTags ? tags : tags.slice(0, 3);
 
   return (
     <>
       <div className={mobileOpen ? "sidebar-scrim open" : "sidebar-scrim"} onClick={onCloseMobile} />
-      <aside className={`${collapsed ? "database-sidebar collapsed" : "database-sidebar"} ${mobileOpen ? "mobile-open" : ""}`} aria-label="Database views">
+      <aside className={`${collapsed ? "database-sidebar collapsed" : "database-sidebar"} ${mobileOpen ? "mobile-open" : ""}`} aria-label="觀看資料庫導覽">
         <div className="sidebar-top">
-          {showText && <strong>Views</strong>}
-          <button className="row-icon desktop-collapse" onClick={onToggleCollapsed} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
+          {showText && (
+            <div className="sidebar-brand">
+              <p>Personal Media Log</p>
+              <strong>觀看資料庫</strong>
+              <HomeDashboard items={summaryItems} inboxTotal={inboxTotal} />
+            </div>
+          )}
+          <button className="row-icon desktop-collapse" onClick={onToggleCollapsed} title={collapsed ? "展開側欄" : "收合側欄"}>
             {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           </button>
-          <button className="row-icon mobile-close" onClick={onCloseMobile} title="Close views"><X size={16} /></button>
+          <button className="row-icon mobile-close" onClick={onCloseMobile} title="關閉側欄"><X size={16} /></button>
         </div>
 
-        <div className="sidebar-group">
-          {displayViews.map((view) => {
-            const Icon = view.icon;
+        <NavSection title="主要" showText={showText} tone="primary">
+          {mainItems.map((item) => {
+            const Icon = item.icon;
             return (
-              <button key={view.id} className={displayView === view.id ? "active" : ""} onClick={() => onDisplayView(view.id)} title={view.label}>
-                <Icon size={15} />
-                {showText && <span>{view.label}</span>}
+              <button key={item.id} className={isMainActive(item.id, activeView, filters) ? "active" : ""} onClick={() => onView(item.id)} title={item.label}>
+                <Icon size={16} />
+                {showText && <span>{item.label}</span>}
               </button>
             );
           })}
-        </div>
+        </NavSection>
 
-        <div className="sidebar-group">
-          {showText && <p>Status</p>}
-          {statusViews.map((view) => {
-            const Icon = view.icon;
-            return (
-              <button key={view.id} className={activeView === view.id || (view.id === "favorites" && filters.favorite) ? "active" : ""} onClick={() => onView(view.id)} title={view.label}>
-                <Icon size={15} />
-                {showText && <span>{view.label}</span>}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="sidebar-group">
-          {showText && <p><Folder size={13} />Library</p>}
-          {libraryTree.map((entry) => {
-            const isOpen = openGroups[entry.label] ?? activeParent === entry.label;
-            const hasChildren = entry.children.length > 0;
-            return (
-              <div className="tree-node" key={entry.id}>
-                <button className={activeView === entry.label ? "active" : ""} onClick={() => selectParent(entry.label, hasChildren)} title={entry.label}>
-                  {iconFor(entry.label)}
-                  {showText && <span>{entry.label}</span>}
-                  {showText && hasChildren && <ChevronDown className={isOpen ? "tree-chevron open" : "tree-chevron"} size={13} />}
-                </button>
-                {showText && hasChildren && isOpen && (
-                  <div className="tree-children">
-                    {entry.children.map((child) => (
-                      <button key={child} className={activeView === `${entry.label}/${child}` ? "active" : ""} onClick={() => onLibrary(entry.label, child)}>
-                        <span className="tree-branch" />
-                        {child}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="sidebar-group">
-          {showText && <p><Tags size={13} />Tags</p>}
-          {tags.length === 0 ? (
-            showText && <em>No tags</em>
-          ) : tags.slice(0, 16).map((tag) => (
-            <button key={tag} className={filters.tag === tag ? "active" : ""} onClick={() => onTag(tag)} title={tag}>
-              {!showText ? <Hash size={14} /> : <span>#</span>}
-              {showText && <span>{tag}</span>}
+        <NavSection title="媒體類型" showText={showText} tone="secondary">
+          {libraryTree.map((entry) => (
+            <button key={entry.id} className={activeView === entry.label ? "active" : ""} onClick={() => onLibrary(entry.label)} title={entry.label}>
+              {iconFor(entry.label)}
+              {showText && <span>{entry.label}</span>}
             </button>
           ))}
-        </div>
+        </NavSection>
+
+        <NavSection title="標籤" showText={showText} tone="tags">
+          {tags.length === 0 ? (
+            showText && <em>尚無標籤</em>
+          ) : (
+            <>
+              {visibleTags.map((tag) => (
+                <button key={tag} className={filters.tag === tag ? "active" : ""} onClick={() => onTag(tag)} title={tag}>
+                  {!showText ? <Hash size={14} /> : <span className="tag-prefix">#</span>}
+                  {showText && <span>{tag}</span>}
+                </button>
+              ))}
+              {showText && tags.length > 3 && (
+                <button className="sidebar-more" onClick={() => setShowAllTags((value) => !value)}>
+                  <Tags size={13} />
+                  {showAllTags ? "收合標籤" : "更多標籤..."}
+                </button>
+              )}
+            </>
+          )}
+        </NavSection>
+
+        <NavSection title="工具" showText={showText} tone="tools">
+          {toolItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button key={item.id} className={activeTool === item.id ? "active" : ""} onClick={() => onTool(item.id)} title={item.label}>
+                <Icon size={15} />
+                {showText && <span>{item.label}</span>}
+              </button>
+            );
+          })}
+        </NavSection>
       </aside>
     </>
   );
 }
 
+function NavSection({ title, showText, tone, children }: { title: string; showText: boolean; tone: "primary" | "secondary" | "tags" | "tools"; children: ReactNode }) {
+  return (
+    <div className={`sidebar-group sidebar-${tone}`}>
+      {showText && <p>{title}</p>}
+      {children}
+    </div>
+  );
+}
+
+function isMainActive(id: string, activeView: string, filters: ListFilters) {
+  if (id === "home") return activeView === "home" && !filters.favorite;
+  if (id === "favorites") return activeView === "favorites" || filters.favorite;
+  return activeView === id;
+}
+
 function iconFor(label: string) {
-  if (label === "Movie") return <Film size={15} />;
-  if (label === "Series") return <Tv size={15} />;
-  if (label === "Anime") return <Clapperboard size={15} />;
+  if (label === "電影") return <Film size={15} />;
+  if (label === "影集") return <Tv size={15} />;
+  if (label === "動畫") return <Clapperboard size={15} />;
   if (label === "YouTube") return <Layers size={15} />;
   return <Folder size={15} />;
 }

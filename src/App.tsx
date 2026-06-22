@@ -1,8 +1,6 @@
-import { BarChart3, DatabaseBackup, Menu, Moon, Search, SlidersHorizontal, Sun } from "lucide-react";
+import { Menu, Moon, Search, SlidersHorizontal, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { BottomTabBar } from "./components/BottomTabBar";
 import { FilterSheet } from "./components/FilterSheet";
-import { HomeDashboard } from "./components/HomeDashboard";
 import { ImportExport } from "./components/ImportExport";
 import { ItemEditor } from "./components/ItemEditor";
 import { ItemList } from "./components/ItemList";
@@ -33,7 +31,7 @@ const defaultFilters: ListFilters = {
   pageSize: 100
 };
 
-type Tab = "log" | "organize" | "stats" | "data";
+type Tab = "log" | "stats" | "data" | "settings";
 type DisplayView = "table" | "list" | "poster";
 
 export default function App() {
@@ -41,13 +39,12 @@ export default function App() {
   const [displayView, setDisplayView] = useState<DisplayView>(() => (localStorage.getItem("displayView") as DisplayView) || "table");
   const [quickText, setQuickText] = useState("");
   const [filters, setFilters] = useState<ListFilters>(defaultFilters);
-  const [activeView, setActiveView] = useState("table");
+  const [activeView, setActiveView] = useState("home");
   const [activeCategory, setActiveCategory] = useState("");
   const [items, setItems] = useState<MediaItem[]>([]);
   const [summaryItems, setSummaryItems] = useState<MediaItem[]>([]);
   const [total, setTotal] = useState(0);
   const [inboxTotal, setInboxTotal] = useState(0);
-  const [favoriteTotal, setFavoriteTotal] = useState(0);
   const [selected, setSelected] = useState<MediaItem | null>(null);
   const [metadataTarget, setMetadataTarget] = useState<MediaItem | null>(null);
   const [metadataCandidates, setMetadataCandidates] = useState<TmdbCandidate[]>([]);
@@ -109,7 +106,7 @@ export default function App() {
       setItems(result.items);
       setTotal(result.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load records");
+      setError(err instanceof Error ? err.message : "讀取紀錄失敗");
     } finally {
       setLoading(false);
     }
@@ -117,14 +114,12 @@ export default function App() {
 
   async function loadSummary() {
     try {
-      const [all, inbox, favorites] = await Promise.all([
+      const [all, inbox] = await Promise.all([
         listItems({ ...defaultFilters, status: "all", pageSize: 100 }),
-        listItems({ ...defaultFilters, status: "inbox", pageSize: 1 }),
-        listItems({ ...defaultFilters, status: "all", favorite: true, pageSize: 1 })
+        listItems({ ...defaultFilters, status: "inbox", pageSize: 1 })
       ]);
       setSummaryItems(all.items);
       setInboxTotal(inbox.total);
-      setFavoriteTotal(favorites.total);
     } catch {
       setSummaryItems([]);
     }
@@ -144,13 +139,14 @@ export default function App() {
         ...updateWatchProgress({ ...emptyItem(), raw_title: parsed.raw_title } as MediaItem, { watch_status: "plan_to_watch" })
       });
       setQuickText("");
-      setToast("Added to Plan to Watch");
+      setToast("已新增到待觀看");
+      setTab("log");
       setActiveView("plan_to_watch");
       setActiveCategory("");
       setFilters((current) => ({ ...current, status: "all", page: 1 }));
       await refreshVisibleData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add record");
+      setError(err instanceof Error ? err.message : "新增紀錄失敗");
     } finally {
       setLoading(false);
     }
@@ -160,27 +156,27 @@ export default function App() {
     if (!selected) return;
     const saved = await updateItem(selected.id, input);
     setSelected(saved);
-    setToast("Saved");
+    setToast("已儲存");
     await refreshVisibleData();
   }
 
   async function removeItem(id: string) {
-    if (!window.confirm("Delete this record?")) return;
+    if (!window.confirm("確定要刪除這筆紀錄嗎？")) return;
     await deleteItem(id);
     setSelected(null);
-    setToast("Deleted");
+    setToast("已刪除");
     await refreshVisibleData();
   }
 
   async function toggleFavorite(item: MediaItem) {
     await updateItem(item.id, { ...toItemInput(item), favorite: !item.favorite });
-    setToast(item.favorite ? "Removed from favorites" : "Added to favorites");
+    setToast(item.favorite ? "已取消收藏" : "已加入收藏");
     await refreshVisibleData();
   }
 
   async function quickUpdate(item: MediaItem, patch: Partial<ItemInput>) {
     await updateItem(item.id, { ...toItemInput(item), ...patch });
-    setToast("Updated");
+    setToast("已更新");
     await refreshVisibleData();
   }
 
@@ -199,7 +195,7 @@ export default function App() {
       setMetadataQuery(result.query);
       setMetadataCandidates(result.candidates);
     } catch (err) {
-      setMetadataError(err instanceof Error ? err.message : "TMDb search failed");
+      setMetadataError(err instanceof Error ? err.message : "TMDb 搜尋失敗");
     } finally {
       setMetadataLoading(false);
     }
@@ -214,10 +210,10 @@ export default function App() {
       setMetadataTarget(null);
       setMetadataCandidates([]);
       setSelected(updated);
-      setToast("TMDb metadata applied");
+      setToast("已套用 TMDb 資料");
       await refreshVisibleData();
     } catch (err) {
-      setMetadataError(err instanceof Error ? err.message : "Failed to apply TMDb metadata");
+      setMetadataError(err instanceof Error ? err.message : "套用 TMDb 資料失敗");
     } finally {
       setMetadataLoading(false);
     }
@@ -228,122 +224,129 @@ export default function App() {
   }
 
   function selectView(view: string) {
+    setTab("log");
     setActiveView(view);
     setActiveCategory("");
     const base = { ...defaultFilters, query: filters.query };
-    if (view === "inbox") setFilters({ ...base, status: "inbox" });
-    else if (view === "favorites") setFilters({ ...base, favorite: true });
-    else if (view === "highRated") setFilters({ ...base, highRated: true });
+    if (view === "favorites") setFilters({ ...base, favorite: true });
     else setFilters(base);
+    setSidebarOpen(false);
   }
 
   function selectDisplayView(view: DisplayView) {
+    setTab("log");
     setDisplayView(view);
-    setActiveView(view);
   }
 
   function selectLibrary(type: string, category?: string) {
+    setTab("log");
     setActiveView(category ? `${type}/${category}` : type);
     setActiveCategory(category || "");
     setFilters({ ...defaultFilters, status: "all", query: filters.query, pageSize: 100 });
+    setSidebarOpen(false);
   }
 
   function selectTag(tag: string) {
+    setTab("log");
     setActiveView(`#${tag}`);
     setActiveCategory("");
     setFilters({ ...defaultFilters, status: "all", tag, query: filters.query });
+    setSidebarOpen(false);
+  }
+
+  function selectTool(nextTab: "stats" | "data" | "settings") {
+    setTab(nextTab);
+    setActiveView(nextTab);
+    setActiveCategory("");
+    setSidebarOpen(false);
   }
 
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="title-block">
-          <p className="eyebrow">Personal Media Log</p>
-          <h1>Watchlist Database</h1>
-          <HomeDashboard items={summaryItems} inboxTotal={inboxTotal} favoriteTotal={favoriteTotal} />
-        </div>
+        <button className="icon-button mobile-sidebar-button" onClick={() => setSidebarOpen(true)} title="開啟導覽"><Menu size={18} /></button>
         <div className="header-tools">
           <QuickCapture value={quickText} loading={loading} onChange={setQuickText} onSubmit={submitQuick} />
           <div className="search-field header-search">
             <Search size={15} />
-            <input value={filters.query} onChange={(event) => patchFilters({ query: event.target.value })} placeholder="Search" />
+            <input value={filters.query} onChange={(event) => patchFilters({ query: event.target.value })} placeholder="搜尋標題、標籤、平台" />
           </div>
-          <button className="icon-button mobile-sidebar-button" onClick={() => setSidebarOpen(true)} title="Open views"><Menu size={18} /></button>
         </div>
-        <button className="icon-button" onClick={() => setDark((value) => !value)} title={dark ? "Switch to light mode" : "Switch to dark mode"}>
+        <button className="icon-button" onClick={() => setDark((value) => !value)} title={dark ? "切換淺色模式" : "切換深色模式"}>
           {dark ? <Sun size={18} /> : <Moon size={18} />}
         </button>
       </header>
 
       {error && <div className="notice danger">{error}</div>}
 
-      {(tab === "log" || tab === "organize") && (
-        <>
-          <div className="mobile-view-switch">
-            {["table", "list", "poster", "watching", "plan_to_watch", "completed"].map((view) => (
-              <button key={view} className={(displayView === view || activeView === view) ? "active" : ""} onClick={() => view === "table" || view === "list" || view === "poster" ? selectDisplayView(view as DisplayView) : selectView(view)}>
-                {viewLabel(view)}
-              </button>
-            ))}
-          </div>
+      <main className={sidebarCollapsed ? "database-layout sidebar-collapsed" : "database-layout"}>
+        <ViewSidebar
+          activeView={activeView}
+          displayView={displayView}
+          activeTool={tab === "stats" || tab === "data" || tab === "settings" ? tab : null}
+          summaryItems={summaryItems}
+          inboxTotal={inboxTotal}
+          tags={knownTags}
+          filters={filters}
+          collapsed={sidebarCollapsed}
+          mobileOpen={sidebarOpen}
+          onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
+          onCloseMobile={() => setSidebarOpen(false)}
+          onView={selectView}
+          onDisplayView={selectDisplayView}
+          onLibrary={selectLibrary}
+          onTag={selectTag}
+          onTool={selectTool}
+        />
 
-          <main className={sidebarCollapsed ? "database-layout sidebar-collapsed" : "database-layout"}>
-            <ViewSidebar
-              activeView={activeView}
-              displayView={displayView}
-              tags={knownTags}
-              filters={filters}
-              collapsed={sidebarCollapsed}
-              mobileOpen={sidebarOpen}
-              onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
-              onCloseMobile={() => setSidebarOpen(false)}
-              onView={selectView}
-              onDisplayView={selectDisplayView}
-              onLibrary={selectLibrary}
-              onTag={selectTag}
-            />
-            <section className="database-main">
+        <section className="database-main">
+          {tab === "log" && (
+            <>
+              <div className="mobile-view-switch">
+                {["table", "list", "poster", "watching", "plan_to_watch", "completed"].map((view) => (
+                  <button key={view} className={(displayView === view || activeView === view) ? "active" : ""} onClick={() => view === "table" || view === "list" || view === "poster" ? selectDisplayView(view as DisplayView) : selectView(view)}>
+                    {viewLabel(view)}
+                  </button>
+                ))}
+              </div>
+
               <div className="database-toolbar">
                 <div className="view-tabs">
                   {["table", "list", "poster", "watching", "plan_to_watch", "completed"].map((view) => (
                     <button key={view} className={(displayView === view || activeView === view) ? "active" : ""} onClick={() => view === "table" || view === "list" || view === "poster" ? selectDisplayView(view as DisplayView) : selectView(view)}>{viewLabel(view)}</button>
                   ))}
                 </div>
-                <button className="filter-toggle" onClick={() => setFiltersOpen(true)}><SlidersHorizontal size={16} />Filter</button>
+                <button className="filter-toggle" onClick={() => setFiltersOpen(true)}><SlidersHorizontal size={16} />篩選</button>
               </div>
               <div className="database-meta">
-                <span>{viewLabel(activeView)} · {visibleItems.length === items.length ? total : visibleItems.length} items</span>
+                <span>{viewLabel(activeView)} · {visibleItems.length === items.length ? total : visibleItems.length} 筆</span>
                 <div>
-                  <button disabled={filters.page <= 1} onClick={() => patchFilters({ page: filters.page - 1 })}>Prev</button>
+                  <button disabled={filters.page <= 1} onClick={() => patchFilters({ page: filters.page - 1 })}>上一頁</button>
                   <span>{filters.page} / {pageCount}</span>
-                  <button disabled={filters.page >= pageCount} onClick={() => patchFilters({ page: filters.page + 1 })}>Next</button>
+                  <button disabled={filters.page >= pageCount} onClick={() => patchFilters({ page: filters.page + 1 })}>下一頁</button>
                 </div>
               </div>
               <ItemList
                 items={visibleItems}
                 view={displayView}
                 loading={loading}
-                emptyMessage="No records yet. Add one quickly from the top bar."
+                emptyMessage="還沒有紀錄，先從上方快速新增一筆就好。"
                 onSelect={setSelected}
                 onToggleFavorite={toggleFavorite}
                 onDelete={removeItem}
                 onMetadata={openMetadataLookup}
                 onQuickUpdate={quickUpdate}
               />
-            </section>
-          </main>
-          <FilterSheet open={filtersOpen} filters={filters} onChange={patchFilters} onClose={() => setFiltersOpen(false)} />
-        </>
-      )}
+            </>
+          )}
 
-      {tab === "stats" && <StatsPanel />}
-      {tab === "data" && <ImportExport onImported={refreshVisibleData} />}
+          {tab === "stats" && <StatsPanel />}
+          {tab === "data" && <ImportExport onImported={refreshVisibleData} />}
+          {tab === "settings" && <SettingsPanel dark={dark} onThemeChange={setDark} />}
+        </section>
+      </main>
 
-      <div className="utility-tabs">
-        <button className={tab === "log" ? "active" : ""} onClick={() => setTab("log")}>Database</button>
-        <button className={tab === "stats" ? "active" : ""} onClick={() => setTab("stats")}><BarChart3 size={15} />Stats</button>
-        <button className={tab === "data" ? "active" : ""} onClick={() => setTab("data")}><DatabaseBackup size={15} />Data</button>
-      </div>
+      <FilterSheet open={filtersOpen} filters={filters} onChange={patchFilters} onClose={() => setFiltersOpen(false)} />
 
       {selected && <ItemEditor item={selected} onClose={() => setSelected(null)} onSave={saveItem} onDelete={removeItem} />}
       {metadataTarget && (
@@ -359,27 +362,44 @@ export default function App() {
         />
       )}
       <Toast message={toast} onClose={() => setToast("")} />
-      <BottomTabBar active={tab} onChange={setTab} />
     </div>
   );
 }
 
 function viewLabel(view: string) {
   const labels: Record<string, string> = {
-    table: "Table",
-    list: "List",
-    poster: "Poster Wall",
-    inbox: "Inbox",
-    favorites: "Favorites",
-    highRated: "High Rated",
-    plan_to_watch: "Plan to Watch",
-    watching: "Watching",
-    completed: "Completed",
-    paused: "Paused",
-    dropped: "Dropped",
-    rewatching: "Rewatching"
+    home: "首頁",
+    table: "表格",
+    list: "清單",
+    poster: "海報牆",
+    favorites: "收藏",
+    plan_to_watch: "待觀看",
+    watching: "觀看中",
+    completed: "已完成",
+    paused: "暫停",
+    dropped: "已放棄",
+    rewatching: "重看中",
+    stats: "統計",
+    data: "資料備份",
+    settings: "設定"
   };
   return labels[view] || view;
+}
+
+function SettingsPanel({ dark, onThemeChange }: { dark: boolean; onThemeChange: (value: boolean) => void }) {
+  return (
+    <section className="settings-panel">
+      <div>
+        <p className="eyebrow">設定</p>
+        <h1>偏好設定</h1>
+      </div>
+      <label className="check">
+        <input type="checkbox" checked={dark} onChange={(event) => onThemeChange(event.target.checked)} />
+        使用深色模式
+      </label>
+      <p className="muted-cell">目前設定只保存在這台裝置，不會寫入資料庫。</p>
+    </section>
+  );
 }
 
 function emptyItem(): Partial<MediaItem> {
