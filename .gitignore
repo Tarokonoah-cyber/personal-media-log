@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.wrangler/
+_worker.bundle
+.dev.vars
+.env
+.env.local
+*.local
+exports/
+backups/
+*.tsbuildinfo

@@ -1,0 +1,62 @@
+export interface Env {
+  MEDIA_LOG_DB: D1Database;
+  MEDIA_LOG_BACKUPS?: R2Bucket;
+  ACCESS_ALLOWED_EMAILS?: string;
+  DEV_AUTH_EMAIL?: string;
+  BACKUP_ENCRYPTION_KEY_B64?: string;
+}
+
+export interface Actor {
+  email: string;
+}
+
+export type ItemStatus = "raw" | "partial" | "complete" | "archived" | "deleted";
+
+export interface ItemInput {
+  raw_title?: string;
+  official_title?: string | null;
+  original_title?: string | null;
+  code?: string | null;
+  type?: string | null;
+  category?: string | null;
+  platform?: string | null;
+  release_year?: number | null;
+  watched_at?: string | null;
+  rating?: number | null;
+  rewatch_score?: number | null;
+  favorite?: boolean;
+  status?: ItemStatus;
+  quick_note?: string | null;
+  long_note?: string | null;
+  source_url?: string | null;
+  cover_url?: string | null;
+  tags?: string[];
+  people?: string[];
+  collections?: string[];
+}
+
+export interface ItemRecord extends Required<Omit<ItemInput, "tags" | "people" | "collections">> {
+  id: string;
+  favorite: boolean;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  tags: string[];
+  people: string[];
+  collections: string[];
+}
+
+export interface ItemListParams {
+  query?: string;
+  status?: ItemStatus | "all" | "inbox" | "organized";
+  favorite?: boolean;
+  highRated?: boolean;
+  type?: string;
+  tag?: string;
+  year?: number;
+  platform?: string;
+  watchedFrom?: string;
+  watchedTo?: string;
+  page: number;
+  pageSize: number;
+}
