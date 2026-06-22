@@ -1,4 +1,4 @@
-import { BarChart3, Clapperboard, ChevronLeft, ChevronRight, DatabaseBackup, Film, Folder, Hash, Heart, Home, Inbox, Layers, Play, Settings, Tags, Tv, X, CheckCircle2 } from "lucide-react";
+import { BarChart3, Clapperboard, ChevronLeft, ChevronRight, DatabaseBackup, Eye, EyeOff, Film, Folder, Hash, Heart, Home, Inbox, Layers, Play, Settings, Tags, Tv, X, CheckCircle2 } from "lucide-react";
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { libraryTree } from "../lib/taxonomy";
@@ -29,6 +29,7 @@ export function ViewSidebar({
   inboxTotal,
   tags,
   filters,
+  safeMode,
   collapsed,
   mobileOpen,
   onToggleCollapsed,
@@ -36,7 +37,8 @@ export function ViewSidebar({
   onView,
   onLibrary,
   onTag,
-  onTool
+  onTool,
+  onToggleSafeMode
 }: {
   activeView: string;
   displayView: DisplayView;
@@ -45,6 +47,7 @@ export function ViewSidebar({
   inboxTotal: number;
   tags: string[];
   filters: ListFilters;
+  safeMode: boolean;
   collapsed: boolean;
   mobileOpen: boolean;
   onToggleCollapsed: () => void;
@@ -54,10 +57,12 @@ export function ViewSidebar({
   onLibrary: (type: string, category?: string) => void;
   onTag: (tag: string) => void;
   onTool: (tab: ToolTab) => void;
+  onToggleSafeMode: () => void;
 }) {
   const [showAllTags, setShowAllTags] = useState(false);
   const showText = !collapsed || mobileOpen;
   const visibleTags = showAllTags ? tags : tags.slice(0, 3);
+  const libraryItems = libraryTree.filter((entry) => !safeMode || entry.label !== "私密");
 
   return (
     <>
@@ -90,7 +95,7 @@ export function ViewSidebar({
         </NavSection>
 
         <NavSection title="媒體類型" showText={showText} tone="secondary">
-          {libraryTree.map((entry) => (
+          {libraryItems.map((entry) => (
             <button key={entry.id} className={activeView === entry.label ? "active" : ""} onClick={() => onLibrary(entry.label)} title={entry.label}>
               {iconFor(entry.label)}
               {showText && <span>{entry.label}</span>}
@@ -129,6 +134,10 @@ export function ViewSidebar({
               </button>
             );
           })}
+          <button className="safe-mode-toggle" onClick={onToggleSafeMode} title={safeMode ? "關閉安全模式" : "開啟安全模式"}>
+            {safeMode ? <EyeOff size={14} /> : <Eye size={14} />}
+            {showText && <span>{safeMode ? "安全模式開啟" : "安全模式關閉"}</span>}
+          </button>
         </NavSection>
       </aside>
     </>

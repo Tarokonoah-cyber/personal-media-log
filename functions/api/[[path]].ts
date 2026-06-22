@@ -30,7 +30,7 @@ export const onRequest: PagesFunction<Env, "path"> = async (context) => {
     }
 
     if (method === "GET" && path.length === 1 && path[0] === "stats") {
-      return json(await getStats(context.env));
+      return json(await getStats(context.env, url.searchParams.get("includePrivate") === "true"));
     }
 
     if (path[0] === "export") {
@@ -138,6 +138,7 @@ function defaultMapping(columns: string[]) {
     "rating",
     "rewatch_score",
     "favorite",
+    "is_private",
     "status",
     "quick_note",
     "long_note",
@@ -145,6 +146,7 @@ function defaultMapping(columns: string[]) {
     "cover_url",
     "metadata_json",
     "progress_json",
+    "genres",
     "tags",
     "people",
     "collections"
@@ -172,6 +174,7 @@ function getListParams(url: URL): ItemListParams {
     status: isStatusFilter(status) ? status : "all",
     favorite: url.searchParams.get("favorite") === "true",
     highRated: url.searchParams.get("highRated") === "true",
+    includePrivate: url.searchParams.get("includePrivate") === "true",
     type: optional(url.searchParams.get("type")),
     tag: optional(url.searchParams.get("tag")),
     year: optionalNumber(url.searchParams.get("year")),

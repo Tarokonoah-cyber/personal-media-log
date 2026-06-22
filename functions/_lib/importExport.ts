@@ -67,6 +67,7 @@ export function toCsv(rows: Record<string, unknown>[]) {
     "rating",
     "rewatch_score",
     "favorite",
+    "is_private",
     "status",
     "quick_note",
     "long_note",
@@ -110,7 +111,8 @@ function normalizeExternalRow(value: unknown): ItemInput {
     planned_at: asString(row.planned_at),
     rating: asNumber(row.rating),
     rewatch_score: asNumber(row.rewatch_score),
-    favorite: Boolean(row.favorite),
+    favorite: asBoolean(row.favorite),
+    is_private: asBoolean(row.is_private) || hasPrivateSignal(row),
     status: asStatus(row.status),
     quick_note: asString(row.quick_note ?? row.note),
     long_note: asString(row.long_note),
@@ -118,10 +120,27 @@ function normalizeExternalRow(value: unknown): ItemInput {
     cover_url: asString(row.cover_url),
     metadata_json: asString(row.metadata_json),
     progress_json: asString(row.progress_json),
-    tags: asList(row.tags),
+    tags: asList(row.tags).filter((tag) => !isPrivateMarker(tag)),
     people: asList(row.people),
     collections: asList(row.collections)
   };
+}
+
+function hasPrivateSignal(row: Record<string, unknown>) {
+  const text = [
+    row.type,
+    row.category,
+    row.platform,
+    row.metadata_json,
+    row.genres,
+    row.tags
+  ].flatMap((value) => Array.isArray(value) ? value : [value]).filter(Boolean).join(" ").toLowerCase();
+  return ["adult", "nsfw", "private", "成人", "私密"].some((term) => text.includes(term.toLowerCase()));
+}
+
+function isPrivateMarker(value: string) {
+  const text = value.trim().toLowerCase();
+  return text === "adult" || text === "nsfw" || text === "private" || text === "成人" || text === "私密";
 }
 
 function asString(value: unknown) {
@@ -132,6 +151,13 @@ function asNumber(value: unknown) {
   if (value === null || value === undefined || value === "") return undefined;
   const number = Number(value);
   return Number.isFinite(number) ? number : undefined;
+}
+
+function asBoolean(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value !== "string") return false;
+  return ["true", "1", "yes", "y", "favorite", "收藏", "private", "私密"].includes(value.trim().toLowerCase());
 }
 
 function asList(value: unknown) {

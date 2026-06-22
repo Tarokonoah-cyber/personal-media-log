@@ -21,6 +21,7 @@ const itemColumns = [
   "rating",
   "rewatch_score",
   "favorite",
+  "is_private",
   "status",
   "quick_note",
   "long_note",
@@ -51,6 +52,7 @@ export async function listItems(env: Env, params: ItemListParams) {
   }
 
   if (params.favorite) where.push("items.favorite = 1");
+  if (!params.includePrivate) where.push("items.is_private = 0");
   if (params.highRated) where.push("items.rating >= 4");
   if (params.type) {
     where.push("items.type = ?");
@@ -144,9 +146,9 @@ export async function createItem(env: Env, actor: Actor, input: ItemInput) {
       .prepare(`INSERT INTO items (
         id, raw_title, official_title, original_title, code, type, category, platform,
         release_year, watched_at, started_at, completed_at, planned_at, rating, rewatch_score,
-        favorite, status, quick_note, long_note, source_url, cover_url, metadata_json,
+        favorite, is_private, status, quick_note, long_note, source_url, cover_url, metadata_json,
         progress_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(
         id,
         rawTitle,
@@ -164,6 +166,7 @@ export async function createItem(env: Env, actor: Actor, input: ItemInput) {
         normalized.rating,
         normalized.rewatch_score,
         normalized.favorite ? 1 : 0,
+        normalized.is_private ? 1 : 0,
         status,
         normalized.quick_note,
         normalized.long_note,
@@ -194,7 +197,7 @@ export async function updateItem(env: Env, actor: Actor, id: string, input: Item
         raw_title = ?, official_title = ?, original_title = ?, code = ?, type = ?,
         category = ?, platform = ?, release_year = ?, watched_at = ?, started_at = ?,
         completed_at = ?, planned_at = ?, rating = ?, rewatch_score = ?, favorite = ?,
-        status = ?, quick_note = ?, long_note = ?, source_url = ?, cover_url = ?,
+        is_private = ?, status = ?, quick_note = ?, long_note = ?, source_url = ?, cover_url = ?,
         metadata_json = ?, progress_json = ?, updated_at = ?
         WHERE id = ?`)
       .bind(
@@ -213,6 +216,7 @@ export async function updateItem(env: Env, actor: Actor, id: string, input: Item
         normalized.rating,
         normalized.rewatch_score,
         normalized.favorite ? 1 : 0,
+        normalized.is_private ? 1 : 0,
         status,
         normalized.quick_note,
         normalized.long_note,
@@ -245,8 +249,11 @@ export async function exportItems(env: Env) {
   return hydrateItems(env, rows.results || []);
 }
 
-export async function getStats(env: Env) {
+export async function getStats(env: Env, includePrivate = false) {
   const year = new Date().getFullYear().toString();
+  const visibleSql = includePrivate ? "status != 'deleted'" : "status != 'deleted' AND is_private = 0";
+  const visibleItemsSql = includePrivate ? "items.status != 'deleted'" : "items.status != 'deleted' AND items.is_private = 0";
+  const inboxSql = includePrivate ? "status IN ('raw', 'partial')" : "status IN ('raw', 'partial') AND is_private = 0";
   const [
     total,
     currentYear,
@@ -259,16 +266,16 @@ export async function getStats(env: Env) {
     platforms,
     tags
   ] = await Promise.all([
-    env.MEDIA_LOG_DB.prepare("SELECT COUNT(*) AS value FROM items WHERE status != 'deleted'").first<{ value: number }>(),
-    env.MEDIA_LOG_DB.prepare("SELECT COUNT(*) AS value FROM items WHERE status != 'deleted' AND substr(coalesce(watched_at, created_at), 1, 4) = ?").bind(year).first<{ value: number }>(),
-    env.MEDIA_LOG_DB.prepare("SELECT AVG(rating) AS value FROM items WHERE status != 'deleted' AND rating IS NOT NULL").first<{ value: number }>(),
-    env.MEDIA_LOG_DB.prepare("SELECT COUNT(*) AS value FROM items WHERE status IN ('raw', 'partial')").first<{ value: number }>(),
-    env.MEDIA_LOG_DB.prepare(`SELECT ${itemColumns} FROM items WHERE status != 'deleted' AND rating IS NOT NULL ORDER BY rating DESC, datetime(updated_at) DESC LIMIT 20`).all<Row>(),
-    env.MEDIA_LOG_DB.prepare(`SELECT ${itemColumns} FROM items WHERE status != 'deleted' ORDER BY datetime(coalesce(watched_at, updated_at)) DESC LIMIT 12`).all<Row>(),
-    env.MEDIA_LOG_DB.prepare(`SELECT substr(coalesce(watched_at, created_at), 1, 7) AS month, COUNT(*) AS count FROM items WHERE status != 'deleted' GROUP BY month ORDER BY month DESC LIMIT 18`).all(),
-    env.MEDIA_LOG_DB.prepare(`SELECT coalesce(category, '未分類') AS name, COUNT(*) AS count FROM items WHERE status != 'deleted' GROUP BY coalesce(category, '未分類') ORDER BY count DESC`).all(),
-    env.MEDIA_LOG_DB.prepare(`SELECT coalesce(platform, '未設定') AS name, COUNT(*) AS count FROM items WHERE status != 'deleted' GROUP BY coalesce(platform, '未設定') ORDER BY count DESC`).all(),
-    env.MEDIA_LOG_DB.prepare(`SELECT tags.name AS name, COUNT(*) AS count FROM tags JOIN item_tags ON item_tags.tag_id = tags.id JOIN items ON items.id = item_tags.item_id WHERE items.status != 'deleted' GROUP BY tags.id ORDER BY count DESC, tags.name ASC LIMIT 100`).all()
+    env.MEDIA_LOG_DB.prepare(`SELECT COUNT(*) AS value FROM items WHERE ${visibleSql}`).first<{ value: number }>(),
+    env.MEDIA_LOG_DB.prepare(`SELECT COUNT(*) AS value FROM items WHERE ${visibleSql} AND substr(coalesce(watched_at, created_at), 1, 4) = ?`).bind(year).first<{ value: number }>(),
+    env.MEDIA_LOG_DB.prepare(`SELECT AVG(rating) AS value FROM items WHERE ${visibleSql} AND rating IS NOT NULL`).first<{ value: number }>(),
+    env.MEDIA_LOG_DB.prepare(`SELECT COUNT(*) AS value FROM items WHERE ${inboxSql}`).first<{ value: number }>(),
+    env.MEDIA_LOG_DB.prepare(`SELECT ${itemColumns} FROM items WHERE ${visibleSql} AND rating IS NOT NULL ORDER BY rating DESC, datetime(updated_at) DESC LIMIT 20`).all<Row>(),
+    env.MEDIA_LOG_DB.prepare(`SELECT ${itemColumns} FROM items WHERE ${visibleSql} ORDER BY datetime(coalesce(watched_at, updated_at)) DESC LIMIT 12`).all<Row>(),
+    env.MEDIA_LOG_DB.prepare(`SELECT substr(coalesce(watched_at, created_at), 1, 7) AS month, COUNT(*) AS count FROM items WHERE ${visibleSql} GROUP BY month ORDER BY month DESC LIMIT 18`).all(),
+    env.MEDIA_LOG_DB.prepare(`SELECT coalesce(category, '未分類') AS name, COUNT(*) AS count FROM items WHERE ${visibleSql} GROUP BY coalesce(category, '未分類') ORDER BY count DESC`).all(),
+    env.MEDIA_LOG_DB.prepare(`SELECT coalesce(platform, '未設定') AS name, COUNT(*) AS count FROM items WHERE ${visibleSql} GROUP BY coalesce(platform, '未設定') ORDER BY count DESC`).all(),
+    env.MEDIA_LOG_DB.prepare(`SELECT tags.name AS name, COUNT(*) AS count FROM tags JOIN item_tags ON item_tags.tag_id = tags.id JOIN items ON items.id = item_tags.item_id WHERE ${visibleItemsSql} GROUP BY tags.id ORDER BY count DESC, tags.name ASC LIMIT 100`).all()
   ]);
 
   return {
@@ -284,7 +291,6 @@ export async function getStats(env: Env) {
     tags: tags.results || []
   };
 }
-
 export async function importItems(env: Env, actor: Actor, rows: ItemInput[], sourceName: string, sourceType: "csv" | "json") {
   const jobId = newId("import");
   let imported = 0;
@@ -373,6 +379,7 @@ async function hydrateItems(env: Env, rows: Row[]): Promise<ItemRecord[]> {
     rating: nullableNumber(row.rating),
     rewatch_score: nullableNumber(row.rewatch_score),
     favorite: Boolean(row.favorite),
+    is_private: Boolean(row.is_private),
     status: String(row.status || "raw") as ItemStatus,
     quick_note: nullableString(row.quick_note),
     long_note: nullableString(row.long_note),
@@ -444,6 +451,7 @@ function normalizeInput(input: ItemInput): Required<ItemInput> {
     rating: clampNumber(input.rating, 0, 5),
     rewatch_score: clampNumber(input.rewatch_score, 0, 5),
     favorite: Boolean(input.favorite),
+    is_private: Boolean(input.is_private) || hasPrivateSignal(input),
     status: input.status || "raw",
     quick_note: cleanString(input.quick_note),
     long_note: cleanString(input.long_note),
@@ -451,10 +459,28 @@ function normalizeInput(input: ItemInput): Required<ItemInput> {
     cover_url: cleanString(input.cover_url),
     metadata_json: cleanString(input.metadata_json),
     progress_json: cleanString(input.progress_json),
-    tags: input.tags || [],
+    tags: (input.tags || []).filter((tag) => !isPrivateMarker(tag)),
     people: input.people || [],
     collections: input.collections || []
   };
+}
+
+function hasPrivateSignal(input: ItemInput) {
+  const genres = (input as { genres?: unknown }).genres;
+  const text = [
+    input.type,
+    input.category,
+    input.platform,
+    input.metadata_json,
+    ...(input.tags || []),
+    ...(Array.isArray(genres) ? genres.map(String) : typeof genres === "string" ? [genres] : [])
+  ].filter(Boolean).join(" ").toLowerCase();
+  return ["adult", "nsfw", "private", "?犖", "蝘?"].some((term) => text.includes(term.toLowerCase()));
+}
+
+function isPrivateMarker(value: string) {
+  const text = value.trim().toLowerCase();
+  return text === "adult" || text === "nsfw" || text === "private" || text === "成人" || text === "私密";
 }
 
 function inferStatus(input: Required<ItemInput>): ItemStatus {

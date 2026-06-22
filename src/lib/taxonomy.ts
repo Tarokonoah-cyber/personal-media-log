@@ -5,16 +5,18 @@ export const libraryTree = [
   { id: "series", label: "影集", children: [] },
   { id: "anime", label: "動畫", children: [] },
   { id: "youtube", label: "YouTube", children: [] },
-  { id: "adult", label: "成人", children: [] },
+  { id: "private", label: "私密", children: [] },
   { id: "other", label: "其他", children: [] }
 ] as const;
 
 export function classifyItem(item: MediaItem) {
+  if (item.is_private) return { type: "私密", category: "" };
+
   const haystack = normalize(`${item.type || ""} ${item.category || ""} ${item.platform || ""} ${item.tags.join(" ")}`);
   const category = normalize(item.category || "");
 
-  if (includesAny(haystack, ["adult", "nsfw", "jav", "av ", "18+", "r18", "xxx", "adult content", "成人"])) {
-    return { type: "成人", category: "" };
+  if (includesAny(haystack, ["adult", "nsfw", "jav", "av ", "18+", "r18", "xxx", "adult content", "成人", "私密"])) {
+    return { type: "私密", category: "" };
   }
   if (includesAny(haystack, ["youtube", "yt"])) return { type: "YouTube", category: "" };
   if (includesAny(haystack, ["anime", "animation", "anime series", "動畫", "動漫"])) {

@@ -37,6 +37,7 @@ type DisplayView = "table" | "list" | "poster";
 export default function App() {
   const [tab, setTab] = useState<Tab>("log");
   const [displayView, setDisplayView] = useState<DisplayView>(() => (localStorage.getItem("displayView") as DisplayView) || "table");
+  const [safeMode, setSafeMode] = useState(() => localStorage.getItem("safeMode") !== "false");
   const [quickText, setQuickText] = useState("");
   const [filters, setFilters] = useState<ListFilters>(defaultFilters);
   const [activeView, setActiveView] = useState("home");
@@ -73,12 +74,16 @@ export default function App() {
   }, [displayView]);
 
   useEffect(() => {
+    localStorage.setItem("safeMode", String(safeMode));
+  }, [safeMode]);
+
+  useEffect(() => {
     void loadItems();
-  }, [filters]);
+  }, [filters, safeMode]);
 
   useEffect(() => {
     void loadSummary();
-  }, []);
+  }, [safeMode]);
 
   useEffect(() => {
     if (!toast) return;
@@ -86,9 +91,10 @@ export default function App() {
     return () => window.clearTimeout(id);
   }, [toast]);
 
+  const includePrivate = !safeMode;
   const pageCount = useMemo(() => Math.max(1, Math.ceil(total / filters.pageSize)), [total, filters.pageSize]);
   const knownTags = useMemo(() => Array.from(new Set(summaryItems.flatMap((item) => item.tags))).sort((a, b) => a.localeCompare(b, "zh-Hant")), [summaryItems]);
-  const libraryTypes = useMemo(() => new Set<string>(libraryTree.map((entry) => entry.label)), []);
+  const libraryTypes = useMemo(() => new Set<string>(libraryTree.filter((entry) => includePrivate || entry.label !== "私密").map((entry) => entry.label)), [includePrivate]);
   const visibleItems = useMemo(() => {
     if (activeCategory) return items.filter((item) => classifyItem(item).category === activeCategory);
     if (libraryTypes.has(activeView)) return items.filter((item) => classifyItem(item).type === activeView);
@@ -102,7 +108,7 @@ export default function App() {
     setLoading(true);
     setError("");
     try {
-      const result = await listItems(filters);
+      const result = await listItems({ ...filters, includePrivate });
       setItems(result.items);
       setTotal(result.total);
     } catch (err) {
@@ -115,8 +121,8 @@ export default function App() {
   async function loadSummary() {
     try {
       const [all, inbox] = await Promise.all([
-        listItems({ ...defaultFilters, status: "all", pageSize: 100 }),
-        listItems({ ...defaultFilters, status: "inbox", pageSize: 1 })
+        listItems({ ...defaultFilters, includePrivate, pageSize: 100 }),
+        listItems({ ...defaultFilters, includePrivate, status: "inbox", pageSize: 1 })
       ]);
       setSummaryItems(all.items);
       setInboxTotal(inbox.total);
@@ -223,6 +229,17 @@ export default function App() {
     setFilters((current) => ({ ...current, ...patch, page: patch.page ?? 1 }));
   }
 
+  function toggleSafeMode() {
+    setSafeMode((current) => {
+      const next = !current;
+      if (next && activeView === "私密") {
+        setActiveView("home");
+        setActiveCategory("");
+      }
+      return next;
+    });
+  }
+
   function selectView(view: string) {
     setTab("log");
     setActiveView(view);
@@ -288,6 +305,7 @@ export default function App() {
           inboxTotal={inboxTotal}
           tags={knownTags}
           filters={filters}
+          safeMode={safeMode}
           collapsed={sidebarCollapsed}
           mobileOpen={sidebarOpen}
           onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
@@ -297,6 +315,7 @@ export default function App() {
           onLibrary={selectLibrary}
           onTag={selectTag}
           onTool={selectTool}
+          onToggleSafeMode={toggleSafeMode}
         />
 
         <section className="database-main">
@@ -340,9 +359,9 @@ export default function App() {
             </>
           )}
 
-          {tab === "stats" && <StatsPanel />}
-          {tab === "data" && <ImportExport onImported={refreshVisibleData} />}
-          {tab === "settings" && <SettingsPanel dark={dark} onThemeChange={setDark} />}
+          {tab === "stats" && <StatsPanel includePrivate={includePrivate} />}
+          {tab === "data" && <ImportExport safeMode={safeMode} onImported={refreshVisibleData} />}
+          {tab === "settings" && <SettingsPanel dark={dark} safeMode={safeMode} onThemeChange={setDark} onToggleSafeMode={toggleSafeMode} />}
         </section>
       </main>
 
@@ -386,7 +405,7 @@ function viewLabel(view: string) {
   return labels[view] || view;
 }
 
-function SettingsPanel({ dark, onThemeChange }: { dark: boolean; onThemeChange: (value: boolean) => void }) {
+function SettingsPanel({ dark, safeMode, onThemeChange, onToggleSafeMode }: { dark: boolean; safeMode: boolean; onThemeChange: (value: boolean) => void; onToggleSafeMode: () => void }) {
   return (
     <section className="settings-panel">
       <div>
@@ -397,7 +416,11 @@ function SettingsPanel({ dark, onThemeChange }: { dark: boolean; onThemeChange: 
         <input type="checkbox" checked={dark} onChange={(event) => onThemeChange(event.target.checked)} />
         使用深色模式
       </label>
-      <p className="muted-cell">目前設定只保存在這台裝置，不會寫入資料庫。</p>
+      <label className="check">
+        <input type="checkbox" checked={safeMode} onChange={onToggleSafeMode} />
+        安全模式
+      </label>
+      <p className="muted-cell">安全模式開啟時，私密內容不會出現在列表、搜尋、標籤與統計中。此偏好只在本機儲存開關狀態。</p>
     </section>
   );
 }
@@ -420,6 +443,7 @@ function emptyItem(): Partial<MediaItem> {
     rating: null,
     rewatch_score: null,
     favorite: false,
+    is_private: false,
     status: "raw",
     quick_note: null,
     long_note: null,

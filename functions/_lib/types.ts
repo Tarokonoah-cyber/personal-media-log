@@ -30,6 +30,7 @@ export interface ItemInput {
   rating?: number | null;
   rewatch_score?: number | null;
   favorite?: boolean;
+  is_private?: boolean;
   status?: ItemStatus;
   quick_note?: string | null;
   long_note?: string | null;
@@ -58,6 +59,7 @@ export interface ItemListParams {
   status?: ItemStatus | "all" | "inbox" | "organized";
   favorite?: boolean;
   highRated?: boolean;
+  includePrivate?: boolean;
   type?: string;
   tag?: string;
   year?: number;

@@ -4,7 +4,7 @@ import { classifyItem } from "../lib/taxonomy";
 import { getWatchStatus, isSeriesLike, watchStatusLabel } from "../lib/watch";
 import type { MediaItem } from "../types";
 
-export function StatsPanel() {
+export function StatsPanel({ includePrivate }: { includePrivate: boolean }) {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [error, setError] = useState("");
 
@@ -21,9 +21,10 @@ export function StatsPanel() {
       watchedFrom: "",
       watchedTo: "",
       page: 1,
-      pageSize: 100
+      pageSize: 100,
+      includePrivate
     }).then((result) => setItems(result.items)).catch((err) => setError(err instanceof Error ? err.message : "讀取統計失敗"));
-  }, []);
+  }, [includePrivate]);
 
   const stats = useMemo(() => {
     const month = new Date().toISOString().slice(0, 7);

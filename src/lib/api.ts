@@ -36,8 +36,8 @@ export function deleteItem(id: string) {
   return request<void>(`/api/items/${id}`, { method: "DELETE" });
 }
 
-export function getStats() {
-  return request<StatsResponse>("/api/stats");
+export function getStats(includePrivate = false) {
+  return request<StatsResponse>(`/api/stats?includePrivate=${includePrivate}`);
 }
 
 export function previewImport(content: string, sourceType: "csv" | "json", sourceName: string) {

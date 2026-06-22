@@ -18,6 +18,7 @@ export interface MediaItem {
   rating: number | null;
   rewatch_score: number | null;
   favorite: boolean;
+  is_private: boolean;
   status: ItemStatus;
   quick_note: string | null;
   long_note: string | null;
@@ -49,6 +50,7 @@ export interface ListFilters {
   status: "all" | "inbox" | "organized" | ItemStatus;
   favorite: boolean;
   highRated: boolean;
+  includePrivate?: boolean;
   type: string;
   tag: string;
   year: string;

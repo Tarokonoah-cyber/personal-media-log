@@ -4,7 +4,7 @@ import { commitImport, createBackup, exportCsvUrl, exportJsonUrl, listBackups, p
 import { importFields, mapRows, parseCsvLocally } from "../lib/importMapping";
 import type { BackupJob, ImportPreview, ItemInput } from "../types";
 
-export function ImportExport({ onImported }: { onImported: () => Promise<void> }) {
+export function ImportExport({ safeMode, onImported }: { safeMode: boolean; onImported: () => Promise<void> }) {
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [sourceContent, setSourceContent] = useState("");
   const [sourceName, setSourceName] = useState("");
@@ -62,6 +62,11 @@ export function ImportExport({ onImported }: { onImported: () => Promise<void> }
     await onImported();
   }
 
+  function confirmFullExport() {
+    if (!safeMode) return true;
+    return window.confirm("完整匯出會包含私密資料。確定要繼續匯出嗎？");
+  }
+
   return (
     <div className="data-grid">
       {message && <div className="notice">{message}</div>}
@@ -69,8 +74,8 @@ export function ImportExport({ onImported }: { onImported: () => Promise<void> }
         <h2>匯出</h2>
         <p className="muted-cell">完整備份建議使用 JSON，才能保留 TMDb metadata 與追劇進度。</p>
         <div className="button-row">
-          <a className="button primary" href={exportJsonUrl()} download><Download size={16} />匯出 JSON</a>
-          <a className="button" href={exportCsvUrl()} download><Download size={16} />匯出 CSV</a>
+          <a className="button primary" href={exportJsonUrl()} download onClick={(event) => { if (!confirmFullExport()) event.preventDefault(); }}><Download size={16} />匯出 JSON</a>
+          <a className="button" href={exportCsvUrl()} download onClick={(event) => { if (!confirmFullExport()) event.preventDefault(); }}><Download size={16} />匯出 CSV</a>
         </div>
       </section>
 

@@ -82,6 +82,16 @@ D1 既有 `status` 欄位目前仍沿用舊值：`raw`、`partial`、`complete`�
 
 讀取時會優先使用 `progress_json.watch_status`。如果舊資料沒有 `progress_json.watch_status`，才會從舊 `status` fallback。UI 不會顯示 archived / 封存選項；`archived` 只作為 dropped 的後端相容值。
 
+## 安全模式
+
+前端預設開啟安全模式，只在 `localStorage` 保存 `safeMode` 開關狀態，不保存任何私密資料內容。
+
+`0004_add_item_privacy.sql` 會新增 `items.is_private`。API 的 `/api/items` 與 `/api/stats` 預設排除 `is_private = 1` 的資料；只有明確傳入 `includePrivate=true` 時才會回傳私密資料。
+
+匯入與 migration 會主要依 `type`、`category`、`platform`、`tags`、`genres` 或 `metadata_json` 中的 `adult`、`nsfw`、`private`、`成人`、`私密` 等關鍵字自動標記私密；為了降低誤判，不會只因標題含有這些字就自動標記。這些私密 marker 不會保存成一般標籤。
+
+完整 JSON / CSV 匯出仍保留所有資料，包括私密資料。UI 在安全模式開啟時會先提示「完整匯出會包含私密資料」。
+
 ## 追劇進度
 
 `progress_json` 用來保存使用者自己的追劇進度，不與 TMDb metadata 混用：

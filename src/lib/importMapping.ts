@@ -17,6 +17,7 @@ export const importFields = [
   "rating",
   "rewatch_score",
   "favorite",
+  "is_private",
   "status",
   "quick_note",
   "long_note",
@@ -24,6 +25,7 @@ export const importFields = [
   "cover_url",
   "metadata_json",
   "progress_json",
+  "genres",
   "tags",
   "people",
   "collections"
@@ -65,6 +67,7 @@ function normalizeItem(row: Record<string, unknown>): ItemInput {
     rating: numberValue(row.rating),
     rewatch_score: numberValue(row.rewatch_score),
     favorite: booleanValue(row.favorite),
+    is_private: booleanValue(row.is_private) || hasPrivateSignal(row),
     status: statusValue(row.status),
     quick_note: nullableString(row.quick_note),
     long_note: nullableString(row.long_note),
@@ -72,7 +75,7 @@ function normalizeItem(row: Record<string, unknown>): ItemInput {
     cover_url: nullableString(row.cover_url),
     metadata_json: nullableString(row.metadata_json),
     progress_json: nullableString(row.progress_json),
-    tags: listValue(row.tags),
+    tags: listValue(row.tags).filter((tag) => !isPrivateMarker(tag)),
     people: listValue(row.people),
     collections: listValue(row.collections)
   };
@@ -96,12 +99,29 @@ function numberValue(value: unknown) {
 
 function booleanValue(value: unknown) {
   const text = stringValue(value).toLowerCase();
-  return ["true", "1", "yes", "y", "收藏", "favorite"].includes(text);
+  return ["true", "1", "yes", "y", "收藏", "favorite", "private", "私密"].includes(text);
 }
 
 function listValue(value: unknown) {
   if (Array.isArray(value)) return value.map(String).map((entry) => entry.trim()).filter(Boolean);
   return stringValue(value).split(/[|,#]/).map((entry) => entry.trim()).filter(Boolean);
+}
+
+function hasPrivateSignal(row: Record<string, unknown>) {
+  const text = [
+    row.type,
+    row.category,
+    row.platform,
+    row.metadata_json,
+    row.genres,
+    row.tags
+  ].flatMap((value) => Array.isArray(value) ? value : [value]).filter(Boolean).join(" ").toLowerCase();
+  return ["adult", "nsfw", "private", "成人", "私密"].some((term) => text.includes(term.toLowerCase()));
+}
+
+function isPrivateMarker(value: string) {
+  const text = value.trim().toLowerCase();
+  return text === "adult" || text === "nsfw" || text === "private" || text === "成人" || text === "私密";
 }
 
 function statusValue(value: unknown) {

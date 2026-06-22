@@ -17,6 +17,7 @@ export function toItemInput(item: MediaItem): ItemInput {
     rating: item.rating,
     rewatch_score: item.rewatch_score,
     favorite: item.favorite,
+    is_private: item.is_private,
     status: item.status === "deleted" ? "raw" : item.status,
     quick_note: item.quick_note,
     long_note: item.long_note,

@@ -101,6 +101,8 @@ export function ItemEditor({ item, onClose, onSave, onDelete }: { item: MediaIte
           <Field label="清單" value={form.collections} onChange={(value) => setForm({ ...form, collections: value })} />
 
           <section className="editor-section wide">
+            <h3>進階</h3>
+            <label className="check"><input type="checkbox" checked={form.is_private} onChange={(event) => setForm({ ...form, is_private: event.target.checked })} />私密紀錄</label>
             <button type="button" onClick={() => setMetadataOpen((open) => !open)}>{metadataOpen ? "收合" : "展開"} TMDb 原始資料</button>
             {metadataOpen && <textarea value={form.metadata_json} onChange={(event) => setForm({ ...form, metadata_json: event.target.value })} rows={8} />}
           </section>
@@ -143,6 +145,7 @@ function toForm(item: MediaItem) {
     rating: item.rating?.toString() || "",
     rewatch_score: item.rewatch_score?.toString() || "",
     favorite: item.favorite,
+    is_private: item.is_private,
     watch_status: getWatchStatus(item),
     current_season: progress.current_season?.toString() || "",
     current_episode: progress.current_episode?.toString() || "",
@@ -187,6 +190,7 @@ function toInput(form: ReturnType<typeof toForm>): ItemInput {
     rating: numberOrNull(form.rating),
     rewatch_score: numberOrNull(form.rewatch_score),
     favorite: form.favorite,
+    is_private: form.is_private,
     quick_note: emptyToNull(form.quick_note),
     long_note: emptyToNull(form.long_note),
     source_url: emptyToNull(form.source_url),
