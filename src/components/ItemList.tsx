@@ -1,15 +1,12 @@
-import { CalendarDays, Edit3, Star, Trash2 } from "lucide-react";
+import { Star, Trash2 } from "lucide-react";
 import { MouseEvent } from "react";
 import { displayDate } from "../lib/date";
 import type { ItemInput, ItemStatus, MediaItem } from "../types";
 
-type ListMode = "cards" | "organize";
-
 export function ItemList({
   items,
   loading,
-  mode,
-  emptyMessage = "還沒有紀錄，先快速記一筆就好，不用完整。",
+  emptyMessage = "還沒有紀錄。先在上方快速新增一筆，不用完整。",
   onSelect,
   onToggleFavorite,
   onDelete,
@@ -17,99 +14,109 @@ export function ItemList({
 }: {
   items: MediaItem[];
   loading: boolean;
-  mode: ListMode;
   emptyMessage?: string;
   onSelect: (item: MediaItem) => void;
   onToggleFavorite?: (item: MediaItem) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
   onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
 }) {
-  if (loading) return <div className="empty">讀取中，先喘一口氣。</div>;
+  if (loading) return <div className="empty">讀取中...</div>;
   if (items.length === 0) return <div className="empty">{emptyMessage}</div>;
 
   return (
     <>
-      {mode === "organize" && (
-        <div className="table-wrap desktop-table">
-          <table>
-            <thead>
-              <tr>
-                <th>標題</th>
-                <th>狀態</th>
-                <th>分類</th>
-                <th>平台</th>
-                <th>評分</th>
-                <th>日期</th>
-                <th>收藏</th>
+      <div className="database-table-wrap">
+        <table className="database-table">
+          <thead>
+            <tr>
+              <th className="title-col">標題</th>
+              <th>評分</th>
+              <th>類型</th>
+              <th>標籤</th>
+              <th>狀態</th>
+              <th>收藏</th>
+              <th>日期</th>
+              <th>備註摘要</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.id} onClick={() => onSelect(item)}>
+                <td className="title-cell">
+                  <strong>{item.official_title || item.raw_title}</strong>
+                  {item.code && <small>{item.code}</small>}
+                </td>
+                <td>
+                  <input
+                    className="inline-rating"
+                    defaultValue={item.rating ?? ""}
+                    inputMode="decimal"
+                    onClick={stop}
+                    onBlur={(event) => onQuickUpdate?.(item, { rating: event.target.value ? Number(event.target.value) : null })}
+                  />
+                </td>
+                <td>
+                  <input
+                    className="inline-type"
+                    defaultValue={item.type || item.category || ""}
+                    placeholder="未分類"
+                    onClick={stop}
+                    onBlur={(event) => onQuickUpdate?.(item, { type: event.target.value || null })}
+                  />
+                </td>
+                <td><Tags tags={item.tags} /></td>
+                <td>
+                  <select className="inline-status" value={item.status} onClick={stop} onChange={(event) => onQuickUpdate?.(item, { status: event.target.value as ItemStatus })}>
+                    <option value="raw">待整理</option>
+                    <option value="partial">部分整理</option>
+                    <option value="complete">已整理</option>
+                    <option value="archived">封存</option>
+                  </select>
+                </td>
+                <td>
+                  <button className={item.favorite ? "row-icon active" : "row-icon"} onClick={(event) => action(event, () => onToggleFavorite?.(item))} title="切換收藏">
+                    <Star size={15} fill={item.favorite ? "currentColor" : "none"} />
+                  </button>
+                </td>
+                <td className="muted-cell">{displayDate(item.watched_at || item.created_at)}</td>
+                <td className="note-cell">{item.quick_note || item.long_note || ""}</td>
+                <td>
+                  <button className="row-icon danger-button" onClick={(event) => action(event, () => onDelete?.(item.id))} title="刪除">
+                    <Trash2 size={15} />
+                  </button>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.id} onClick={() => onSelect(item)}>
-                  <td>
-                    <strong>{item.official_title || item.raw_title}</strong>
-                    <small>{item.quick_note || item.code || item.tags.slice(0, 3).map((tag) => `#${tag}`).join(" ")}</small>
-                  </td>
-                  <td>
-                    <select className="inline-control" value={item.status} onClick={stop} onChange={(event) => onQuickUpdate?.(item, { status: event.target.value as ItemStatus })}>
-                      <option value="raw">待整理</option>
-                      <option value="partial">部分整理</option>
-                      <option value="complete">已整理</option>
-                      <option value="archived">封存</option>
-                    </select>
-                  </td>
-                  <td>{item.category || item.type || "未分類"}</td>
-                  <td>{item.platform || "未設定"}</td>
-                  <td>
-                    <input
-                      className="inline-rating"
-                      defaultValue={item.rating ?? ""}
-                      inputMode="decimal"
-                      onClick={stop}
-                      onBlur={(event) => onQuickUpdate?.(item, { rating: event.target.value ? Number(event.target.value) : null })}
-                    />
-                  </td>
-                  <td>{displayDate(item.watched_at || item.created_at)}</td>
-                  <td>
-                    <button className={item.favorite ? "mini-action active" : "mini-action"} onClick={(event) => action(event, () => onToggleFavorite?.(item))} title="切換收藏">
-                      <Star size={15} fill={item.favorite ? "currentColor" : "none"} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-      <div className={mode === "organize" ? "card-list mobile-list" : "card-list"}>
+      <div className="compact-list">
         {items.map((item) => (
-          <article className="media-card" key={item.id} onClick={() => onSelect(item)}>
-            {item.cover_url ? <img className="media-cover" src={item.cover_url} alt="" /> : <TextCover item={item} />}
-            <div className="media-content">
-              <div className="media-title-row">
-                <div>
-                  <h3>{item.official_title || item.raw_title}</h3>
-                  {item.official_title && item.raw_title !== item.official_title && <p>{item.raw_title}</p>}
-                </div>
-                <Rating item={item} />
+          <article className="compact-row" key={item.id} onClick={() => onSelect(item)}>
+            <div className="compact-main">
+              <div className="compact-title">
+                <strong>{item.official_title || item.raw_title}</strong>
+                {item.favorite && <Star size={13} fill="currentColor" />}
               </div>
-              <p className="media-note">{item.quick_note || item.long_note || item.category || "待整理，之後再補也可以"}</p>
-              <div className="badge-row">
-                <StatusBadge item={item} />
-                {item.favorite && <span className="status-badge favorite"><Star size={13} fill="currentColor" />收藏</span>}
-                <span className="date-badge"><CalendarDays size={13} />{displayDate(item.watched_at || item.created_at)}</span>
+              <div className="compact-meta">
+                <span>{item.rating ?? "未評"}</span>
+                <Status status={item.status} />
+                <span>{item.type || item.category || "未分類"}</span>
+                <span>{displayDate(item.watched_at || item.created_at)}</span>
               </div>
-              {item.tags.length > 0 && (
-                <div className="chip-row">
-                  {item.tags.slice(0, 5).map((tag) => <span className="chip" key={tag}>#{tag}</span>)}
+              {(item.tags.length > 0 || item.quick_note || item.long_note) && (
+                <div className="compact-sub">
+                  <Tags tags={item.tags} />
+                  <span>{item.quick_note || item.long_note || ""}</span>
                 </div>
               )}
-              <div className="card-actions">
-                <button onClick={(event) => action(event, () => onSelect(item))}><Edit3 size={15} />編輯</button>
-                <button className={item.favorite ? "active" : ""} onClick={(event) => action(event, () => onToggleFavorite?.(item))}><Star size={15} fill={item.favorite ? "currentColor" : "none"} />收藏</button>
-                <button className="danger-button" onClick={(event) => action(event, () => onDelete?.(item.id))}><Trash2 size={15} />刪除</button>
-              </div>
+            </div>
+            <div className="compact-actions">
+              <button className={item.favorite ? "row-icon active" : "row-icon"} onClick={(event) => action(event, () => onToggleFavorite?.(item))} title="切換收藏">
+                <Star size={15} fill={item.favorite ? "currentColor" : "none"} />
+              </button>
             </div>
           </article>
         ))}
@@ -118,30 +125,18 @@ export function ItemList({
   );
 }
 
-function TextCover({ item }: { item: MediaItem }) {
-  const title = item.official_title || item.raw_title;
-  const initials = title.replace(/\s+/g, "").slice(0, 4);
+function Tags({ tags }: { tags: string[] }) {
+  if (tags.length === 0) return <span className="muted-cell">-</span>;
   return (
-    <div className="text-cover" data-tone={tone(title)}>
-      <span>{initials}</span>
-      <i>{item.category || item.type || item.platform || "MEDIA"}</i>
-    </div>
+    <span className="mini-tags">
+      {tags.slice(0, 4).map((tag) => <span key={tag}>#{tag}</span>)}
+    </span>
   );
 }
 
-function Rating({ item }: { item: MediaItem }) {
-  if (item.rating === null) return <span className="rating muted">未評</span>;
-  return <span className="rating"><Star size={14} fill="currentColor" />{item.rating}</span>;
-}
-
-function StatusBadge({ item }: { item: MediaItem }) {
-  const labels: Record<string, string> = { raw: "待整理", partial: "部分整理", complete: "已整理", archived: "封存", deleted: "刪除" };
-  return <span className={`status-badge ${item.status}`}>{labels[item.status] || item.status}</span>;
-}
-
-function tone(title: string) {
-  const code = Array.from(title).reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return String((code % 5) + 1);
+function Status({ status }: { status: ItemStatus }) {
+  const labels: Record<ItemStatus, string> = { raw: "待整理", partial: "部分", complete: "已整理", archived: "封存", deleted: "刪除" };
+  return <span className={`status-pill ${status}`}>{labels[status]}</span>;
 }
 
 function stop(event: MouseEvent) {

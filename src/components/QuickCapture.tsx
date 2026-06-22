@@ -1,4 +1,4 @@
-import { CornerDownLeft, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { KeyboardEvent } from "react";
 
 export function QuickCapture({
@@ -12,7 +12,7 @@ export function QuickCapture({
   onChange: (value: string) => void;
   onSubmit: () => void;
 }) {
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key !== "Enter") return;
     if (event.shiftKey) return;
     event.preventDefault();
@@ -20,28 +20,17 @@ export function QuickCapture({
   }
 
   return (
-    <section className="quick-note-card">
-      <div className="quick-note-head">
-        <div>
-          <p className="eyebrow">Quick note</p>
-          <h2>先記下來就好</h2>
-        </div>
-        <span className="shortcut"><CornerDownLeft size={14} /> Enter</span>
-      </div>
-      <textarea
+    <section className="quick-add-bar" aria-label="快速新增">
+      <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="快速記一筆：黑暗榮耀 EP3 4.5 後半段精彩 #韓劇 #收藏"
-        rows={4}
+        placeholder="快速新增：標題 4.5 一句心得 #標籤"
       />
-      <div className="quick-note-foot">
-        <span>Shift + Enter 換行，Enter 或 Ctrl + Enter 新增</span>
-        <button className="primary capture-button" disabled={loading || !value.trim()} onClick={onSubmit}>
-          <Plus size={18} />
-          新增到 Inbox
-        </button>
-      </div>
+      <button className="primary compact-add" disabled={loading || !value.trim()} onClick={onSubmit} title="新增到 Inbox">
+        <Plus size={16} />
+        新增
+      </button>
     </section>
   );
 }
