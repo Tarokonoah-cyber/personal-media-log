@@ -1,4 +1,4 @@
-import { BarChart3, DatabaseBackup, Moon, Search, SlidersHorizontal, Sun } from "lucide-react";
+import { BarChart3, DatabaseBackup, Menu, Moon, Search, SlidersHorizontal, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { BottomTabBar } from "./components/BottomTabBar";
 import { FilterSheet } from "./components/FilterSheet";
@@ -13,6 +13,7 @@ import { ViewSidebar } from "./components/ViewSidebar";
 import { createItem, deleteItem, listItems, updateItem } from "./lib/api";
 import { toItemInput } from "./lib/itemTransforms";
 import { parseQuickEntry } from "./lib/quickParse";
+import { classifyItem, libraryTree } from "./lib/taxonomy";
 import type { ItemInput, ListFilters, MediaItem } from "./types";
 
 const defaultFilters: ListFilters = {
@@ -37,6 +38,7 @@ export default function App() {
   const [quickText, setQuickText] = useState("");
   const [filters, setFilters] = useState<ListFilters>(defaultFilters);
   const [activeView, setActiveView] = useState("inbox");
+  const [activeCategory, setActiveCategory] = useState("");
   const [items, setItems] = useState<MediaItem[]>([]);
   const [summaryItems, setSummaryItems] = useState<MediaItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -47,12 +49,18 @@ export default function App() {
   const [toast, setToast] = useState("");
   const [error, setError] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebarCollapsed") === "true");
   const [dark, setDark] = useState(() => localStorage.getItem("theme") !== "light");
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
     localStorage.setItem("theme", dark ? "dark" : "light");
   }, [dark]);
+
+  useEffect(() => {
+    localStorage.setItem("sidebarCollapsed", String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
 
   useEffect(() => {
     void loadItems();
@@ -70,6 +78,12 @@ export default function App() {
 
   const pageCount = useMemo(() => Math.max(1, Math.ceil(total / filters.pageSize)), [total, filters.pageSize]);
   const knownTags = useMemo(() => Array.from(new Set(summaryItems.flatMap((item) => item.tags))).sort((a, b) => a.localeCompare(b, "zh-Hant")), [summaryItems]);
+  const libraryTypes = useMemo(() => new Set<string>(libraryTree.map((entry) => entry.label)), []);
+  const visibleItems = useMemo(() => {
+    if (activeCategory) return items.filter((item) => classifyItem(item).category === activeCategory);
+    if (libraryTypes.has(activeView)) return items.filter((item) => classifyItem(item).type === activeView);
+    return items;
+  }, [activeCategory, activeView, items, libraryTypes]);
 
   async function loadItems() {
     setLoading(true);
@@ -113,6 +127,7 @@ export default function App() {
       setQuickText("");
       setToast("已新增到 Inbox");
       setActiveView("inbox");
+      setActiveCategory("");
       setFilters((current) => ({ ...current, status: "inbox", page: 1 }));
       await refreshVisibleData();
     } catch (err) {
@@ -155,29 +170,43 @@ export default function App() {
 
   function selectView(view: string) {
     setActiveView(view);
+    setActiveCategory("");
     const base = { ...defaultFilters, query: filters.query };
     if (view === "inbox") setFilters({ ...base, status: "inbox" });
     if (view === "all") setFilters({ ...base, status: "all" });
     if (view === "favorite") setFilters({ ...base, status: "all", favorite: true });
     if (view === "highRated") setFilters({ ...base, status: "all", highRated: true });
+    if (view === "byType") setFilters({ ...base, status: "all" });
+    if (view === "byPlatform") setFilters({ ...base, status: "all" });
   }
 
-  function selectType(type: string) {
-    setActiveView(type);
-    setFilters({ ...defaultFilters, status: "all", type, query: filters.query });
+  function selectLibrary(type: string, category?: string) {
+    setActiveView(category ? `${type}/${category}` : type);
+    setActiveCategory(category || "");
+    setFilters({ ...defaultFilters, status: "all", query: filters.query, pageSize: 100 });
   }
 
   function selectTag(tag: string) {
     setActiveView(`#${tag}`);
+    setActiveCategory("");
     setFilters({ ...defaultFilters, status: "all", tag, query: filters.query });
   }
 
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div>
+        <div className="title-block">
           <p className="eyebrow">Personal Media Log</p>
           <h1>觀看資料庫</h1>
+          <HomeDashboard items={summaryItems} inboxTotal={inboxTotal} favoriteTotal={favoriteTotal} />
+        </div>
+        <div className="header-tools">
+          <QuickCapture value={quickText} loading={loading} onChange={setQuickText} onSubmit={submitQuick} />
+          <div className="search-field header-search">
+            <Search size={15} />
+            <input value={filters.query} onChange={(event) => patchFilters({ query: event.target.value })} placeholder="Search" />
+          </div>
+          <button className="icon-button mobile-sidebar-button" onClick={() => setSidebarOpen(true)} title="Open views"><Menu size={18} /></button>
         </div>
         <button className="icon-button" onClick={() => setDark((value) => !value)} title={dark ? "切換淺色模式" : "切換深色模式"}>
           {dark ? <Sun size={18} /> : <Moon size={18} />}
@@ -188,28 +217,38 @@ export default function App() {
 
       {(tab === "log" || tab === "organize") && (
         <>
-          <QuickCapture value={quickText} loading={loading} onChange={setQuickText} onSubmit={submitQuick} />
-          <HomeDashboard items={summaryItems} inboxTotal={inboxTotal} favoriteTotal={favoriteTotal} />
           <div className="mobile-view-switch">
-            {["inbox", "all", "favorite", "highRated"].map((view) => (
+            {["inbox", "all", "favorite", "highRated", "byType", "byPlatform"].map((view) => (
               <button key={view} className={activeView === view ? "active" : ""} onClick={() => selectView(view)}>
                 {viewLabel(view)}
               </button>
             ))}
           </div>
 
-          <main className="database-layout">
-            <ViewSidebar activeView={activeView} tags={knownTags} filters={filters} onView={selectView} onType={selectType} onTag={selectTag} />
+          <main className={sidebarCollapsed ? "database-layout sidebar-collapsed" : "database-layout"}>
+            <ViewSidebar
+              activeView={activeView}
+              tags={knownTags}
+              filters={filters}
+              collapsed={sidebarCollapsed}
+              mobileOpen={sidebarOpen}
+              onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
+              onCloseMobile={() => setSidebarOpen(false)}
+              onView={selectView}
+              onLibrary={selectLibrary}
+              onTag={selectTag}
+            />
             <section className="database-main">
               <div className="database-toolbar">
-                <div className="search-field">
-                  <Search size={16} />
-                  <input value={filters.query} onChange={(event) => patchFilters({ query: event.target.value })} placeholder="搜尋標題、代碼、筆記、標籤、人物、平台" />
+                <div className="view-tabs">
+                  {["inbox", "all", "favorite", "highRated", "byType", "byPlatform"].map((view) => (
+                    <button key={view} className={activeView === view ? "active" : ""} onClick={() => selectView(view)}>{viewLabel(view)}</button>
+                  ))}
                 </div>
                 <button className="filter-toggle" onClick={() => setFiltersOpen(true)}><SlidersHorizontal size={16} />篩選</button>
               </div>
               <div className="database-meta">
-                <span>{viewLabel(activeView)} · {total} 筆</span>
+                <span>{viewLabel(activeView)} · {visibleItems.length === items.length ? total : visibleItems.length} items</span>
                 <div>
                   <button disabled={filters.page <= 1} onClick={() => patchFilters({ page: filters.page - 1 })}>上一頁</button>
                   <span>{filters.page} / {pageCount}</span>
@@ -217,7 +256,7 @@ export default function App() {
                 </div>
               </div>
               <ItemList
-                items={items}
+                items={visibleItems}
                 loading={loading}
                 emptyMessage="還沒有紀錄。先在上方快速新增一筆，不用完整。"
                 onSelect={setSelected}
@@ -250,9 +289,11 @@ export default function App() {
 function viewLabel(view: string) {
   const labels: Record<string, string> = {
     inbox: "Inbox",
-    all: "全部",
-    favorite: "收藏",
-    highRated: "高分"
+    all: "All",
+    favorite: "Favorites",
+    highRated: "High Rated",
+    byType: "By Type",
+    byPlatform: "By Platform"
   };
   return labels[view] || view;
 }
