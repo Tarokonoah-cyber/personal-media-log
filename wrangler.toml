@@ -4,8 +4,8 @@ pages_build_output_dir = "dist"
 
 [[d1_databases]]
 binding = "MEDIA_LOG_DB"
-database_name = "personal-media-log"
-database_id = "replace-with-cloudflare-d1-database-id"
+database_name = "personal-media-log-db"
+database_id = "c3e04583-2deb-47e3-8c4f-314479cec3c9"
 migrations_dir = "migrations"
 
 [[r2_buckets]]
@@ -16,5 +16,7 @@ bucket_name = "personal-media-log-backups"
 ACCESS_ALLOWED_EMAILS = ""
 BACKUP_ENCRYPTION_KEY_B64 = ""
 
-[triggers]
-crons = ["17 19 * * *"]
+# Cron triggers are not supported in Cloudflare Pages config.
+# Scheduled backup should be implemented as a separate Worker later.
+# [triggers]
+# crons = ["17 19 * * *"]
