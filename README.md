@@ -169,6 +169,24 @@ npx wrangler pages secret put TMDB_API_KEY --project-name your-pages-project
 
 系統會優先使用 `TMDB_READ_TOKEN`。TMDb request 只會從 Pages Functions 發出，token 不會進入前端 bundle。
 
+## Smart Add / AI 標籤補全
+
+智慧新增用於把短文字解析成 item draft，例如 `3/29 藍鳥 運動家` 或 `昨天 阪神 巨人`。它只做日期、運動類型、聯盟、隊伍與標籤解析，不查即時賽程、不查比分，也不自動產生心得。
+
+設定 Cloudflare Pages secret：
+
+```bash
+npx wrangler pages secret put OPENAI_API_KEY --project-name your-pages-project
+```
+
+可選模型設定：
+
+```bash
+npx wrangler pages secret put SMART_ADD_MODEL --project-name your-pages-project
+```
+
+若沒有設定 `SMART_ADD_MODEL`，預設使用 `gpt-4.1-mini`。API key 只在 Pages Functions 使用，不會進入前端 bundle。若本機或 production 未設定 `OPENAI_API_KEY`，系統會使用保守規則解析作為 fallback，方便快速記錄不中斷。
+
 ## Cloudflare Access
 
 請在 Cloudflare Zero Trust 建立 Access Application 保護 Pages production domain。
@@ -234,6 +252,7 @@ npx wrangler pages deploy dist --project-name personal-media-log
 - `GET /api/stats`
 - `POST /api/import/preview`
 - `POST /api/import/commit`
+- `POST /api/smart-add/parse`
 - `POST /api/metadata/search`
 - `POST /api/metadata/apply`
 - `GET /api/export/json`

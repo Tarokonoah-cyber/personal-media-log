@@ -6,6 +6,8 @@ export interface Env {
   BACKUP_ENCRYPTION_KEY_B64?: string;
   TMDB_READ_TOKEN?: string;
   TMDB_API_KEY?: string;
+  OPENAI_API_KEY?: string;
+  SMART_ADD_MODEL?: string;
 }
 
 export interface Actor {

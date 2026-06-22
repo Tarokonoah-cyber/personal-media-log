@@ -1,20 +1,23 @@
-import { Plus } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import { KeyboardEvent } from "react";
 
 export function QuickCapture({
   value,
   loading,
+  smartLoading,
   onChange,
-  onSubmit
+  onSubmit,
+  onSmartAdd
 }: {
   value: string;
   loading: boolean;
+  smartLoading?: boolean;
   onChange: (value: string) => void;
   onSubmit: () => void;
+  onSmartAdd?: () => void;
 }) {
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key !== "Enter") return;
-    if (event.shiftKey) return;
     event.preventDefault();
     onSubmit();
   }
@@ -25,9 +28,13 @@ export function QuickCapture({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="快速新增：標題 4.5 一句心得 #標籤"
+        placeholder="快速新增：3/29 藍鳥 運動家，或 標題 4.5 一句心得 #tag"
       />
-      <button className="primary compact-add" disabled={loading || !value.trim()} onClick={onSubmit} title="新增到待觀看">
+      <button className="smart-add" disabled={loading || smartLoading || !value.trim()} onClick={onSmartAdd} title="AI 補分類與標籤">
+        <Sparkles size={15} />
+        智慧新增
+      </button>
+      <button className="primary compact-add" disabled={loading || !value.trim()} onClick={onSubmit} title="直接新增">
         <Plus size={16} />
         新增
       </button>

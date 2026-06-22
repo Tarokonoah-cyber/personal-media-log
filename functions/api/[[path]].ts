@@ -2,6 +2,7 @@ import { createBackup, listBackups, restoreBackup } from "../_lib/backup";
 import { error, handleError, json, noContent, notFound, readJson, requireAccess } from "../_lib/http";
 import { parseCsv, parseJsonItems, toCsv } from "../_lib/importExport";
 import { createItem, exportItems, getItem, getStats, importItems, isLikelyDuplicate, listItems, softDeleteItem, updateItem } from "../_lib/items";
+import { parseSmartAdd } from "../_lib/smartAdd";
 import { applyTmdbMetadata, searchTmdb } from "../_lib/tmdb";
 import type { Env, ItemInput, ItemListParams, ItemStatus } from "../_lib/types";
 
@@ -31,6 +32,12 @@ export const onRequest: PagesFunction<Env, "path"> = async (context) => {
 
     if (method === "GET" && path.length === 1 && path[0] === "stats") {
       return json(await getStats(context.env, url.searchParams.get("includePrivate") === "true"));
+    }
+
+    if (path[0] === "smart-add" && method === "POST" && path[1] === "parse") {
+      const body = await readJson<{ text?: string }>(context.request);
+      if (!body.text?.trim()) return error(400, "text is required");
+      return json(await parseSmartAdd(context.env, body.text));
     }
 
     if (path[0] === "export") {

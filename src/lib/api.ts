@@ -1,4 +1,4 @@
-import type { BackupJob, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, StatsResponse, TmdbSearchResponse } from "../types";
+import type { BackupJob, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, SmartAddResponse, StatsResponse, TmdbSearchResponse } from "../types";
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -74,6 +74,13 @@ export function applyMetadata(itemId: string, tmdb_id: number, media_type: "movi
   return request<MediaItem>("/api/metadata/apply", {
     method: "POST",
     body: JSON.stringify({ itemId, tmdb_id, media_type })
+  });
+}
+
+export function parseSmartAdd(text: string) {
+  return request<SmartAddResponse>("/api/smart-add/parse", {
+    method: "POST",
+    body: JSON.stringify({ text })
   });
 }
 

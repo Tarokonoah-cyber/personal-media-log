@@ -111,6 +111,23 @@ export interface TmdbSearchResponse {
   candidates: TmdbCandidate[];
 }
 
+export interface SmartAddResponse {
+  input: ItemInput;
+  summary: string;
+  parsed: {
+    date?: string | null;
+    is_sports: boolean;
+    is_plain_record: boolean;
+    sport?: string | null;
+    league?: string | null;
+    teams?: string[];
+    tags?: string[];
+    note?: string | null;
+    confidence?: number;
+  };
+  source: "ai" | "rule";
+}
+
 export interface WatchProgress {
   watch_status?: WatchStatus;
   current_season?: number | null;

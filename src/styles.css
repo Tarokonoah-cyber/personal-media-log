@@ -758,8 +758,10 @@ h2 {
 .mini-tags {
   display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .mini-tags span,
@@ -772,6 +774,13 @@ h2 {
   font-size: 12px;
   background: var(--panel-soft);
   color: var(--muted);
+}
+
+.mini-tags span {
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .status-pill.raw {
@@ -1570,11 +1579,17 @@ h2 {
 
   .title-cell strong {
     display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-weight: 600;
   }
 
   .title-cell small {
     display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--faint);
     margin-top: 2px;
   }

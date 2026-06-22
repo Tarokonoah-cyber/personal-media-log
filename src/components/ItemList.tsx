@@ -5,7 +5,7 @@ import { classifyItem, libraryTree } from "../lib/taxonomy";
 import { displayDateForItem, getWatchStatus, isSeriesLike, progressLabel, updateWatchProgress, watchStatusLabel, watchStatuses } from "../lib/watch";
 import type { ItemInput, MediaItem, WatchStatus } from "../types";
 
-const typeOptions = libraryTree.map((entry) => entry.label);
+const typeOptions: string[] = libraryTree.map((entry) => entry.label);
 
 export function ItemList({
   items,
@@ -61,20 +61,22 @@ export function ItemList({
                     <td className="title-cell">
                       <strong>{item.official_title || item.raw_title}</strong>
                       {item.code && <small>{item.code}</small>}
+                      {item.quick_note && <small>{item.quick_note}</small>}
                     </td>
                     <td>
-                      <select className="inline-type" value={classification.type} onClick={stop} onChange={(event) => onQuickUpdate?.(item, { type: event.target.value })}>
+                      <select className="inline-type" value={displayType(item, classification)} onClick={stop} onChange={(event) => onQuickUpdate?.(item, { type: event.target.value })}>
                         {typeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
+                        {!typeOptions.includes(displayType(item, classification)) && <option value={displayType(item, classification)}>{displayType(item, classification)}</option>}
                       </select>
                     </td>
                     <td><WatchStatusSelect item={item} onQuickUpdate={onQuickUpdate} /></td>
                     <td className="muted-cell">{progressLabel(item) || "-"}</td>
                     <td><RatingStars item={item} onQuickUpdate={onQuickUpdate} /></td>
-                    <td className="muted-cell">{classification.category || "-"}</td>
+                    <td className="muted-cell">{displayCategory(item, classification)}</td>
                     <td className="muted-cell">{item.platform || "-"}</td>
                     <td><Tags tags={item.tags} /></td>
                     <td className="muted-cell">{item.release_year || "-"}</td>
-                    <td className="muted-cell">{displayDate(displayDateForItem(item))}</td>
+                    <td className="muted-cell">{dateLabel(item)}</td>
                     <td>
                       <button className={item.favorite ? "row-icon active" : "row-icon"} onClick={(event) => action(event, () => onToggleFavorite?.(item))} title="切換收藏">
                         <Star size={15} fill={item.favorite ? "currentColor" : "none"} />
@@ -100,11 +102,17 @@ export function ItemList({
                 {item.favorite && <Star size={13} fill="currentColor" />}
               </div>
               <div className="compact-meta">
-                <span>{classifyItem(item).type}</span>
+                <span>{compactTypeLabel(item)}</span>
                 <StatusPill item={item} />
                 {progressLabel(item) && <span>{progressLabel(item)}</span>}
-                <span>{displayDate(displayDateForItem(item))}</span>
+                <span>{dateLabel(item)}</span>
               </div>
+              {(item.quick_note || item.tags.length > 0) && (
+                <div className="compact-sub">
+                  {item.quick_note && <span>{item.quick_note}</span>}
+                  {item.tags.length > 0 && <Tags tags={item.tags} limit={3} />}
+                </div>
+              )}
             </div>
             <div className="compact-actions">
               <RatingStars item={item} onQuickUpdate={onQuickUpdate} compact />
@@ -183,13 +191,41 @@ function RowActions({ item, onDelete, onMetadata }: { item: MediaItem; onDelete?
   );
 }
 
-function Tags({ tags }: { tags: string[] }) {
+function Tags({ tags, limit = 4 }: { tags: string[]; limit?: number }) {
   if (tags.length === 0) return <span className="muted-cell">-</span>;
   return (
     <span className="mini-tags">
-      {tags.slice(0, 4).map((tag) => <span key={tag}>#{tag}</span>)}
+      {tags.slice(0, limit).map((tag) => <span key={tag}>#{tag}</span>)}
+      {tags.length > limit && <span>+{tags.length - limit}</span>}
     </span>
   );
+}
+
+function displayType(item: MediaItem, classification = classifyItem(item)) {
+  return item.type || classification.type;
+}
+
+function displayCategory(item: MediaItem, classification = classifyItem(item)) {
+  return item.category || classification.category || "-";
+}
+
+function compactTypeLabel(item: MediaItem) {
+  const parts = [displayType(item), item.category, item.platform].filter(Boolean);
+  return parts.join(" · ");
+}
+
+function dateLabel(item: MediaItem) {
+  if (isSmartAdd(item) && !item.watched_at && !item.completed_at && !item.started_at && !item.planned_at) return "未記日期";
+  return displayDate(displayDateForItem(item));
+}
+
+function isSmartAdd(item: MediaItem) {
+  if (!item.metadata_json) return false;
+  try {
+    return Boolean((JSON.parse(item.metadata_json) as { smart_add?: unknown }).smart_add);
+  } catch {
+    return false;
+  }
 }
 
 function StatusPill({ item }: { item: MediaItem }) {

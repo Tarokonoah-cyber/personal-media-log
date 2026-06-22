@@ -9,12 +9,12 @@ import { QuickCapture } from "./components/QuickCapture";
 import { StatsPanel } from "./components/StatsPanel";
 import { Toast } from "./components/Toast";
 import { ViewSidebar } from "./components/ViewSidebar";
-import { applyMetadata, createItem, deleteItem, listItems, searchMetadata, updateItem } from "./lib/api";
+import { applyMetadata, createItem, deleteItem, listItems, parseSmartAdd, searchMetadata, updateItem } from "./lib/api";
 import { toItemInput } from "./lib/itemTransforms";
 import { parseQuickEntry } from "./lib/quickParse";
 import { classifyItem, libraryTree } from "./lib/taxonomy";
 import { getWatchStatus, updateWatchProgress } from "./lib/watch";
-import type { ItemInput, ListFilters, MediaItem, TmdbCandidate } from "./types";
+import type { ItemInput, ListFilters, MediaItem, SmartAddResponse, TmdbCandidate } from "./types";
 
 const defaultFilters: ListFilters = {
   query: "",
@@ -54,6 +54,9 @@ export default function App() {
   const [metadataQuery, setMetadataQuery] = useState("");
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [metadataError, setMetadataError] = useState("");
+  const [smartPreview, setSmartPreview] = useState<SmartAddResponse | null>(null);
+  const [smartDraft, setSmartDraft] = useState<ItemInput | null>(null);
+  const [smartLoading, setSmartLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState("");
   const [error, setError] = useState("");
@@ -158,6 +161,47 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function requestSmartAdd() {
+    if (!quickText.trim()) return;
+    setSmartLoading(true);
+    setError("");
+    try {
+      const result = await parseSmartAdd(quickText);
+      setSmartPreview(result);
+      setSmartDraft(result.input);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "智慧新增解析失敗");
+    } finally {
+      setSmartLoading(false);
+    }
+  }
+
+  async function confirmSmartAdd() {
+    if (!smartDraft?.raw_title.trim()) return;
+    setLoading(true);
+    try {
+      await createItem(smartDraft);
+      setQuickText("");
+      setSmartPreview(null);
+      setSmartDraft(null);
+      setToast("已用智慧新增建立紀錄");
+      setTab("log");
+      setActiveView(smartDraft.status === "complete" ? "completed" : "home");
+      setActiveCategory("");
+      setFilters((current) => ({ ...current, status: "all", page: 1 }));
+      await refreshVisibleData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "智慧新增失敗");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function updateSmartDraft(patch: Partial<ItemInput>) {
+    if (!smartDraft) return;
+    setSmartDraft({ ...smartDraft, ...patch });
   }
 
   async function saveItem(input: ItemInput) {
@@ -285,7 +329,18 @@ export default function App() {
       <header className="topbar">
         <button className="icon-button mobile-sidebar-button" onClick={() => setSidebarOpen(true)} title="開啟導覽"><Menu size={18} /></button>
         <div className="header-tools">
-          <QuickCapture value={quickText} loading={loading} onChange={setQuickText} onSubmit={submitQuick} />
+          <QuickCapture
+            value={quickText}
+            loading={loading}
+            smartLoading={smartLoading}
+            onChange={(value) => {
+              setQuickText(value);
+              setSmartPreview(null);
+              setSmartDraft(null);
+            }}
+            onSubmit={submitQuick}
+            onSmartAdd={requestSmartAdd}
+          />
           <div className="search-field header-search">
             <Search size={15} />
             <input value={filters.query} onChange={(event) => patchFilters({ query: event.target.value })} placeholder="搜尋標題、標籤、平台" />
@@ -297,6 +352,19 @@ export default function App() {
       </header>
 
       {error && <div className="notice danger">{error}</div>}
+      {smartPreview && smartDraft && (
+        <SmartAddPreview
+          preview={smartPreview}
+          draft={smartDraft}
+          loading={loading}
+          onChange={updateSmartDraft}
+          onCancel={() => {
+            setSmartPreview(null);
+            setSmartDraft(null);
+          }}
+          onConfirm={confirmSmartAdd}
+        />
+      )}
 
       <main className={sidebarCollapsed ? "database-layout sidebar-collapsed" : "database-layout"}>
         <ViewSidebar
@@ -420,6 +488,66 @@ function quickFilterLabel(view: string) {
     favorites: "收藏"
   };
   return labels[view] || view;
+}
+
+function SmartAddPreview({
+  preview,
+  draft,
+  loading,
+  onChange,
+  onCancel,
+  onConfirm
+}: {
+  preview: SmartAddResponse;
+  draft: ItemInput;
+  loading: boolean;
+  onChange: (patch: Partial<ItemInput>) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <section className="smart-preview" aria-label="智慧新增確認">
+      <div>
+        <p className="eyebrow">智慧新增預覽</p>
+        <strong>{preview.summary}</strong>
+        <span>{preview.source === "ai" ? "AI 解析" : "規則解析"} · {preview.parsed.is_sports ? "運動比賽" : "普通紀錄"}</span>
+      </div>
+      <div className="smart-preview-grid">
+        <label>
+          標題
+          <input value={draft.raw_title} onChange={(event) => onChange({ raw_title: event.target.value })} />
+        </label>
+        <label>
+          類型
+          <input value={draft.type || ""} onChange={(event) => onChange({ type: event.target.value || null })} placeholder="Other" />
+        </label>
+        <label>
+          分類
+          <input value={draft.category || ""} onChange={(event) => onChange({ category: event.target.value || null })} placeholder="Baseball" />
+        </label>
+        <label>
+          聯盟 / 平台
+          <input value={draft.platform || ""} onChange={(event) => onChange({ platform: event.target.value || null })} placeholder="MLB / NPB / CPBL" />
+        </label>
+        <label>
+          日期
+          <input type="date" value={draft.watched_at || ""} onChange={(event) => onChange({ watched_at: event.target.value || null })} />
+        </label>
+        <label className="wide">
+          標籤
+          <input value={(draft.tags || []).join(", ")} onChange={(event) => onChange({ tags: splitTags(event.target.value) })} placeholder="MLB, 棒球, 藍鳥" />
+        </label>
+      </div>
+      <div className="smart-preview-actions">
+        <button onClick={onCancel}>取消</button>
+        <button className="primary" disabled={loading || !draft.raw_title.trim()} onClick={onConfirm}>確認新增</button>
+      </div>
+    </section>
+  );
+}
+
+function splitTags(value: string) {
+  return Array.from(new Set(value.split(/[,，#]/).map((tag) => tag.trim()).filter(Boolean).filter((tag) => !/^(adult|nsfw|private|成人|私密)$/i.test(tag))));
 }
 
 function SettingsPanel({ dark, safeMode, onThemeChange, onToggleSafeMode }: { dark: boolean; safeMode: boolean; onThemeChange: (value: boolean) => void; onToggleSafeMode: () => void }) {
