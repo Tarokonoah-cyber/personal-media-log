@@ -2,12 +2,14 @@ import { Sparkles, Star, Trash2 } from "lucide-react";
 import { MouseEvent } from "react";
 import { displayDate } from "../lib/date";
 import { classifyItem, libraryTree } from "../lib/taxonomy";
-import type { ItemInput, ItemStatus, MediaItem } from "../types";
+import { displayDateForItem, getWatchProgress, getWatchStatus, isSeriesLike, progressLabel, updateWatchProgress, watchStatusLabel, watchStatuses } from "../lib/watch";
+import type { ItemInput, MediaItem, WatchStatus } from "../types";
 
 const typeOptions = libraryTree.map((entry) => entry.label);
 
 export function ItemList({
   items,
+  view,
   loading,
   emptyMessage = "No records yet. Add one quickly from the top bar.",
   onSelect,
@@ -17,6 +19,7 @@ export function ItemList({
   onQuickUpdate
 }: {
   items: MediaItem[];
+  view: "table" | "list" | "poster";
   loading: boolean;
   emptyMessage?: string;
   onSelect: (item: MediaItem) => void;
@@ -27,78 +30,68 @@ export function ItemList({
 }) {
   if (loading) return <div className="empty">Loading...</div>;
   if (items.length === 0) return <div className="empty">{emptyMessage}</div>;
+  if (view === "poster") return <PosterWall items={items} onSelect={onSelect} />;
 
   return (
     <>
-      <div className="database-table-wrap">
-        <table className="database-table">
-          <thead>
-            <tr>
-              <th className="title-col">Title</th>
-              <th>Rating</th>
-              <th>Type</th>
-              <th>Category</th>
-              <th>Tags</th>
-              <th>Status</th>
-              <th>Favorite</th>
-              <th>Date</th>
-              <th>Note</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => {
-              const classification = classifyItem(item);
-              return (
-                <tr key={item.id} onClick={() => onSelect(item)}>
-                  <td className="title-cell">
-                    <strong>{item.official_title || item.raw_title}</strong>
-                    {item.code && <small>{item.code}</small>}
-                  </td>
-                  <td>
-                    <RatingStars item={item} onQuickUpdate={onQuickUpdate} />
-                  </td>
-                  <td>
-                    <select className="inline-type" value={classification.type} onClick={stop} onChange={(event) => onQuickUpdate?.(item, { type: event.target.value })}>
-                      {typeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
-                    </select>
-                  </td>
-                  <td className="muted-cell">{classification.category || "-"}</td>
-                  <td><Tags tags={item.tags} /></td>
-                  <td>
-                    <select className="inline-status" value={item.status} onClick={stop} onChange={(event) => onQuickUpdate?.(item, { status: event.target.value as ItemStatus })}>
-                      <option value="raw">Inbox</option>
-                      <option value="partial">Partial</option>
-                      <option value="complete">Done</option>
-                      <option value="archived">Archived</option>
-                    </select>
-                  </td>
-                  <td>
-                    <button className={item.favorite ? "row-icon active" : "row-icon"} onClick={(event) => action(event, () => onToggleFavorite?.(item))} title="Toggle favorite">
-                      <Star size={15} fill={item.favorite ? "currentColor" : "none"} />
-                    </button>
-                  </td>
-                  <td className="muted-cell">{displayDate(item.watched_at || item.created_at)}</td>
-                  <td className="note-cell">{item.quick_note || item.long_note || ""}</td>
-                  <td>
-                    <div className="row-actions">
-                      <button className="row-icon danger-button" onClick={(event) => action(event, () => onDelete?.(item.id))} title="Delete">
-                        <Trash2 size={15} />
+      {view === "table" && (
+        <div className="database-table-wrap">
+          <table className="database-table">
+            <thead>
+              <tr>
+                <th className="title-col">Title</th>
+                <th>Type</th>
+                <th>Watch Status</th>
+                <th>Progress</th>
+                <th>Rating</th>
+                <th>Category / Region</th>
+                <th>Platform</th>
+                <th>Tags</th>
+                <th>Year</th>
+                <th>Date</th>
+                <th>Favorite</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => {
+                const classification = classifyItem(item);
+                return (
+                  <tr key={item.id} onClick={() => onSelect(item)}>
+                    <td className="title-cell">
+                      <strong>{item.official_title || item.raw_title}</strong>
+                      {item.code && <small>{item.code}</small>}
+                    </td>
+                    <td>
+                      <select className="inline-type" value={classification.type} onClick={stop} onChange={(event) => onQuickUpdate?.(item, { type: event.target.value })}>
+                        {typeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
+                      </select>
+                    </td>
+                    <td><WatchStatusSelect item={item} onQuickUpdate={onQuickUpdate} /></td>
+                    <td className="muted-cell">{progressLabel(item) || "-"}</td>
+                    <td><RatingStars item={item} onQuickUpdate={onQuickUpdate} /></td>
+                    <td className="muted-cell">{classification.category || "-"}</td>
+                    <td className="muted-cell">{item.platform || "-"}</td>
+                    <td><Tags tags={item.tags} /></td>
+                    <td className="muted-cell">{item.release_year || "-"}</td>
+                    <td className="muted-cell">{displayDate(displayDateForItem(item))}</td>
+                    <td>
+                      <button className={item.favorite ? "row-icon active" : "row-icon"} onClick={(event) => action(event, () => onToggleFavorite?.(item))} title="Toggle favorite">
+                        <Star size={15} fill={item.favorite ? "currentColor" : "none"} />
                       </button>
-                      <button className="row-action" onClick={(event) => action(event, () => onMetadata?.(item))} title="Lookup metadata">
-                        <Sparkles size={14} />
-                        Lookup
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+                    <td>
+                      <RowActions item={item} onDelete={onDelete} onMetadata={onMetadata} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-      <div className="compact-list">
+      <div className={view === "list" ? "compact-list force-list" : "compact-list"}>
         {items.map((item) => (
           <article className="compact-row" key={item.id} onClick={() => onSelect(item)}>
             <div className="compact-main">
@@ -107,23 +100,54 @@ export function ItemList({
                 {item.favorite && <Star size={13} fill="currentColor" />}
               </div>
               <div className="compact-meta">
-                <RatingStars item={item} onQuickUpdate={onQuickUpdate} compact />
-                <Status status={item.status} />
-                <span>{displayDate(item.watched_at || item.created_at)}</span>
+                <span>{classifyItem(item).type}</span>
+                <StatusPill item={item} />
+                {progressLabel(item) && <span>{progressLabel(item)}</span>}
+                <span>{displayDate(displayDateForItem(item))}</span>
               </div>
             </div>
             <div className="compact-actions">
+              <RatingStars item={item} onQuickUpdate={onQuickUpdate} compact />
               <button className="row-icon" onClick={(event) => action(event, () => onMetadata?.(item))} title="Lookup metadata">
                 <Sparkles size={15} />
-              </button>
-              <button className={item.favorite ? "row-icon active" : "row-icon"} onClick={(event) => action(event, () => onToggleFavorite?.(item))} title="Toggle favorite">
-                <Star size={15} fill={item.favorite ? "currentColor" : "none"} />
               </button>
             </div>
           </article>
         ))}
       </div>
     </>
+  );
+}
+
+function PosterWall({ items, onSelect }: { items: MediaItem[]; onSelect: (item: MediaItem) => void }) {
+  const posterItems = items.filter((item) => item.cover_url);
+  if (posterItems.length === 0) return <div className="empty">No posters yet. Use TMDb lookup to add cover URLs.</div>;
+  return (
+    <div className="poster-wall">
+      {posterItems.map((item) => (
+        <button className="poster-card" key={item.id} onClick={() => onSelect(item)}>
+          <img src={item.cover_url || ""} alt="" />
+          <span>
+            <strong>{item.official_title || item.raw_title}</strong>
+            <em>{item.release_year || "-"} · {watchStatusLabel(getWatchStatus(item))}</em>
+            <em>{item.rating ? `${item.rating}/5` : "Unrated"}{isSeriesLike(item) && progressLabel(item) ? ` · ${progressLabel(item)}` : ""}</em>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function WatchStatusSelect({ item, onQuickUpdate }: { item: MediaItem; onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void> }) {
+  return (
+    <select
+      className="inline-status"
+      value={getWatchStatus(item)}
+      onClick={stop}
+      onChange={(event) => onQuickUpdate?.(item, updateWatchProgress(item, { watch_status: event.target.value as WatchStatus }))}
+    >
+      {watchStatuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
+    </select>
   );
 }
 
@@ -145,6 +169,20 @@ function RatingStars({ item, compact, onQuickUpdate }: { item: MediaItem; compac
   );
 }
 
+function RowActions({ item, onDelete, onMetadata }: { item: MediaItem; onDelete?: (id: string) => Promise<void>; onMetadata?: (item: MediaItem) => void }) {
+  return (
+    <div className="row-actions">
+      <button className="row-icon danger-button" onClick={(event) => action(event, () => onDelete?.(item.id))} title="Delete">
+        <Trash2 size={15} />
+      </button>
+      <button className="row-action" onClick={(event) => action(event, () => onMetadata?.(item))} title="Lookup metadata">
+        <Sparkles size={14} />
+        Lookup
+      </button>
+    </div>
+  );
+}
+
 function Tags({ tags }: { tags: string[] }) {
   if (tags.length === 0) return <span className="muted-cell">-</span>;
   return (
@@ -154,9 +192,9 @@ function Tags({ tags }: { tags: string[] }) {
   );
 }
 
-function Status({ status }: { status: ItemStatus }) {
-  const labels: Record<ItemStatus, string> = { raw: "Inbox", partial: "Partial", complete: "Done", archived: "Archived", deleted: "Deleted" };
-  return <span className={`status-pill ${status}`}>{labels[status]}</span>;
+function StatusPill({ item }: { item: MediaItem }) {
+  const status = getWatchStatus(item);
+  return <span className={`status-pill ${status}`}>{watchStatusLabel(status)}</span>;
 }
 
 function stop(event: MouseEvent) {

@@ -132,6 +132,9 @@ function defaultMapping(columns: string[]) {
     "platform",
     "release_year",
     "watched_at",
+    "started_at",
+    "completed_at",
+    "planned_at",
     "rating",
     "rewatch_score",
     "favorite",
@@ -141,6 +144,7 @@ function defaultMapping(columns: string[]) {
     "source_url",
     "cover_url",
     "metadata_json",
+    "progress_json",
     "tags",
     "people",
     "collections"

@@ -13,7 +13,6 @@ export const libraryTree = [
   },
   { id: "anime", label: "Anime", children: [] },
   { id: "youtube", label: "YouTube", children: [] },
-  { id: "adult", label: "Adult", children: [] },
   { id: "other", label: "Other", children: [] }
 ] as const;
 
@@ -22,7 +21,7 @@ export function classifyItem(item: MediaItem) {
   const category = normalize(item.category || "");
 
   if (includesAny(haystack, ["adult", "nsfw", "jav", "av ", "18+", "r18", "xxx", "adult content", "成人"])) {
-    return { type: "Adult", category: "" };
+    return { type: "Other", category: "" };
   }
   if (includesAny(haystack, ["youtube", "yt"])) return { type: "YouTube", category: "" };
   if (includesAny(haystack, ["anime", "animation", "anime series", "動畫"])) {

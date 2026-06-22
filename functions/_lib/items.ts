@@ -15,6 +15,9 @@ const itemColumns = [
   "platform",
   "release_year",
   "watched_at",
+  "started_at",
+  "completed_at",
+  "planned_at",
   "rating",
   "rewatch_score",
   "favorite",
@@ -24,6 +27,7 @@ const itemColumns = [
   "source_url",
   "cover_url",
   "metadata_json",
+  "progress_json",
   "created_at",
   "updated_at",
   "deleted_at"
@@ -139,9 +143,10 @@ export async function createItem(env: Env, actor: Actor, input: ItemInput) {
     env.MEDIA_LOG_DB
       .prepare(`INSERT INTO items (
         id, raw_title, official_title, original_title, code, type, category, platform,
-        release_year, watched_at, rating, rewatch_score, favorite, status, quick_note,
-        long_note, source_url, cover_url, metadata_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        release_year, watched_at, started_at, completed_at, planned_at, rating, rewatch_score,
+        favorite, status, quick_note, long_note, source_url, cover_url, metadata_json,
+        progress_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(
         id,
         rawTitle,
@@ -153,6 +158,9 @@ export async function createItem(env: Env, actor: Actor, input: ItemInput) {
         normalized.platform,
         normalized.release_year,
         normalized.watched_at,
+        normalized.started_at,
+        normalized.completed_at,
+        normalized.planned_at,
         normalized.rating,
         normalized.rewatch_score,
         normalized.favorite ? 1 : 0,
@@ -162,6 +170,7 @@ export async function createItem(env: Env, actor: Actor, input: ItemInput) {
         normalized.source_url,
         normalized.cover_url,
         normalized.metadata_json,
+        normalized.progress_json,
         timestamp,
         timestamp
       ),
@@ -183,9 +192,10 @@ export async function updateItem(env: Env, actor: Actor, id: string, input: Item
     env.MEDIA_LOG_DB
       .prepare(`UPDATE items SET
         raw_title = ?, official_title = ?, original_title = ?, code = ?, type = ?,
-        category = ?, platform = ?, release_year = ?, watched_at = ?, rating = ?,
-        rewatch_score = ?, favorite = ?, status = ?, quick_note = ?, long_note = ?,
-        source_url = ?, cover_url = ?, metadata_json = ?, updated_at = ?
+        category = ?, platform = ?, release_year = ?, watched_at = ?, started_at = ?,
+        completed_at = ?, planned_at = ?, rating = ?, rewatch_score = ?, favorite = ?,
+        status = ?, quick_note = ?, long_note = ?, source_url = ?, cover_url = ?,
+        metadata_json = ?, progress_json = ?, updated_at = ?
         WHERE id = ?`)
       .bind(
         rawTitle,
@@ -197,6 +207,9 @@ export async function updateItem(env: Env, actor: Actor, id: string, input: Item
         normalized.platform,
         normalized.release_year,
         normalized.watched_at,
+        normalized.started_at,
+        normalized.completed_at,
+        normalized.planned_at,
         normalized.rating,
         normalized.rewatch_score,
         normalized.favorite ? 1 : 0,
@@ -206,6 +219,7 @@ export async function updateItem(env: Env, actor: Actor, id: string, input: Item
         normalized.source_url,
         normalized.cover_url,
         normalized.metadata_json,
+        normalized.progress_json,
         nowIso(),
         id
       ),
@@ -353,6 +367,9 @@ async function hydrateItems(env: Env, rows: Row[]): Promise<ItemRecord[]> {
     platform: nullableString(row.platform),
     release_year: nullableNumber(row.release_year),
     watched_at: nullableString(row.watched_at),
+    started_at: nullableString(row.started_at),
+    completed_at: nullableString(row.completed_at),
+    planned_at: nullableString(row.planned_at),
     rating: nullableNumber(row.rating),
     rewatch_score: nullableNumber(row.rewatch_score),
     favorite: Boolean(row.favorite),
@@ -362,6 +379,7 @@ async function hydrateItems(env: Env, rows: Row[]): Promise<ItemRecord[]> {
     source_url: nullableString(row.source_url),
     cover_url: nullableString(row.cover_url),
     metadata_json: nullableString(row.metadata_json),
+    progress_json: nullableString(row.progress_json),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
     deleted_at: nullableString(row.deleted_at),
@@ -420,6 +438,9 @@ function normalizeInput(input: ItemInput): Required<ItemInput> {
     platform: cleanString(input.platform),
     release_year: nullableNumber(input.release_year),
     watched_at: cleanString(input.watched_at),
+    started_at: cleanString(input.started_at),
+    completed_at: cleanString(input.completed_at),
+    planned_at: cleanString(input.planned_at),
     rating: clampNumber(input.rating, 0, 5),
     rewatch_score: clampNumber(input.rewatch_score, 0, 5),
     favorite: Boolean(input.favorite),
@@ -429,6 +450,7 @@ function normalizeInput(input: ItemInput): Required<ItemInput> {
     source_url: cleanString(input.source_url),
     cover_url: cleanString(input.cover_url),
     metadata_json: cleanString(input.metadata_json),
+    progress_json: cleanString(input.progress_json),
     tags: input.tags || [],
     people: input.people || [],
     collections: input.collections || []

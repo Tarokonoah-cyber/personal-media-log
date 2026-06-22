@@ -1,20 +1,17 @@
-# 私人觀看紀錄 Personal Media Log
+# Personal Media Log
 
-手機優先的私人觀看紀錄系統，部署在 Cloudflare Pages，API 由 Cloudflare Pages Functions 提供，資料存在 Cloudflare D1，匯出與備份檔可存入 Cloudflare R2。
+私人觀影 / 追劇資料庫。前端部署在 Cloudflare Pages，API 使用 Pages Functions，主要資料存在 Cloudflare D1，匯入 / 匯出與備份檔可使用 Cloudflare R2。
 
-## 核心功能
+## 功能重點
 
-- 手機首頁快速新增，一行輸入即可建立 Inbox/raw 紀錄
-- `raw_title` 是唯一必填欄位，其他欄位都可之後補
-- D1 儲存、讀取、分頁搜尋、篩選、詳細編輯、軟刪除
-- 狀態：`raw`、`partial`、`complete`、`archived`、`deleted`
-- 標籤、人物、清單、平台、分類
-- 統計頁：總筆數、今年筆數、每月觀看、平均評分、Top 20、最近觀看、分類/平台/標籤數
-- CSV / JSON 匯入，含預覽與欄位對應
-- JSON / CSV 匯出
-- TMDb metadata lookup，使用者選擇候選後才補資料
-- R2 加密備份與還原 API 架構
-- Cloudflare Access 全站保護設計
+- 手機優先快速新增：只需要輸入標題即可建立紀錄。
+- Notion-style database：支援 Table、List、Poster Wall 視圖。
+- 觀看狀態：Plan to Watch、Watching、Completed、Paused、Dropped、Rewatching。
+- 影集追劇進度：目前季 / 集、總季數 / 集數、單集長度、進度備註。
+- TMDb metadata lookup：由後端 API 使用 secret 查詢，不把 token 放在前端。
+- 搜尋、篩選、分頁由 API / SQL 處理，避免一次載入全部資料。
+- 匯入 CSV / JSON，匯出 CSV / JSON。
+- JSON 匯出包含 `metadata_json`、`progress_json` 與日期欄位，是完整備份格式。
 
 ## 本機開發
 
@@ -26,15 +23,17 @@ npm run build
 npm run cf:dev
 ```
 
-本機 Pages Functions 需要 `.dev.vars` 裡的 `DEV_AUTH_EMAIL`。Production 不使用這個值，請用 Cloudflare Access 保護整個 Pages site。
-
-前端純 Vite 開發可使用：
+單純開前端 UI 可使用：
 
 ```bash
 npm run dev
 ```
 
-但完整 API / D1 / R2 流程請用 `npm run cf:dev`。
+需要測試 Pages Functions、D1、R2 時請使用：
+
+```bash
+npm run cf:dev
+```
 
 ## Cloudflare D1
 
@@ -44,7 +43,7 @@ npm run dev
 npx wrangler d1 create personal-media-log
 ```
 
-將輸出的 `database_id` 填入 `wrangler.toml`：
+將 `database_id` 填入 `wrangler.toml`：
 
 ```toml
 [[d1_databases]]
@@ -60,25 +59,67 @@ migrations_dir = "migrations"
 npm run db:migrate:remote
 ```
 
-本專案的列表、搜尋、篩選與分頁由 `/api/items` 在 D1 SQL 層處理，不會一次讀出全部資料到前端。
+目前 migrations：
 
-新增欄位 migration：
+- `0001_initial.sql`：建立 items 與關聯資料表。
+- `0002_add_item_metadata_json.sql`：新增 `items.metadata_json`，保存 TMDb 補充資料。
+- `0003_add_watch_progress_fields.sql`：新增 `progress_json`、`started_at`、`completed_at`、`planned_at`。
 
-```bash
-npm run db:migrate:remote
+`0003_add_watch_progress_fields.sql` 只使用 `ALTER TABLE ... ADD COLUMN`，不會重建 `items` table，也不會刪除既有資料。
+
+## 觀看狀態與舊狀態相容
+
+D1 既有 `status` 欄位目前仍沿用舊值：`raw`、`partial`、`complete`、`archived`、`deleted`。前端顯示新的 watch status，並同步寫入 `progress_json.watch_status`。
+
+儲存 mapping：
+
+- `plan_to_watch` -> `raw`
+- `watching` -> `partial`
+- `completed` -> `complete`
+- `paused` -> `partial`
+- `dropped` -> `archived`
+- `rewatching` -> `partial`
+
+讀取時會優先使用 `progress_json.watch_status`。如果舊資料沒有 `progress_json.watch_status`，才會從舊 `status` fallback。UI 不會顯示 archived / 封存選項；`archived` 只作為 dropped 的後端相容值。
+
+## 追劇進度
+
+`progress_json` 用來保存使用者自己的追劇進度，不與 TMDb metadata 混用：
+
+```json
+{
+  "watch_status": "watching",
+  "current_season": 2,
+  "current_episode": 5,
+  "total_seasons": 6,
+  "total_episodes": 73,
+  "episode_runtime": 50,
+  "progress_note": ""
+}
 ```
 
-`0002_add_item_metadata_json.sql` 會新增 `items.metadata_json`，用來保存 TMDb 補充資料。
+`total_seasons` / `total_episodes` 會優先讀 `progress_json`，如果沒有，才從 `metadata_json` 的 TMDb 資料補上。
+
+## 日期欄位
+
+日期都是選填：
+
+- `planned_at`：預計看
+- `started_at`：開始看
+- `completed_at`：看完
+- `watched_at`：保留為舊資料的紀錄日期 / 觀看日期
+
+UI 不會把日期當成必填，也不會強迫每筆資料都有看完時間。
 
 ## Cloudflare R2
 
-建立 bucket：
+建立備份 bucket：
 
 ```bash
 npx wrangler r2 bucket create personal-media-log-backups
 ```
 
-`wrangler.toml` 已預留：
+`wrangler.toml` 需要有：
 
 ```toml
 [[r2_buckets]]
@@ -86,125 +127,78 @@ binding = "MEDIA_LOG_BACKUPS"
 bucket_name = "personal-media-log-backups"
 ```
 
-備份檔會先用 AES-GCM 加密，再寫入 R2。請設定 32 bytes base64 key：
+備份加密 key：
 
 ```bash
 openssl rand -base64 32
-npx wrangler pages secret put BACKUP_ENCRYPTION_KEY_B64
+npx wrangler pages secret put BACKUP_ENCRYPTION_KEY_B64 --project-name your-pages-project
 ```
 
-R2 備份、每日 Cron、自動加密備份、還原功能已建立 API 與 UI 入口；R2 binding、密鑰與 Cron 觸發需在 Cloudflare production 環境驗證。
+R2 備份、排程與還原請在 Cloudflare production 環境驗證。
 
-## TMDb metadata
+## TMDb Metadata
 
-本專案使用 TMDb API 補齊電影 / TV series metadata，不使用爬蟲。前端不保存也不傳出 TMDb token，所有 TMDb request 都由 Pages Functions 發出。
+申請方式：
 
 1. 到 [TMDb](https://www.themoviedb.org/) 建立帳號。
-2. 進入 Settings → API。
-3. 建立 API application，取得 Read Access Token。
-4. 設定 Cloudflare Pages secret：
+2. 進入 Settings -> API。
+3. 建立 API application。
+4. 複製 Read Access Token。
+
+設定 Cloudflare Pages secret：
 
 ```bash
 npx wrangler pages secret put TMDB_READ_TOKEN --project-name your-pages-project
 ```
 
-也可用 legacy API key：
+也可設定 legacy API key：
 
 ```bash
 npx wrangler pages secret put TMDB_API_KEY --project-name your-pages-project
 ```
 
-建議優先使用 `TMDB_READ_TOKEN`。設定 secret 後重新部署 Pages，Functions 才會讀到新環境變數。
-
-補資料流程：
-
-1. 在資料表對 item 點「補資料」。
-2. 系統用 `official_title` 或 `raw_title` 搜尋 TMDb。
-3. 使用者從候選清單選擇正確項目。
-4. 系統抓 movie / TV detail 後填入既有欄位，並把完整補充資料放進 `metadata_json`。
-
-TV series 會保存 `season_count` 與 `episode_count`；poster 只保存 TMDb poster URL/path，不下載到 R2。
+系統會優先使用 `TMDB_READ_TOKEN`。TMDb request 只會從 Pages Functions 發出，token 不會進入前端 bundle。
 
 ## Cloudflare Access
 
-請在 Cloudflare Zero Trust 建立 Access Application，保護整個 Pages 網域。
+請在 Cloudflare Zero Trust 建立 Access Application 保護 Pages production domain。
 
 建議設定：
 
-- Application domain：你的 Pages production domain
-- Policy：Allow only your email
-- Session duration：依個人需求
-- Identity provider：Cloudflare One-Time PIN 或你慣用的 IdP
+- Application domain：Pages production domain。
+- Policy：只允許你的 email。
+- Identity provider：Cloudflare One-Time PIN 或你的 IdP。
 
-API 使用 Cloudflare Access headers 判斷登入狀態：
+後端會使用 Cloudflare Access headers / JWT 驗證：
 
 - `Cf-Access-Authenticated-User-Email`
 - `Cf-Access-Jwt-Assertion`
 
-可額外設定允許清單：
+可設定允許名單：
 
 ```bash
-npx wrangler pages secret put ACCESS_ALLOWED_EMAILS
+npx wrangler pages secret put ACCESS_ALLOWED_EMAILS --project-name your-pages-project
 ```
 
-值可以是單一 email 或逗號分隔清單。不要把 service token、管理金鑰或 Access secret 放入前端。
+不要把 service token、管理金鑰或 TMDb token 放在前端。
 
-## 匯入
+## 匯入 / 匯出
 
-支援：
+支援匯入：
 
 - CSV
 - JSON array
 - `{ "items": [...] }`
-- Excel 先另存 CSV 再匯入
+- Excel 請先匯出 CSV 再匯入。
 
-匯入流程：
+匯出端點：
 
-1. 選擇 `.csv` 或 `.json`
-2. 預覽欄位
-3. 對應欄位
-4. 提交匯入
+- `GET /api/export/json`
+- `GET /api/export/csv`
 
-重複資料判斷：
+完整備份請使用 JSON，因為 CSV 不適合完整保存巢狀 JSON 欄位，例如 `metadata_json` 與 `progress_json`。
 
-- `code` 已存在
-- 或 `raw_title / official_title + watched_at` 相同
-
-## 匯出與資料可攜
-
-一鍵匯出：
-
-- `/api/export/json`
-- `/api/export/csv`
-
-匯出不包含軟刪除資料。
-
-## 每日自動備份
-
-`wrangler.toml` 已預留 cron：
-
-```toml
-[triggers]
-crons = ["17 19 * * *"]
-```
-
-若 Pages Functions 的 Cron 在你的帳號/部署模式不可用，請建立一個 Cloudflare Worker Cron，每日呼叫同一套備份服務或受保護的備份 API。此段需在 Cloudflare production 環境驗證。
-
-## 部署 Cloudflare Pages
-
-Build command：
-
-```bash
-npm run build
-```
-
-Build output：
-
-```text
-dist
-```
-
-部署前檢查：
+## 驗證與部署
 
 ```bash
 npm run typecheck
@@ -212,13 +206,13 @@ npm run build
 npm run db:migrate:remote
 ```
 
-部署：
+如果已連接 GitHub 與 Cloudflare Pages，push 到 production branch 後 Cloudflare Pages 會自動部署。
+
+手動部署：
 
 ```bash
 npx wrangler pages deploy dist --project-name personal-media-log
 ```
-
-如果已經接 GitHub 到 Cloudflare Pages，push 後請到 Cloudflare Pages deployment 頁面確認 production 狀態。
 
 ## API
 

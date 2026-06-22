@@ -16,47 +16,47 @@ export function FilterSheet({
     <div className={open ? "filter-sheet open" : "filter-sheet"}>
       <div className="filter-sheet-panel">
         <header className="sheet-head">
-          <span><SlidersHorizontal size={18} />篩選</span>
-          <button className="ghost-icon" onClick={onClose} aria-label="關閉篩選"><X size={18} /></button>
+          <span><SlidersHorizontal size={18} />Filter</span>
+          <button className="ghost-icon" onClick={onClose} aria-label="Close filter"><X size={18} /></button>
         </header>
         <div className="filter-grid">
           <label>
-            狀態
+            Legacy Status
             <select value={filters.status} onChange={(event) => onChange({ status: event.target.value as ListFilters["status"] })}>
-              <option value="all">全部</option>
+              <option value="all">All</option>
               <option value="inbox">Inbox</option>
-              <option value="raw">待整理</option>
-              <option value="partial">部分整理</option>
-              <option value="organized">已整理</option>
-              <option value="archived">封存</option>
+              <option value="raw">Raw</option>
+              <option value="partial">Partial</option>
+              <option value="organized">Organized</option>
+              <option value="complete">Complete</option>
             </select>
           </label>
           <label>
-            類型
-            <input value={filters.type} onChange={(event) => onChange({ type: event.target.value })} placeholder="電影、韓劇、動畫..." />
+            Type
+            <input value={filters.type} onChange={(event) => onChange({ type: event.target.value })} placeholder="Movie, Series, Anime..." />
           </label>
           <label>
-            標籤
-            <input value={filters.tag} onChange={(event) => onChange({ tag: event.target.value })} placeholder="復仇、療癒..." />
+            Tag
+            <input value={filters.tag} onChange={(event) => onChange({ tag: event.target.value })} placeholder="Search a tag..." />
           </label>
           <label>
-            平台
-            <input value={filters.platform} onChange={(event) => onChange({ platform: event.target.value })} placeholder="Netflix、YouTube..." />
+            Platform
+            <input value={filters.platform} onChange={(event) => onChange({ platform: event.target.value })} placeholder="Netflix, YouTube..." />
           </label>
           <label>
-            年份
+            Year
             <input value={filters.year} onChange={(event) => onChange({ year: event.target.value })} inputMode="numeric" placeholder="2026" />
           </label>
           <label>
-            起日
+            From
             <input value={filters.watchedFrom} onChange={(event) => onChange({ watchedFrom: event.target.value })} type="date" />
           </label>
           <label>
-            迄日
+            To
             <input value={filters.watchedTo} onChange={(event) => onChange({ watchedTo: event.target.value })} type="date" />
           </label>
-          <label className="check"><input type="checkbox" checked={filters.favorite} onChange={(event) => onChange({ favorite: event.target.checked })} />收藏</label>
-          <label className="check"><input type="checkbox" checked={filters.highRated} onChange={(event) => onChange({ highRated: event.target.checked })} />高分</label>
+          <label className="check"><input type="checkbox" checked={filters.favorite} onChange={(event) => onChange({ favorite: event.target.checked })} />Favorites</label>
+          <label className="check"><input type="checkbox" checked={filters.highRated} onChange={(event) => onChange({ highRated: event.target.checked })} />High rated</label>
         </div>
       </div>
     </div>

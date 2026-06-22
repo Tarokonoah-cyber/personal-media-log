@@ -1,4 +1,5 @@
 export type ItemStatus = "raw" | "partial" | "complete" | "archived" | "deleted";
+export type WatchStatus = "plan_to_watch" | "watching" | "completed" | "paused" | "dropped" | "rewatching";
 
 export interface MediaItem {
   id: string;
@@ -11,6 +12,9 @@ export interface MediaItem {
   platform: string | null;
   release_year: number | null;
   watched_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  planned_at: string | null;
   rating: number | null;
   rewatch_score: number | null;
   favorite: boolean;
@@ -20,6 +24,7 @@ export interface MediaItem {
   source_url: string | null;
   cover_url: string | null;
   metadata_json: string | null;
+  progress_json: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -102,4 +107,14 @@ export interface TmdbCandidate {
 export interface TmdbSearchResponse {
   query: string;
   candidates: TmdbCandidate[];
+}
+
+export interface WatchProgress {
+  watch_status?: WatchStatus;
+  current_season?: number | null;
+  current_episode?: number | null;
+  total_seasons?: number | null;
+  total_episodes?: number | null;
+  episode_runtime?: number | null;
+  progress_note?: string;
 }

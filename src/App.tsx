@@ -15,11 +15,12 @@ import { applyMetadata, createItem, deleteItem, listItems, searchMetadata, updat
 import { toItemInput } from "./lib/itemTransforms";
 import { parseQuickEntry } from "./lib/quickParse";
 import { classifyItem, libraryTree } from "./lib/taxonomy";
+import { getWatchStatus, updateWatchProgress } from "./lib/watch";
 import type { ItemInput, ListFilters, MediaItem, TmdbCandidate } from "./types";
 
 const defaultFilters: ListFilters = {
   query: "",
-  status: "inbox",
+  status: "all",
   favorite: false,
   highRated: false,
   type: "",
@@ -29,16 +30,18 @@ const defaultFilters: ListFilters = {
   watchedFrom: "",
   watchedTo: "",
   page: 1,
-  pageSize: 50
+  pageSize: 100
 };
 
 type Tab = "log" | "organize" | "stats" | "data";
+type DisplayView = "table" | "list" | "poster";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("log");
+  const [displayView, setDisplayView] = useState<DisplayView>(() => (localStorage.getItem("displayView") as DisplayView) || "table");
   const [quickText, setQuickText] = useState("");
   const [filters, setFilters] = useState<ListFilters>(defaultFilters);
-  const [activeView, setActiveView] = useState("inbox");
+  const [activeView, setActiveView] = useState("table");
   const [activeCategory, setActiveCategory] = useState("");
   const [items, setItems] = useState<MediaItem[]>([]);
   const [summaryItems, setSummaryItems] = useState<MediaItem[]>([]);
@@ -69,6 +72,10 @@ export default function App() {
   }, [sidebarCollapsed]);
 
   useEffect(() => {
+    localStorage.setItem("displayView", displayView);
+  }, [displayView]);
+
+  useEffect(() => {
     void loadItems();
   }, [filters]);
 
@@ -88,6 +95,9 @@ export default function App() {
   const visibleItems = useMemo(() => {
     if (activeCategory) return items.filter((item) => classifyItem(item).category === activeCategory);
     if (libraryTypes.has(activeView)) return items.filter((item) => classifyItem(item).type === activeView);
+    if (["plan_to_watch", "watching", "completed", "paused", "dropped", "rewatching"].includes(activeView)) {
+      return items.filter((item) => getWatchStatus(item) === activeView);
+    }
     return items;
   }, [activeCategory, activeView, items, libraryTypes]);
 
@@ -99,7 +109,7 @@ export default function App() {
       setItems(result.items);
       setTotal(result.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "讀取資料失敗");
+      setError(err instanceof Error ? err.message : "Failed to load records");
     } finally {
       setLoading(false);
     }
@@ -129,15 +139,18 @@ export default function App() {
     if (!parsed.raw_title.trim()) return;
     setLoading(true);
     try {
-      await createItem(parsed);
+      await createItem({
+        ...parsed,
+        ...updateWatchProgress({ ...emptyItem(), raw_title: parsed.raw_title } as MediaItem, { watch_status: "plan_to_watch" })
+      });
       setQuickText("");
-      setToast("已新增到 Inbox");
-      setActiveView("inbox");
+      setToast("Added to Plan to Watch");
+      setActiveView("plan_to_watch");
       setActiveCategory("");
-      setFilters((current) => ({ ...current, status: "inbox", page: 1 }));
+      setFilters((current) => ({ ...current, status: "all", page: 1 }));
       await refreshVisibleData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "新增失敗");
+      setError(err instanceof Error ? err.message : "Failed to add record");
     } finally {
       setLoading(false);
     }
@@ -147,26 +160,27 @@ export default function App() {
     if (!selected) return;
     const saved = await updateItem(selected.id, input);
     setSelected(saved);
-    setToast("已儲存");
+    setToast("Saved");
     await refreshVisibleData();
   }
 
   async function removeItem(id: string) {
+    if (!window.confirm("Delete this record?")) return;
     await deleteItem(id);
     setSelected(null);
-    setToast("已移到刪除狀態");
+    setToast("Deleted");
     await refreshVisibleData();
   }
 
   async function toggleFavorite(item: MediaItem) {
     await updateItem(item.id, { ...toItemInput(item), favorite: !item.favorite });
-    setToast(item.favorite ? "已取消收藏" : "已加入收藏");
+    setToast(item.favorite ? "Removed from favorites" : "Added to favorites");
     await refreshVisibleData();
   }
 
   async function quickUpdate(item: MediaItem, patch: Partial<ItemInput>) {
     await updateItem(item.id, { ...toItemInput(item), ...patch });
-    setToast("已更新");
+    setToast("Updated");
     await refreshVisibleData();
   }
 
@@ -185,7 +199,7 @@ export default function App() {
       setMetadataQuery(result.query);
       setMetadataCandidates(result.candidates);
     } catch (err) {
-      setMetadataError(err instanceof Error ? err.message : "TMDb 搜尋失敗");
+      setMetadataError(err instanceof Error ? err.message : "TMDb search failed");
     } finally {
       setMetadataLoading(false);
     }
@@ -200,10 +214,10 @@ export default function App() {
       setMetadataTarget(null);
       setMetadataCandidates([]);
       setSelected(updated);
-      setToast("已套用 TMDb 資料");
+      setToast("TMDb metadata applied");
       await refreshVisibleData();
     } catch (err) {
-      setMetadataError(err instanceof Error ? err.message : "套用 TMDb 資料失敗");
+      setMetadataError(err instanceof Error ? err.message : "Failed to apply TMDb metadata");
     } finally {
       setMetadataLoading(false);
     }
@@ -218,11 +232,14 @@ export default function App() {
     setActiveCategory("");
     const base = { ...defaultFilters, query: filters.query };
     if (view === "inbox") setFilters({ ...base, status: "inbox" });
-    if (view === "all") setFilters({ ...base, status: "all" });
-    if (view === "favorite") setFilters({ ...base, status: "all", favorite: true });
-    if (view === "highRated") setFilters({ ...base, status: "all", highRated: true });
-    if (view === "byType") setFilters({ ...base, status: "all" });
-    if (view === "byPlatform") setFilters({ ...base, status: "all" });
+    else if (view === "favorites") setFilters({ ...base, favorite: true });
+    else if (view === "highRated") setFilters({ ...base, highRated: true });
+    else setFilters(base);
+  }
+
+  function selectDisplayView(view: DisplayView) {
+    setDisplayView(view);
+    setActiveView(view);
   }
 
   function selectLibrary(type: string, category?: string) {
@@ -242,7 +259,7 @@ export default function App() {
       <header className="topbar">
         <div className="title-block">
           <p className="eyebrow">Personal Media Log</p>
-          <h1>觀看資料庫</h1>
+          <h1>Watchlist Database</h1>
           <HomeDashboard items={summaryItems} inboxTotal={inboxTotal} favoriteTotal={favoriteTotal} />
         </div>
         <div className="header-tools">
@@ -253,7 +270,7 @@ export default function App() {
           </div>
           <button className="icon-button mobile-sidebar-button" onClick={() => setSidebarOpen(true)} title="Open views"><Menu size={18} /></button>
         </div>
-        <button className="icon-button" onClick={() => setDark((value) => !value)} title={dark ? "切換淺色模式" : "切換深色模式"}>
+        <button className="icon-button" onClick={() => setDark((value) => !value)} title={dark ? "Switch to light mode" : "Switch to dark mode"}>
           {dark ? <Sun size={18} /> : <Moon size={18} />}
         </button>
       </header>
@@ -263,8 +280,8 @@ export default function App() {
       {(tab === "log" || tab === "organize") && (
         <>
           <div className="mobile-view-switch">
-            {["inbox", "all", "favorite", "highRated", "byType", "byPlatform"].map((view) => (
-              <button key={view} className={activeView === view ? "active" : ""} onClick={() => selectView(view)}>
+            {["table", "list", "poster", "watching", "plan_to_watch", "completed"].map((view) => (
+              <button key={view} className={(displayView === view || activeView === view) ? "active" : ""} onClick={() => view === "table" || view === "list" || view === "poster" ? selectDisplayView(view as DisplayView) : selectView(view)}>
                 {viewLabel(view)}
               </button>
             ))}
@@ -273,6 +290,7 @@ export default function App() {
           <main className={sidebarCollapsed ? "database-layout sidebar-collapsed" : "database-layout"}>
             <ViewSidebar
               activeView={activeView}
+              displayView={displayView}
               tags={knownTags}
               filters={filters}
               collapsed={sidebarCollapsed}
@@ -280,30 +298,32 @@ export default function App() {
               onToggleCollapsed={() => setSidebarCollapsed((value) => !value)}
               onCloseMobile={() => setSidebarOpen(false)}
               onView={selectView}
+              onDisplayView={selectDisplayView}
               onLibrary={selectLibrary}
               onTag={selectTag}
             />
             <section className="database-main">
               <div className="database-toolbar">
                 <div className="view-tabs">
-                  {["inbox", "all", "favorite", "highRated", "byType", "byPlatform"].map((view) => (
-                    <button key={view} className={activeView === view ? "active" : ""} onClick={() => selectView(view)}>{viewLabel(view)}</button>
+                  {["table", "list", "poster", "watching", "plan_to_watch", "completed"].map((view) => (
+                    <button key={view} className={(displayView === view || activeView === view) ? "active" : ""} onClick={() => view === "table" || view === "list" || view === "poster" ? selectDisplayView(view as DisplayView) : selectView(view)}>{viewLabel(view)}</button>
                   ))}
                 </div>
-                <button className="filter-toggle" onClick={() => setFiltersOpen(true)}><SlidersHorizontal size={16} />篩選</button>
+                <button className="filter-toggle" onClick={() => setFiltersOpen(true)}><SlidersHorizontal size={16} />Filter</button>
               </div>
               <div className="database-meta">
                 <span>{viewLabel(activeView)} · {visibleItems.length === items.length ? total : visibleItems.length} items</span>
                 <div>
-                  <button disabled={filters.page <= 1} onClick={() => patchFilters({ page: filters.page - 1 })}>上一頁</button>
+                  <button disabled={filters.page <= 1} onClick={() => patchFilters({ page: filters.page - 1 })}>Prev</button>
                   <span>{filters.page} / {pageCount}</span>
-                  <button disabled={filters.page >= pageCount} onClick={() => patchFilters({ page: filters.page + 1 })}>下一頁</button>
+                  <button disabled={filters.page >= pageCount} onClick={() => patchFilters({ page: filters.page + 1 })}>Next</button>
                 </div>
               </div>
               <ItemList
                 items={visibleItems}
+                view={displayView}
                 loading={loading}
-                emptyMessage="還沒有紀錄。先在上方快速新增一筆，不用完整。"
+                emptyMessage="No records yet. Add one quickly from the top bar."
                 onSelect={setSelected}
                 onToggleFavorite={toggleFavorite}
                 onDelete={removeItem}
@@ -320,9 +340,9 @@ export default function App() {
       {tab === "data" && <ImportExport onImported={refreshVisibleData} />}
 
       <div className="utility-tabs">
-        <button className={tab === "log" ? "active" : ""} onClick={() => setTab("log")}>資料庫</button>
-        <button className={tab === "stats" ? "active" : ""} onClick={() => setTab("stats")}><BarChart3 size={15} />統計</button>
-        <button className={tab === "data" ? "active" : ""} onClick={() => setTab("data")}><DatabaseBackup size={15} />資料</button>
+        <button className={tab === "log" ? "active" : ""} onClick={() => setTab("log")}>Database</button>
+        <button className={tab === "stats" ? "active" : ""} onClick={() => setTab("stats")}><BarChart3 size={15} />Stats</button>
+        <button className={tab === "data" ? "active" : ""} onClick={() => setTab("data")}><DatabaseBackup size={15} />Data</button>
       </div>
 
       {selected && <ItemEditor item={selected} onClose={() => setSelected(null)} onSave={saveItem} onDelete={removeItem} />}
@@ -346,12 +366,52 @@ export default function App() {
 
 function viewLabel(view: string) {
   const labels: Record<string, string> = {
+    table: "Table",
+    list: "List",
+    poster: "Poster Wall",
     inbox: "Inbox",
-    all: "All",
-    favorite: "Favorites",
+    favorites: "Favorites",
     highRated: "High Rated",
-    byType: "By Type",
-    byPlatform: "By Platform"
+    plan_to_watch: "Plan to Watch",
+    watching: "Watching",
+    completed: "Completed",
+    paused: "Paused",
+    dropped: "Dropped",
+    rewatching: "Rewatching"
   };
   return labels[view] || view;
+}
+
+function emptyItem(): Partial<MediaItem> {
+  return {
+    id: "",
+    raw_title: "",
+    official_title: null,
+    original_title: null,
+    code: null,
+    type: null,
+    category: null,
+    platform: null,
+    release_year: null,
+    watched_at: null,
+    started_at: null,
+    completed_at: null,
+    planned_at: null,
+    rating: null,
+    rewatch_score: null,
+    favorite: false,
+    status: "raw",
+    quick_note: null,
+    long_note: null,
+    source_url: null,
+    cover_url: null,
+    metadata_json: null,
+    progress_json: null,
+    created_at: "",
+    updated_at: "",
+    deleted_at: null,
+    tags: [],
+    people: [],
+    collections: []
+  };
 }

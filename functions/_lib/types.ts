@@ -24,6 +24,9 @@ export interface ItemInput {
   platform?: string | null;
   release_year?: number | null;
   watched_at?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  planned_at?: string | null;
   rating?: number | null;
   rewatch_score?: number | null;
   favorite?: boolean;
@@ -33,6 +36,7 @@ export interface ItemInput {
   source_url?: string | null;
   cover_url?: string | null;
   metadata_json?: string | null;
+  progress_json?: string | null;
   tags?: string[];
   people?: string[];
   collections?: string[];

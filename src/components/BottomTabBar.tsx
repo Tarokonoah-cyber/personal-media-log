@@ -1,17 +1,16 @@
-import { BarChart3, DatabaseBackup, PencilLine, Table2 } from "lucide-react";
+import { BarChart3, DatabaseBackup, Table2 } from "lucide-react";
 
 type Tab = "log" | "organize" | "stats" | "data";
 
 const tabs = [
-  { id: "log", label: "記錄", icon: PencilLine },
-  { id: "organize", label: "整理", icon: Table2 },
-  { id: "stats", label: "統計", icon: BarChart3 },
-  { id: "data", label: "資料", icon: DatabaseBackup }
+  { id: "log", label: "Database", icon: Table2 },
+  { id: "stats", label: "Stats", icon: BarChart3 },
+  { id: "data", label: "Data", icon: DatabaseBackup }
 ] as const;
 
 export function BottomTabBar({ active, onChange }: { active: Tab; onChange: (tab: Tab) => void }) {
   return (
-    <nav className="bottom-tabs" aria-label="手機導覽">
+    <nav className="bottom-tabs" aria-label="Mobile navigation">
       {tabs.map((tab) => {
         const Icon = tab.icon;
         return (

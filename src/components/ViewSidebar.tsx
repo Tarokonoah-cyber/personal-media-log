@@ -1,17 +1,29 @@
-import { ChevronDown, ChevronLeft, ChevronRight, Clapperboard, EyeOff, Film, Folder, Hash, Inbox, Layers, List, Star, Tags, TrendingUp, Tv, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Clapperboard, Film, Folder, Hash, Inbox, Layers, List, Pause, Play, RotateCcw, Star, Tags, TrendingUp, Tv, X, CheckCircle2, Grid2X2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { libraryTree } from "../lib/taxonomy";
 import type { ListFilters } from "../types";
 
-const views = [
+const displayViews = [
+  { id: "table", label: "Table", icon: List },
+  { id: "list", label: "List", icon: List },
+  { id: "poster", label: "Poster Wall", icon: Grid2X2 }
+] as const;
+
+const statusViews = [
   { id: "inbox", label: "Inbox", icon: Inbox },
-  { id: "all", label: "All", icon: List },
-  { id: "favorite", label: "Favorites", icon: Star },
+  { id: "plan_to_watch", label: "Plan to Watch", icon: Inbox },
+  { id: "watching", label: "Watching", icon: Play },
+  { id: "completed", label: "Completed", icon: CheckCircle2 },
+  { id: "paused", label: "Paused", icon: Pause },
+  { id: "dropped", label: "Dropped", icon: X },
+  { id: "rewatching", label: "Rewatching", icon: RotateCcw },
+  { id: "favorites", label: "Favorites", icon: Star },
   { id: "highRated", label: "High Rated", icon: TrendingUp }
 ] as const;
 
 export function ViewSidebar({
   activeView,
+  displayView,
   tags,
   filters,
   collapsed,
@@ -19,10 +31,12 @@ export function ViewSidebar({
   onToggleCollapsed,
   onCloseMobile,
   onView,
+  onDisplayView,
   onLibrary,
   onTag
 }: {
   activeView: string;
+  displayView: "table" | "list" | "poster";
   tags: string[];
   filters: ListFilters;
   collapsed: boolean;
@@ -30,6 +44,7 @@ export function ViewSidebar({
   onToggleCollapsed: () => void;
   onCloseMobile: () => void;
   onView: (view: string) => void;
+  onDisplayView: (view: "table" | "list" | "poster") => void;
   onLibrary: (type: string, category?: string) => void;
   onTag: (tag: string) => void;
 }) {
@@ -41,12 +56,11 @@ export function ViewSidebar({
     }
   });
   const showText = !collapsed || mobileOpen;
+  const activeParent = useMemo(() => activeView.split("/")[0], [activeView]);
 
   useEffect(() => {
     localStorage.setItem("libraryOpenGroups", JSON.stringify(openGroups));
   }, [openGroups]);
-
-  const activeParent = useMemo(() => activeView.split("/")[0], [activeView]);
 
   function toggleGroup(label: string) {
     setOpenGroups((current) => ({ ...current, [label]: !(current[label] ?? activeParent === label) }));
@@ -70,10 +84,23 @@ export function ViewSidebar({
         </div>
 
         <div className="sidebar-group">
-          {views.map((view) => {
+          {displayViews.map((view) => {
             const Icon = view.icon;
             return (
-              <button key={view.id} className={activeView === view.id ? "active" : ""} onClick={() => onView(view.id)} title={view.label}>
+              <button key={view.id} className={displayView === view.id ? "active" : ""} onClick={() => onDisplayView(view.id)} title={view.label}>
+                <Icon size={15} />
+                {showText && <span>{view.label}</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="sidebar-group">
+          {showText && <p>Status</p>}
+          {statusViews.map((view) => {
+            const Icon = view.icon;
+            return (
+              <button key={view.id} className={activeView === view.id || (view.id === "favorites" && filters.favorite) ? "active" : ""} onClick={() => onView(view.id)} title={view.label}>
                 <Icon size={15} />
                 {showText && <span>{view.label}</span>}
               </button>
@@ -129,6 +156,5 @@ function iconFor(label: string) {
   if (label === "Series") return <Tv size={15} />;
   if (label === "Anime") return <Clapperboard size={15} />;
   if (label === "YouTube") return <Layers size={15} />;
-  if (label === "Adult") return <EyeOff size={15} />;
   return <Folder size={15} />;
 }
