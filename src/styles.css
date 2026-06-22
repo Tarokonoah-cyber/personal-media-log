@@ -190,6 +190,13 @@ h2 {
   padding: 0;
 }
 
+.row-action {
+  min-height: 28px;
+  padding: 0 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .primary {
   background: var(--text);
   color: var(--bg);
@@ -652,6 +659,116 @@ h2 {
   display: grid;
   justify-items: end;
   background: rgba(0, 0, 0, 0.42);
+}
+
+.metadata-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.44);
+}
+
+.metadata-modal {
+  width: min(820px, 100%);
+  max-height: min(760px, 92vh);
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+}
+
+.metadata-head,
+.metadata-search {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.metadata-head h2 {
+  font-size: 17px;
+}
+
+.metadata-search input {
+  flex: 1;
+}
+
+.candidate-list {
+  display: grid;
+}
+
+.candidate-row {
+  min-height: 82px;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  gap: 11px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  text-align: left;
+}
+
+.candidate-row:hover {
+  background: var(--hover);
+}
+
+.candidate-row img,
+.poster-placeholder {
+  width: 46px;
+  height: 68px;
+  border-radius: 5px;
+  object-fit: cover;
+  background: var(--panel);
+}
+
+.poster-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--faint);
+  font-size: 10px;
+  text-align: center;
+}
+
+.candidate-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.candidate-main strong,
+.candidate-main em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidate-main em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 12px;
+}
+
+.candidate-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.candidate-meta b {
+  color: var(--text);
+}
+
+.candidate-action {
+  color: var(--accent);
+  font-size: 12px;
 }
 
 .drawer {

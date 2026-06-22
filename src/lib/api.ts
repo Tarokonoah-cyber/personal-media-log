@@ -1,4 +1,4 @@
-import type { BackupJob, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, StatsResponse } from "../types";
+import type { BackupJob, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, StatsResponse, TmdbSearchResponse } from "../types";
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -61,6 +61,20 @@ export function createBackup() {
 
 export function restoreBackup(id: string) {
   return request<{ imported: number; skipped: number }>(`/api/backups/${id}/restore`, { method: "POST", body: "{}" });
+}
+
+export function searchMetadata(itemId: string, query?: string) {
+  return request<TmdbSearchResponse>("/api/metadata/search", {
+    method: "POST",
+    body: JSON.stringify({ itemId, query })
+  });
+}
+
+export function applyMetadata(itemId: string, tmdb_id: number, media_type: "movie" | "tv") {
+  return request<MediaItem>("/api/metadata/apply", {
+    method: "POST",
+    body: JSON.stringify({ itemId, tmdb_id, media_type })
+  });
 }
 
 export function exportJsonUrl() {

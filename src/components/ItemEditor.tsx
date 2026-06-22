@@ -111,6 +111,7 @@ function toForm(item: MediaItem) {
     long_note: item.long_note || "",
     source_url: item.source_url || "",
     cover_url: item.cover_url || "",
+    metadata_json: item.metadata_json || "",
     tags: item.tags.join(", "),
     people: item.people.join(", "),
     collections: item.collections.join(", ")
@@ -136,6 +137,7 @@ function toInput(form: ReturnType<typeof toForm>): ItemInput {
     long_note: emptyToNull(form.long_note),
     source_url: emptyToNull(form.source_url),
     cover_url: emptyToNull(form.cover_url),
+    metadata_json: emptyToNull(form.metadata_json),
     tags: splitList(form.tags),
     people: splitList(form.people),
     collections: splitList(form.collections)

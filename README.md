@@ -12,6 +12,7 @@
 - 統計頁：總筆數、今年筆數、每月觀看、平均評分、Top 20、最近觀看、分類/平台/標籤數
 - CSV / JSON 匯入，含預覽與欄位對應
 - JSON / CSV 匯出
+- TMDb metadata lookup，使用者選擇候選後才補資料
 - R2 加密備份與還原 API 架構
 - Cloudflare Access 全站保護設計
 
@@ -61,6 +62,14 @@ npm run db:migrate:remote
 
 本專案的列表、搜尋、篩選與分頁由 `/api/items` 在 D1 SQL 層處理，不會一次讀出全部資料到前端。
 
+新增欄位 migration：
+
+```bash
+npm run db:migrate:remote
+```
+
+`0002_add_item_metadata_json.sql` 會新增 `items.metadata_json`，用來保存 TMDb 補充資料。
+
 ## Cloudflare R2
 
 建立 bucket：
@@ -85,6 +94,36 @@ npx wrangler pages secret put BACKUP_ENCRYPTION_KEY_B64
 ```
 
 R2 備份、每日 Cron、自動加密備份、還原功能已建立 API 與 UI 入口；R2 binding、密鑰與 Cron 觸發需在 Cloudflare production 環境驗證。
+
+## TMDb metadata
+
+本專案使用 TMDb API 補齊電影 / TV series metadata，不使用爬蟲。前端不保存也不傳出 TMDb token，所有 TMDb request 都由 Pages Functions 發出。
+
+1. 到 [TMDb](https://www.themoviedb.org/) 建立帳號。
+2. 進入 Settings → API。
+3. 建立 API application，取得 Read Access Token。
+4. 設定 Cloudflare Pages secret：
+
+```bash
+npx wrangler pages secret put TMDB_READ_TOKEN --project-name your-pages-project
+```
+
+也可用 legacy API key：
+
+```bash
+npx wrangler pages secret put TMDB_API_KEY --project-name your-pages-project
+```
+
+建議優先使用 `TMDB_READ_TOKEN`。設定 secret 後重新部署 Pages，Functions 才會讀到新環境變數。
+
+補資料流程：
+
+1. 在資料表對 item 點「補資料」。
+2. 系統用 `official_title` 或 `raw_title` 搜尋 TMDb。
+3. 使用者從候選清單選擇正確項目。
+4. 系統抓 movie / TV detail 後填入既有欄位，並把完整補充資料放進 `metadata_json`。
+
+TV series 會保存 `season_count` 與 `episode_count`；poster 只保存 TMDb poster URL/path，不下載到 R2。
 
 ## Cloudflare Access
 
@@ -191,6 +230,8 @@ npx wrangler pages deploy dist --project-name personal-media-log
 - `GET /api/stats`
 - `POST /api/import/preview`
 - `POST /api/import/commit`
+- `POST /api/metadata/search`
+- `POST /api/metadata/apply`
 - `GET /api/export/json`
 - `GET /api/export/csv`
 - `GET /api/backups`

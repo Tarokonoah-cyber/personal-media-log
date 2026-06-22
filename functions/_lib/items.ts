@@ -23,6 +23,7 @@ const itemColumns = [
   "long_note",
   "source_url",
   "cover_url",
+  "metadata_json",
   "created_at",
   "updated_at",
   "deleted_at"
@@ -139,8 +140,8 @@ export async function createItem(env: Env, actor: Actor, input: ItemInput) {
       .prepare(`INSERT INTO items (
         id, raw_title, official_title, original_title, code, type, category, platform,
         release_year, watched_at, rating, rewatch_score, favorite, status, quick_note,
-        long_note, source_url, cover_url, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        long_note, source_url, cover_url, metadata_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(
         id,
         rawTitle,
@@ -160,6 +161,7 @@ export async function createItem(env: Env, actor: Actor, input: ItemInput) {
         normalized.long_note,
         normalized.source_url,
         normalized.cover_url,
+        normalized.metadata_json,
         timestamp,
         timestamp
       ),
@@ -183,7 +185,7 @@ export async function updateItem(env: Env, actor: Actor, id: string, input: Item
         raw_title = ?, official_title = ?, original_title = ?, code = ?, type = ?,
         category = ?, platform = ?, release_year = ?, watched_at = ?, rating = ?,
         rewatch_score = ?, favorite = ?, status = ?, quick_note = ?, long_note = ?,
-        source_url = ?, cover_url = ?, updated_at = ?
+        source_url = ?, cover_url = ?, metadata_json = ?, updated_at = ?
         WHERE id = ?`)
       .bind(
         rawTitle,
@@ -203,6 +205,7 @@ export async function updateItem(env: Env, actor: Actor, id: string, input: Item
         normalized.long_note,
         normalized.source_url,
         normalized.cover_url,
+        normalized.metadata_json,
         nowIso(),
         id
       ),
@@ -358,6 +361,7 @@ async function hydrateItems(env: Env, rows: Row[]): Promise<ItemRecord[]> {
     long_note: nullableString(row.long_note),
     source_url: nullableString(row.source_url),
     cover_url: nullableString(row.cover_url),
+    metadata_json: nullableString(row.metadata_json),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
     deleted_at: nullableString(row.deleted_at),
@@ -424,6 +428,7 @@ function normalizeInput(input: ItemInput): Required<ItemInput> {
     long_note: cleanString(input.long_note),
     source_url: cleanString(input.source_url),
     cover_url: cleanString(input.cover_url),
+    metadata_json: cleanString(input.metadata_json),
     tags: input.tags || [],
     people: input.people || [],
     collections: input.collections || []

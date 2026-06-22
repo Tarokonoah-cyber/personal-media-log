@@ -2,6 +2,7 @@ import { createBackup, listBackups, restoreBackup } from "../_lib/backup";
 import { error, handleError, json, noContent, notFound, readJson, requireAccess } from "../_lib/http";
 import { parseCsv, parseJsonItems, toCsv } from "../_lib/importExport";
 import { createItem, exportItems, getItem, getStats, importItems, isLikelyDuplicate, listItems, softDeleteItem, updateItem } from "../_lib/items";
+import { applyTmdbMetadata, searchTmdb } from "../_lib/tmdb";
 import type { Env, ItemInput, ItemListParams, ItemStatus } from "../_lib/types";
 
 export const onRequest: PagesFunction<Env, "path"> = async (context) => {
@@ -55,6 +56,20 @@ export const onRequest: PagesFunction<Env, "path"> = async (context) => {
         const body = await readJson<{ rows: ItemInput[]; sourceName?: string; sourceType?: "csv" | "json" }>(context.request);
         if (!Array.isArray(body.rows)) return error(400, "rows must be an array");
         return json(await importItems(context.env, actor, body.rows, body.sourceName || "manual-import", body.sourceType || "csv"));
+      }
+    }
+
+    if (path[0] === "metadata") {
+      if (method === "POST" && path[1] === "search") {
+        const body = await readJson<{ itemId?: string; query?: string }>(context.request);
+        return json(await searchTmdb(context.env, body.itemId, body.query));
+      }
+      if (method === "POST" && path[1] === "apply") {
+        const body = await readJson<{ itemId?: string; tmdb_id?: number; media_type?: "movie" | "tv" }>(context.request);
+        if (!body.itemId || !body.tmdb_id || (body.media_type !== "movie" && body.media_type !== "tv")) {
+          return error(400, "itemId, tmdb_id, and media_type are required");
+        }
+        return json(await applyTmdbMetadata(context.env, actor, body.itemId, body.tmdb_id, body.media_type));
       }
     }
 
@@ -125,6 +140,7 @@ function defaultMapping(columns: string[]) {
     "long_note",
     "source_url",
     "cover_url",
+    "metadata_json",
     "tags",
     "people",
     "collections"

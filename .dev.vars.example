@@ -1,3 +1,4 @@
 DEV_AUTH_EMAIL=your-email@example.com
 ACCESS_ALLOWED_EMAILS=your-email@example.com
 BACKUP_ENCRYPTION_KEY_B64=generate-with-openssl-rand-base64-32
+TMDB_READ_TOKEN=your-tmdb-read-access-token

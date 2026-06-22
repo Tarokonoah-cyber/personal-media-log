@@ -69,6 +69,7 @@ export function toCsv(rows: Record<string, unknown>[]) {
     "long_note",
     "source_url",
     "cover_url",
+    "metadata_json",
     "tags",
     "people",
     "collections",
@@ -108,6 +109,7 @@ function normalizeExternalRow(value: unknown): ItemInput {
     long_note: asString(row.long_note),
     source_url: asString(row.source_url),
     cover_url: asString(row.cover_url),
+    metadata_json: asString(row.metadata_json),
     tags: asList(row.tags),
     people: asList(row.people),
     collections: asList(row.collections)

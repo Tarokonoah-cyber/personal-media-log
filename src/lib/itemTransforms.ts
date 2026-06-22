@@ -19,6 +19,7 @@ export function toItemInput(item: MediaItem): ItemInput {
     long_note: item.long_note,
     source_url: item.source_url,
     cover_url: item.cover_url,
+    metadata_json: item.metadata_json,
     tags: item.tags,
     people: item.people,
     collections: item.collections

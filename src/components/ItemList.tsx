@@ -1,4 +1,4 @@
-import { Star, Trash2 } from "lucide-react";
+import { Sparkles, Star, Trash2 } from "lucide-react";
 import { MouseEvent } from "react";
 import { displayDate } from "../lib/date";
 import { classifyItem } from "../lib/taxonomy";
@@ -11,6 +11,7 @@ export function ItemList({
   onSelect,
   onToggleFavorite,
   onDelete,
+  onMetadata,
   onQuickUpdate
 }: {
   items: MediaItem[];
@@ -19,6 +20,7 @@ export function ItemList({
   onSelect: (item: MediaItem) => void;
   onToggleFavorite?: (item: MediaItem) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
+  onMetadata?: (item: MediaItem) => void;
   onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
 }) {
   if (loading) return <div className="empty">讀取中...</div>;
@@ -87,10 +89,14 @@ export function ItemList({
                   <td className="muted-cell">{displayDate(item.watched_at || item.created_at)}</td>
                   <td className="note-cell">{item.quick_note || item.long_note || ""}</td>
                   <td>
-                    <button className="row-icon danger-button" onClick={(event) => action(event, () => onDelete?.(item.id))} title="Delete">
-                      <Trash2 size={15} />
-                    </button>
-                  </td>
+                  <button className="row-icon danger-button" onClick={(event) => action(event, () => onDelete?.(item.id))} title="Delete">
+                    <Trash2 size={15} />
+                  </button>
+                  <button className="row-action" onClick={(event) => action(event, () => onMetadata?.(item))} title="補資料">
+                    <Sparkles size={14} />
+                    補資料
+                  </button>
+                </td>
                 </tr>
               );
             })}
@@ -113,6 +119,9 @@ export function ItemList({
               </div>
             </div>
             <div className="compact-actions">
+              <button className="row-icon" onClick={(event) => action(event, () => onMetadata?.(item))} title="補資料">
+                <Sparkles size={15} />
+              </button>
               <button className={item.favorite ? "row-icon active" : "row-icon"} onClick={(event) => action(event, () => onToggleFavorite?.(item))} title="切換收藏">
                 <Star size={15} fill={item.favorite ? "currentColor" : "none"} />
               </button>

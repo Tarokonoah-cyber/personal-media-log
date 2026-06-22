@@ -4,6 +4,8 @@ export interface Env {
   ACCESS_ALLOWED_EMAILS?: string;
   DEV_AUTH_EMAIL?: string;
   BACKUP_ENCRYPTION_KEY_B64?: string;
+  TMDB_READ_TOKEN?: string;
+  TMDB_API_KEY?: string;
 }
 
 export interface Actor {
@@ -30,6 +32,7 @@ export interface ItemInput {
   long_note?: string | null;
   source_url?: string | null;
   cover_url?: string | null;
+  metadata_json?: string | null;
   tags?: string[];
   people?: string[];
   collections?: string[];

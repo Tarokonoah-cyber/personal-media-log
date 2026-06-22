@@ -19,6 +19,7 @@ export const importFields = [
   "long_note",
   "source_url",
   "cover_url",
+  "metadata_json",
   "tags",
   "people",
   "collections"
@@ -62,6 +63,7 @@ function normalizeItem(row: Record<string, unknown>): ItemInput {
     long_note: nullableString(row.long_note),
     source_url: nullableString(row.source_url),
     cover_url: nullableString(row.cover_url),
+    metadata_json: nullableString(row.metadata_json),
     tags: listValue(row.tags),
     people: listValue(row.people),
     collections: listValue(row.collections)

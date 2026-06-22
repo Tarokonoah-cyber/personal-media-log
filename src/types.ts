@@ -19,6 +19,7 @@ export interface MediaItem {
   long_note: string | null;
   source_url: string | null;
   cover_url: string | null;
+  metadata_json: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -84,4 +85,21 @@ export interface BackupJob {
   created_at: string;
   restored_at: string | null;
   status: string;
+}
+
+export interface TmdbCandidate {
+  tmdb_id: number;
+  media_type: "movie" | "tv";
+  title: string;
+  original_title: string;
+  year: number | null;
+  country: string[];
+  genres: string[];
+  poster_path: string | null;
+  poster_url: string | null;
+}
+
+export interface TmdbSearchResponse {
+  query: string;
+  candidates: TmdbCandidate[];
 }

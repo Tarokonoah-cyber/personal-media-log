@@ -6,15 +6,16 @@ import { HomeDashboard } from "./components/HomeDashboard";
 import { ImportExport } from "./components/ImportExport";
 import { ItemEditor } from "./components/ItemEditor";
 import { ItemList } from "./components/ItemList";
+import { MetadataLookupModal } from "./components/MetadataLookupModal";
 import { QuickCapture } from "./components/QuickCapture";
 import { StatsPanel } from "./components/StatsPanel";
 import { Toast } from "./components/Toast";
 import { ViewSidebar } from "./components/ViewSidebar";
-import { createItem, deleteItem, listItems, updateItem } from "./lib/api";
+import { applyMetadata, createItem, deleteItem, listItems, searchMetadata, updateItem } from "./lib/api";
 import { toItemInput } from "./lib/itemTransforms";
 import { parseQuickEntry } from "./lib/quickParse";
 import { classifyItem, libraryTree } from "./lib/taxonomy";
-import type { ItemInput, ListFilters, MediaItem } from "./types";
+import type { ItemInput, ListFilters, MediaItem, TmdbCandidate } from "./types";
 
 const defaultFilters: ListFilters = {
   query: "",
@@ -45,6 +46,11 @@ export default function App() {
   const [inboxTotal, setInboxTotal] = useState(0);
   const [favoriteTotal, setFavoriteTotal] = useState(0);
   const [selected, setSelected] = useState<MediaItem | null>(null);
+  const [metadataTarget, setMetadataTarget] = useState<MediaItem | null>(null);
+  const [metadataCandidates, setMetadataCandidates] = useState<TmdbCandidate[]>([]);
+  const [metadataQuery, setMetadataQuery] = useState("");
+  const [metadataLoading, setMetadataLoading] = useState(false);
+  const [metadataError, setMetadataError] = useState("");
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState("");
   const [error, setError] = useState("");
@@ -164,6 +170,45 @@ export default function App() {
     await refreshVisibleData();
   }
 
+  async function openMetadataLookup(item: MediaItem) {
+    setMetadataTarget(item);
+    setMetadataCandidates([]);
+    setMetadataError("");
+    await runMetadataSearch(item, item.official_title || item.raw_title);
+  }
+
+  async function runMetadataSearch(item: MediaItem, query?: string) {
+    setMetadataLoading(true);
+    setMetadataError("");
+    try {
+      const result = await searchMetadata(item.id, query);
+      setMetadataQuery(result.query);
+      setMetadataCandidates(result.candidates);
+    } catch (err) {
+      setMetadataError(err instanceof Error ? err.message : "TMDb 搜尋失敗");
+    } finally {
+      setMetadataLoading(false);
+    }
+  }
+
+  async function applyCandidate(candidate: TmdbCandidate) {
+    if (!metadataTarget) return;
+    setMetadataLoading(true);
+    setMetadataError("");
+    try {
+      const updated = await applyMetadata(metadataTarget.id, candidate.tmdb_id, candidate.media_type);
+      setMetadataTarget(null);
+      setMetadataCandidates([]);
+      setSelected(updated);
+      setToast("已套用 TMDb 資料");
+      await refreshVisibleData();
+    } catch (err) {
+      setMetadataError(err instanceof Error ? err.message : "套用 TMDb 資料失敗");
+    } finally {
+      setMetadataLoading(false);
+    }
+  }
+
   function patchFilters(patch: Partial<ListFilters>) {
     setFilters((current) => ({ ...current, ...patch, page: patch.page ?? 1 }));
   }
@@ -262,6 +307,7 @@ export default function App() {
                 onSelect={setSelected}
                 onToggleFavorite={toggleFavorite}
                 onDelete={removeItem}
+                onMetadata={openMetadataLookup}
                 onQuickUpdate={quickUpdate}
               />
             </section>
@@ -280,6 +326,18 @@ export default function App() {
       </div>
 
       {selected && <ItemEditor item={selected} onClose={() => setSelected(null)} onSave={saveItem} onDelete={removeItem} />}
+      {metadataTarget && (
+        <MetadataLookupModal
+          item={metadataTarget}
+          query={metadataQuery}
+          candidates={metadataCandidates}
+          loading={metadataLoading}
+          error={metadataError}
+          onSearch={(query) => runMetadataSearch(metadataTarget, query)}
+          onApply={applyCandidate}
+          onClose={() => setMetadataTarget(null)}
+        />
+      )}
       <Toast message={toast} onClose={() => setToast("")} />
       <BottomTabBar active={tab} onChange={setTab} />
     </div>
