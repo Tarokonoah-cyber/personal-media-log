@@ -33,6 +33,8 @@ const defaultFilters: ListFilters = {
 
 type Tab = "log" | "stats" | "data" | "settings";
 type DisplayView = "table" | "list" | "poster";
+const displayViews: DisplayView[] = ["table", "list", "poster"];
+const quickStatusViews = ["home", "watching", "plan_to_watch", "completed", "favorites"];
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("log");
@@ -321,28 +323,32 @@ export default function App() {
         <section className="database-main">
           {tab === "log" && (
             <>
-              <div className="mobile-view-switch">
-                {["table", "list", "poster", "watching", "plan_to_watch", "completed"].map((view) => (
-                  <button key={view} className={(displayView === view || activeView === view) ? "active" : ""} onClick={() => view === "table" || view === "list" || view === "poster" ? selectDisplayView(view as DisplayView) : selectView(view)}>
-                    {viewLabel(view)}
-                  </button>
-                ))}
-              </div>
-
-              <div className="database-toolbar">
-                <div className="view-tabs">
-                  {["table", "list", "poster", "watching", "plan_to_watch", "completed"].map((view) => (
-                    <button key={view} className={(displayView === view || activeView === view) ? "active" : ""} onClick={() => view === "table" || view === "list" || view === "poster" ? selectDisplayView(view as DisplayView) : selectView(view)}>{viewLabel(view)}</button>
-                  ))}
-                </div>
-                <button className="filter-toggle" onClick={() => setFiltersOpen(true)}><SlidersHorizontal size={16} />篩選</button>
-              </div>
               <div className="database-meta">
                 <span>{viewLabel(activeView)} · {visibleItems.length === items.length ? total : visibleItems.length} 筆</span>
                 <div>
                   <button disabled={filters.page <= 1} onClick={() => patchFilters({ page: filters.page - 1 })}>上一頁</button>
                   <span>{filters.page} / {pageCount}</span>
                   <button disabled={filters.page >= pageCount} onClick={() => patchFilters({ page: filters.page + 1 })}>下一頁</button>
+                </div>
+              </div>
+              <div className="database-toolbar">
+                <div className="toolbar-control-row">
+                  <div className="segmented-control view-segment" aria-label="視圖切換">
+                    {displayViews.map((view) => (
+                      <button key={view} className={displayView === view ? "active" : ""} onClick={() => selectDisplayView(view)}>
+                        {viewLabel(view)}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="toolbar-spacer" />
+                  <div className="segmented-control status-segment" aria-label="快速狀態篩選">
+                    {quickStatusViews.map((view) => (
+                      <button key={view} className={activeView === view ? "active" : ""} onClick={() => selectView(view)}>
+                        {quickFilterLabel(view)}
+                      </button>
+                    ))}
+                  </div>
+                  <button className="filter-toggle advanced-filter" onClick={() => setFiltersOpen(true)}><SlidersHorizontal size={16} />進階篩選</button>
                 </div>
               </div>
               <ItemList
@@ -401,6 +407,17 @@ function viewLabel(view: string) {
     stats: "統計",
     data: "資料備份",
     settings: "設定"
+  };
+  return labels[view] || view;
+}
+
+function quickFilterLabel(view: string) {
+  const labels: Record<string, string> = {
+    home: "全部",
+    watching: "觀看中",
+    plan_to_watch: "待觀看",
+    completed: "已完成",
+    favorites: "收藏"
   };
   return labels[view] || view;
 }
