@@ -101,6 +101,25 @@ select {
   outline: none;
 }
 
+select {
+  appearance: none;
+  color-scheme: dark;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 13px) 50%,
+    calc(100% - 8px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 24px;
+}
+
+option {
+  background: var(--panel);
+  color: var(--text);
+}
+
 input:focus,
 textarea:focus,
 select:focus {
@@ -195,6 +214,12 @@ h2 {
   padding: 0 7px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .primary {
@@ -436,6 +461,36 @@ h2 {
 .compact-title svg,
 .row-icon.active {
   color: var(--warning);
+}
+
+.rating-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  min-width: 94px;
+}
+
+.rating-stars button {
+  width: 18px;
+  min-height: 22px;
+  padding: 0;
+  color: color-mix(in srgb, var(--warning), transparent 34%);
+}
+
+.rating-stars button:hover,
+.rating-stars button.filled {
+  color: #f2c94c;
+  background: transparent;
+}
+
+.rating-stars.compact {
+  min-width: auto;
+  gap: 0;
+}
+
+.rating-stars.compact button {
+  width: 15px;
+  min-height: 18px;
 }
 
 .compact-meta,
@@ -1065,6 +1120,12 @@ h2 {
   .tree-chevron {
     margin-left: auto;
     color: var(--faint);
+    transform: rotate(-90deg);
+    transition: transform 120ms ease;
+  }
+
+  .tree-chevron.open {
+    transform: rotate(0deg);
   }
 
   .tree-children {
@@ -1150,6 +1211,7 @@ h2 {
     width: 100%;
     min-width: 1120px;
     border-collapse: collapse;
+    table-layout: fixed;
   }
 
   .database-table th,
@@ -1159,6 +1221,7 @@ h2 {
     text-align: left;
     vertical-align: middle;
     font-size: 13px;
+    height: 40px;
   }
 
   .database-table th {
@@ -1176,6 +1239,41 @@ h2 {
 
   .title-col {
     width: 300px;
+  }
+
+  .database-table th:nth-child(2),
+  .database-table td:nth-child(2) {
+    width: 122px;
+  }
+
+  .database-table th:nth-child(3),
+  .database-table td:nth-child(3) {
+    width: 122px;
+  }
+
+  .database-table th:nth-child(4),
+  .database-table td:nth-child(4) {
+    width: 120px;
+  }
+
+  .database-table th:nth-child(6),
+  .database-table td:nth-child(6) {
+    width: 130px;
+  }
+
+  .database-table th:nth-child(7),
+  .database-table td:nth-child(7) {
+    width: 72px;
+  }
+
+  .database-table th:nth-child(8),
+  .database-table td:nth-child(8) {
+    width: 112px;
+  }
+
+  .database-table th:nth-child(10),
+  .database-table td:nth-child(10) {
+    width: 132px;
   }
 
   .title-cell strong {
@@ -1202,15 +1300,17 @@ h2 {
   .inline-status {
     min-height: 26px;
     padding: 2px 6px;
-    background: transparent;
-  }
-
-  .inline-rating {
-    width: 54px;
+    background-color: var(--field);
+    border-color: transparent;
+    color: var(--text);
   }
 
   .inline-type {
-    width: 104px;
+    width: 110px;
+  }
+
+  .inline-status {
+    width: 118px;
   }
 
   .compact-list {

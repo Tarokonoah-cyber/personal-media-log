@@ -13,37 +13,30 @@ export const libraryTree = [
   },
   { id: "anime", label: "Anime", children: [] },
   { id: "youtube", label: "YouTube", children: [] },
+  { id: "adult", label: "Adult", children: [] },
   { id: "other", label: "Other", children: [] }
 ] as const;
 
-export type LibraryParent = (typeof libraryTree)[number]["label"];
-
 export function classifyItem(item: MediaItem) {
-  const type = normalize(`${item.type || ""} ${item.category || ""} ${item.platform || ""}`);
+  const haystack = normalize(`${item.type || ""} ${item.category || ""} ${item.platform || ""} ${item.tags.join(" ")}`);
   const category = normalize(item.category || "");
-  const platform = normalize(item.platform || "");
 
-  if (type.includes("youtube") || platform.includes("youtube")) return { type: "YouTube", category: "" };
-  if (type.includes("anime") || type.includes("動畫")) {
-    if (type.includes("series") || type.includes("劇集")) return { type: "Series", category: "Anime Series" };
+  if (includesAny(haystack, ["adult", "nsfw", "jav", "av ", "18+", "r18", "xxx", "adult content", "成人"])) {
+    return { type: "Adult", category: "" };
+  }
+  if (includesAny(haystack, ["youtube", "yt"])) return { type: "YouTube", category: "" };
+  if (includesAny(haystack, ["anime", "animation", "anime series", "動畫"])) {
+    if (includesAny(haystack, ["series", "tv", "season", "劇集"])) return { type: "Series", category: "Anime Series" };
     return { type: "Anime", category: "" };
   }
-  if (type.includes("series") || type.includes("drama") || type.includes("韓劇") || type.includes("日劇") || type.includes("陸劇") || type.includes("台劇") || type.includes("variety")) {
-    return { type: "Series", category: seriesCategory(type || category) };
+  if (includesAny(haystack, ["series", "drama", "tv show", "k-drama", "c-drama", "j-drama", "variety", "韓劇", "陸劇", "日劇", "台劇", "美劇", "綜藝"])) {
+    return { type: "Series", category: seriesCategory(haystack || category) };
   }
-  if (type.includes("movie") || type.includes("film") || type.includes("電影")) {
-    return { type: "Movie", category: movieCategory(type || category) };
+  if (includesAny(haystack, ["movie", "film", "cinema", "電影"])) {
+    return { type: "Movie", category: movieCategory(haystack || category) };
   }
 
   return { type: "Other", category: "" };
-}
-
-export function typeForFilter(type: string) {
-  if (type === "Movie") return "Movie";
-  if (type === "Series") return "Series";
-  if (type === "Anime") return "Anime";
-  if (type === "YouTube") return "YouTube";
-  return "";
 }
 
 function movieCategory(value: string) {

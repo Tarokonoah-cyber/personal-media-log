@@ -1,13 +1,15 @@
 import { Sparkles, Star, Trash2 } from "lucide-react";
 import { MouseEvent } from "react";
 import { displayDate } from "../lib/date";
-import { classifyItem } from "../lib/taxonomy";
+import { classifyItem, libraryTree } from "../lib/taxonomy";
 import type { ItemInput, ItemStatus, MediaItem } from "../types";
+
+const typeOptions = libraryTree.map((entry) => entry.label);
 
 export function ItemList({
   items,
   loading,
-  emptyMessage = "還沒有紀錄。先在上方快速新增一筆，不用完整。",
+  emptyMessage = "No records yet. Add one quickly from the top bar.",
   onSelect,
   onToggleFavorite,
   onDelete,
@@ -23,7 +25,7 @@ export function ItemList({
   onMetadata?: (item: MediaItem) => void;
   onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
 }) {
-  if (loading) return <div className="empty">讀取中...</div>;
+  if (loading) return <div className="empty">Loading...</div>;
   if (items.length === 0) return <div className="empty">{emptyMessage}</div>;
 
   return (
@@ -54,21 +56,11 @@ export function ItemList({
                     {item.code && <small>{item.code}</small>}
                   </td>
                   <td>
-                    <input
-                      className="inline-rating"
-                      defaultValue={item.rating ?? ""}
-                      inputMode="decimal"
-                      onClick={stop}
-                      onBlur={(event) => onQuickUpdate?.(item, { rating: event.target.value ? Number(event.target.value) : null })}
-                    />
+                    <RatingStars item={item} onQuickUpdate={onQuickUpdate} />
                   </td>
                   <td>
                     <select className="inline-type" value={classification.type} onClick={stop} onChange={(event) => onQuickUpdate?.(item, { type: event.target.value })}>
-                      <option value="Movie">Movie</option>
-                      <option value="Series">Series</option>
-                      <option value="Anime">Anime</option>
-                      <option value="YouTube">YouTube</option>
-                      <option value="Other">Other</option>
+                      {typeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
                     </select>
                   </td>
                   <td className="muted-cell">{classification.category || "-"}</td>
@@ -89,14 +81,16 @@ export function ItemList({
                   <td className="muted-cell">{displayDate(item.watched_at || item.created_at)}</td>
                   <td className="note-cell">{item.quick_note || item.long_note || ""}</td>
                   <td>
-                  <button className="row-icon danger-button" onClick={(event) => action(event, () => onDelete?.(item.id))} title="Delete">
-                    <Trash2 size={15} />
-                  </button>
-                  <button className="row-action" onClick={(event) => action(event, () => onMetadata?.(item))} title="補資料">
-                    <Sparkles size={14} />
-                    補資料
-                  </button>
-                </td>
+                    <div className="row-actions">
+                      <button className="row-icon danger-button" onClick={(event) => action(event, () => onDelete?.(item.id))} title="Delete">
+                        <Trash2 size={15} />
+                      </button>
+                      <button className="row-action" onClick={(event) => action(event, () => onMetadata?.(item))} title="Lookup metadata">
+                        <Sparkles size={14} />
+                        Lookup
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               );
             })}
@@ -113,16 +107,16 @@ export function ItemList({
                 {item.favorite && <Star size={13} fill="currentColor" />}
               </div>
               <div className="compact-meta">
-                <span>{item.rating ?? "未評"}</span>
+                <RatingStars item={item} onQuickUpdate={onQuickUpdate} compact />
                 <Status status={item.status} />
                 <span>{displayDate(item.watched_at || item.created_at)}</span>
               </div>
             </div>
             <div className="compact-actions">
-              <button className="row-icon" onClick={(event) => action(event, () => onMetadata?.(item))} title="補資料">
+              <button className="row-icon" onClick={(event) => action(event, () => onMetadata?.(item))} title="Lookup metadata">
                 <Sparkles size={15} />
               </button>
-              <button className={item.favorite ? "row-icon active" : "row-icon"} onClick={(event) => action(event, () => onToggleFavorite?.(item))} title="切換收藏">
+              <button className={item.favorite ? "row-icon active" : "row-icon"} onClick={(event) => action(event, () => onToggleFavorite?.(item))} title="Toggle favorite">
                 <Star size={15} fill={item.favorite ? "currentColor" : "none"} />
               </button>
             </div>
@@ -130,6 +124,24 @@ export function ItemList({
         ))}
       </div>
     </>
+  );
+}
+
+function RatingStars({ item, compact, onQuickUpdate }: { item: MediaItem; compact?: boolean; onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void> }) {
+  const value = item.rating || 0;
+  return (
+    <span className={compact ? "rating-stars compact" : "rating-stars"} onClick={stop}>
+      {[1, 2, 3, 4, 5].map((rating) => (
+        <button
+          key={rating}
+          className={value >= rating ? "filled" : ""}
+          onClick={(event) => action(event, () => onQuickUpdate?.(item, { rating }))}
+          title={`${rating} stars`}
+        >
+          <Star size={compact ? 13 : 16} fill={value >= rating ? "currentColor" : "none"} />
+        </button>
+      ))}
+    </span>
   );
 }
 

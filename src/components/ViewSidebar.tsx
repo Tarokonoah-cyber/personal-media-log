@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronLeft, ChevronRight, Clapperboard, Film, Folder, Hash, Inbox, Layers, List, Star, Tags, TrendingUp, Tv, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Clapperboard, EyeOff, Film, Folder, Hash, Inbox, Layers, List, Star, Tags, TrendingUp, Tv, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { libraryTree } from "../lib/taxonomy";
 import type { ListFilters } from "../types";
 
@@ -32,7 +33,30 @@ export function ViewSidebar({
   onLibrary: (type: string, category?: string) => void;
   onTag: (tag: string) => void;
 }) {
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("libraryOpenGroups") || "{}") as Record<string, boolean>;
+    } catch {
+      return {};
+    }
+  });
   const showText = !collapsed || mobileOpen;
+
+  useEffect(() => {
+    localStorage.setItem("libraryOpenGroups", JSON.stringify(openGroups));
+  }, [openGroups]);
+
+  const activeParent = useMemo(() => activeView.split("/")[0], [activeView]);
+
+  function toggleGroup(label: string) {
+    setOpenGroups((current) => ({ ...current, [label]: !(current[label] ?? activeParent === label) }));
+  }
+
+  function selectParent(label: string, hasChildren: boolean) {
+    onLibrary(label);
+    if (hasChildren) toggleGroup(label);
+  }
+
   return (
     <>
       <div className={mobileOpen ? "sidebar-scrim open" : "sidebar-scrim"} onClick={onCloseMobile} />
@@ -59,25 +83,29 @@ export function ViewSidebar({
 
         <div className="sidebar-group">
           {showText && <p><Folder size={13} />Library</p>}
-          {libraryTree.map((entry) => (
-            <div className="tree-node" key={entry.id}>
-              <button className={activeView === entry.label ? "active" : ""} onClick={() => onLibrary(entry.label)} title={entry.label}>
-                {iconFor(entry.label)}
-                {showText && <span>{entry.label}</span>}
-                {showText && entry.children.length > 0 && <ChevronDown className="tree-chevron" size={13} />}
-              </button>
-              {showText && entry.children.length > 0 && (
-                <div className="tree-children">
-                  {entry.children.map((child) => (
-                    <button key={child} className={activeView === `${entry.label}/${child}` ? "active" : ""} onClick={() => onLibrary(entry.label, child)}>
-                      <span className="tree-branch" />
-                      {child}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+          {libraryTree.map((entry) => {
+            const isOpen = openGroups[entry.label] ?? activeParent === entry.label;
+            const hasChildren = entry.children.length > 0;
+            return (
+              <div className="tree-node" key={entry.id}>
+                <button className={activeView === entry.label ? "active" : ""} onClick={() => selectParent(entry.label, hasChildren)} title={entry.label}>
+                  {iconFor(entry.label)}
+                  {showText && <span>{entry.label}</span>}
+                  {showText && hasChildren && <ChevronDown className={isOpen ? "tree-chevron open" : "tree-chevron"} size={13} />}
+                </button>
+                {showText && hasChildren && isOpen && (
+                  <div className="tree-children">
+                    {entry.children.map((child) => (
+                      <button key={child} className={activeView === `${entry.label}/${child}` ? "active" : ""} onClick={() => onLibrary(entry.label, child)}>
+                        <span className="tree-branch" />
+                        {child}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <div className="sidebar-group">
@@ -101,5 +129,6 @@ function iconFor(label: string) {
   if (label === "Series") return <Tv size={15} />;
   if (label === "Anime") return <Clapperboard size={15} />;
   if (label === "YouTube") return <Layers size={15} />;
+  if (label === "Adult") return <EyeOff size={15} />;
   return <Folder size={15} />;
 }
