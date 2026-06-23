@@ -13,8 +13,8 @@ export function FilterSheet({
   onClose: () => void;
 }) {
   return (
-    <div className={open ? "filter-sheet open" : "filter-sheet"}>
-      <div className="filter-sheet-panel">
+    <div className={open ? "filter-sheet open" : "filter-sheet"} onClick={onClose}>
+      <div className="filter-sheet-panel" onClick={(event) => event.stopPropagation()}>
         <header className="sheet-head">
           <span><SlidersHorizontal size={18} />篩選</span>
           <button className="ghost-icon" onClick={onClose} aria-label="關閉篩選"><X size={18} /></button>

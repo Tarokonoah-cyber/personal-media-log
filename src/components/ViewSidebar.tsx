@@ -1,4 +1,4 @@
-import { BarChart3, Clapperboard, ChevronLeft, ChevronRight, DatabaseBackup, Eye, EyeOff, Film, Folder, Hash, Heart, Home, Inbox, Layers, Play, Settings, Tags, Tv, X, CheckCircle2 } from "lucide-react";
+import { Clapperboard, ChevronLeft, ChevronRight, Film, Folder, Hash, Heart, Home, Layers, Settings, Tags, Tv, X } from "lucide-react";
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { libraryTree } from "../lib/taxonomy";
@@ -10,15 +10,11 @@ type ToolTab = "stats" | "data" | "settings";
 
 const mainItems = [
   { id: "home", label: "首頁", icon: Home },
-  { id: "favorites", label: "收藏", icon: Heart },
-  { id: "watching", label: "觀看中", icon: Play },
-  { id: "plan_to_watch", label: "待觀看", icon: Inbox },
-  { id: "completed", label: "已完成", icon: CheckCircle2 }
+  { id: "database", label: "資料庫", icon: Folder },
+  { id: "favorites", label: "收藏", icon: Heart }
 ] as const;
 
 const toolItems = [
-  { id: "stats", label: "統計", icon: BarChart3 },
-  { id: "data", label: "資料備份", icon: DatabaseBackup },
   { id: "settings", label: "設定", icon: Settings }
 ] as const;
 
@@ -37,8 +33,7 @@ export function ViewSidebar({
   onView,
   onLibrary,
   onTag,
-  onTool,
-  onToggleSafeMode
+  onTool
 }: {
   activeView: string;
   displayView: DisplayView;
@@ -57,7 +52,6 @@ export function ViewSidebar({
   onLibrary: (type: string, category?: string) => void;
   onTag: (tag: string) => void;
   onTool: (tab: ToolTab) => void;
-  onToggleSafeMode: () => void;
 }) {
   const [showAllTags, setShowAllTags] = useState(false);
   const showText = !collapsed || mobileOpen;
@@ -134,10 +128,6 @@ export function ViewSidebar({
               </button>
             );
           })}
-          <button className="safe-mode-toggle" onClick={onToggleSafeMode} title={safeMode ? "關閉安全模式" : "開啟安全模式"}>
-            {safeMode ? <EyeOff size={14} /> : <Eye size={14} />}
-            {showText && <span>{safeMode ? "安全模式開啟" : "安全模式關閉"}</span>}
-          </button>
         </NavSection>
       </aside>
     </>
@@ -155,6 +145,7 @@ function NavSection({ title, showText, tone, children }: { title: string; showTe
 
 function isMainActive(id: string, activeView: string, filters: ListFilters) {
   if (id === "home") return activeView === "home" && !filters.favorite;
+  if (id === "database") return activeView === "database" && !filters.favorite;
   if (id === "favorites") return activeView === "favorites" || filters.favorite;
   return activeView === id;
 }

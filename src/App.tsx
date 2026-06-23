@@ -33,12 +33,15 @@ const defaultFilters: ListFilters = {
 
 type Tab = "log" | "stats" | "data" | "settings";
 type DisplayView = "table" | "list" | "poster";
+type DisplayDensity = "comfortable" | "standard" | "compact";
 const displayViews: DisplayView[] = ["table", "list", "poster"];
-const quickStatusViews = ["home", "watching", "plan_to_watch", "completed", "favorites"];
+const displayDensities: DisplayDensity[] = ["comfortable", "standard", "compact"];
+const quickStatusViews = ["home", "watching", "plan_to_watch", "completed"];
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("log");
   const [displayView, setDisplayView] = useState<DisplayView>(() => (localStorage.getItem("displayView") as DisplayView) || "table");
+  const [displayDensity, setDisplayDensity] = useState<DisplayDensity>(() => (localStorage.getItem("displayDensity") as DisplayDensity) || "standard");
   const [safeMode, setSafeMode] = useState(() => localStorage.getItem("safeMode") !== "false");
   const [quickText, setQuickText] = useState("");
   const [filters, setFilters] = useState<ListFilters>(defaultFilters);
@@ -77,6 +80,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("displayView", displayView);
   }, [displayView]);
+
+  useEffect(() => {
+    localStorage.setItem("displayDensity", displayDensity);
+  }, [displayDensity]);
 
   useEffect(() => {
     localStorage.setItem("safeMode", String(safeMode));
@@ -301,6 +308,10 @@ export default function App() {
     setDisplayView(view);
   }
 
+  function selectDisplayDensity(density: DisplayDensity) {
+    setDisplayDensity(density);
+  }
+
   function selectLibrary(type: string, category?: string) {
     setTab("log");
     setActiveView(category ? `${type}/${category}` : type);
@@ -385,7 +396,6 @@ export default function App() {
           onLibrary={selectLibrary}
           onTag={selectTag}
           onTool={selectTool}
-          onToggleSafeMode={toggleSafeMode}
         />
 
         <section className="database-main">
@@ -411,7 +421,7 @@ export default function App() {
                   <div className="toolbar-spacer" />
                   <div className="segmented-control status-segment" aria-label="快速狀態篩選">
                     {quickStatusViews.map((view) => (
-                      <button key={view} className={activeView === view ? "active" : ""} onClick={() => selectView(view)}>
+                      <button key={view} className={isQuickStatusActive(view, activeView) ? "active" : ""} onClick={() => selectView(view)}>
                         {quickFilterLabel(view)}
                       </button>
                     ))}
@@ -422,6 +432,7 @@ export default function App() {
               <ItemList
                 items={visibleItems}
                 view={displayView}
+                density={displayDensity}
                 loading={loading}
                 emptyMessage="還沒有紀錄，先從上方快速新增一筆就好。"
                 onSelect={setSelected}
@@ -435,7 +446,16 @@ export default function App() {
 
           {tab === "stats" && <StatsPanel includePrivate={includePrivate} />}
           {tab === "data" && <ImportExport safeMode={safeMode} onImported={refreshVisibleData} />}
-          {tab === "settings" && <SettingsPanel dark={dark} safeMode={safeMode} onThemeChange={setDark} onToggleSafeMode={toggleSafeMode} />}
+          {tab === "settings" && (
+            <SettingsPanel
+              dark={dark}
+              safeMode={safeMode}
+              density={displayDensity}
+              onThemeChange={setDark}
+              onDensityChange={selectDisplayDensity}
+              onToggleSafeMode={toggleSafeMode}
+            />
+          )}
         </section>
       </main>
 
@@ -462,6 +482,7 @@ export default function App() {
 function viewLabel(view: string) {
   const labels: Record<string, string> = {
     home: "首頁",
+    database: "資料庫",
     table: "表格",
     list: "清單",
     poster: "海報牆",
@@ -479,6 +500,11 @@ function viewLabel(view: string) {
   return labels[view] || view;
 }
 
+function isQuickStatusActive(view: string, activeView: string) {
+  if (view === "home") return activeView === "home" || activeView === "database";
+  return activeView === view;
+}
+
 function quickFilterLabel(view: string) {
   const labels: Record<string, string> = {
     home: "全部",
@@ -488,6 +514,15 @@ function quickFilterLabel(view: string) {
     favorites: "收藏"
   };
   return labels[view] || view;
+}
+
+function densityLabel(density: string) {
+  const labels: Record<string, string> = {
+    comfortable: "舒適",
+    standard: "標準",
+    compact: "緊湊"
+  };
+  return labels[density] || density;
 }
 
 function SmartAddPreview({
@@ -550,7 +585,21 @@ function splitTags(value: string) {
   return Array.from(new Set(value.split(/[,，#]/).map((tag) => tag.trim()).filter(Boolean).filter((tag) => !/^(adult|nsfw|private|成人|私密)$/i.test(tag))));
 }
 
-function SettingsPanel({ dark, safeMode, onThemeChange, onToggleSafeMode }: { dark: boolean; safeMode: boolean; onThemeChange: (value: boolean) => void; onToggleSafeMode: () => void }) {
+function SettingsPanel({
+  dark,
+  safeMode,
+  density,
+  onThemeChange,
+  onDensityChange,
+  onToggleSafeMode
+}: {
+  dark: boolean;
+  safeMode: boolean;
+  density: DisplayDensity;
+  onThemeChange: (value: boolean) => void;
+  onDensityChange: (value: DisplayDensity) => void;
+  onToggleSafeMode: () => void;
+}) {
   return (
     <section className="settings-panel">
       <div>
@@ -565,6 +614,16 @@ function SettingsPanel({ dark, safeMode, onThemeChange, onToggleSafeMode }: { da
         <input type="checkbox" checked={safeMode} onChange={onToggleSafeMode} />
         安全模式
       </label>
+      <div className="settings-control">
+        <span>表格密度</span>
+        <div className="segmented-control density-segment" aria-label="表格密度">
+          {displayDensities.map((value) => (
+            <button key={value} className={density === value ? "active" : ""} onClick={() => onDensityChange(value)}>
+              {densityLabel(value)}
+            </button>
+          ))}
+        </div>
+      </div>
       <p className="muted-cell">安全模式開啟時，私密內容不會出現在列表、搜尋、標籤與統計中。此偏好只在本機儲存開關狀態。</p>
     </section>
   );
