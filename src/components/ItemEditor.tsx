@@ -1,21 +1,53 @@
 import { Save, Trash2, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { classifyItem, libraryTree } from "../lib/taxonomy";
 import { getWatchProgress, getWatchStatus, isSeriesLike, updateWatchProgress, watchStatuses } from "../lib/watch";
 import type { ItemInput, MediaItem, WatchStatus } from "../types";
 
 export function ItemEditor({ item, onClose, onSave, onDelete }: { item: MediaItem; onClose: () => void; onSave: (input: ItemInput) => Promise<void>; onDelete: (id: string) => Promise<void> }) {
   const [form, setForm] = useState(() => toForm(item));
+  const [savedForm, setSavedForm] = useState(() => toForm(item));
   const [metadataOpen, setMetadataOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const seriesLike = useMemo(() => isSeriesLike({ ...item, type: form.type, category: form.category } as MediaItem), [item, form.type, form.category]);
+  const hasUnsavedChanges = useMemo(() => JSON.stringify(form) !== JSON.stringify(savedForm), [form, savedForm]);
+
+  useEffect(() => {
+    const nextForm = toForm(item);
+    setForm(nextForm);
+    setSavedForm(nextForm);
+    setMetadataOpen(false);
+    setError("");
+  }, [item.id]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      requestCloseWithConfirmation();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [hasUnsavedChanges, onClose]);
+
+  function requestCloseWithConfirmation() {
+    if (hasUnsavedChanges && !window.confirm("有未儲存的變更，確定要關閉編輯面板嗎？")) return;
+    onClose();
+  }
+
+  function handleBackdropClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget) return;
+    requestCloseWithConfirmation();
+  }
 
   async function submit() {
     setSaving(true);
     setError("");
     try {
       await onSave(toInput(form));
+      setSavedForm(form);
     } catch (err) {
       setError(err instanceof Error ? err.message : "儲存失敗");
     } finally {
@@ -30,8 +62,8 @@ export function ItemEditor({ item, onClose, onSave, onDelete }: { item: MediaIte
   }
 
   return (
-    <div className="drawer-backdrop">
-      <aside className="drawer">
+    <div className="drawer-backdrop" onClick={handleBackdropClick}>
+      <aside className="drawer" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
         <header className="drawer-head">
           <div>
             <p className="eyebrow">編輯紀錄</p>

@@ -1,4 +1,5 @@
 import { HttpError } from "./http";
+import { inboxWhereSql } from "./organization";
 import { hasPrivateSignalValues, isPrivateMarker as isPrivateMarkerValue, privateItemWhereSql, publicItemWhereSql } from "./privacy";
 import { newId, nowIso } from "./ids";
 import type { Actor, Env, ItemInput, ItemListParams, ItemRecord, ItemStatus } from "./types";
@@ -41,7 +42,7 @@ export async function listItems(env: Env, params: ItemListParams) {
 
   if (params.status && params.status !== "all") {
     if (params.status === "inbox") {
-      where.push("items.status IN ('raw', 'partial')");
+      where.push(inboxWhereSql("items"));
     } else if (params.status === "organized") {
       where.push("items.status = 'complete'");
     } else {
@@ -255,7 +256,7 @@ export async function getStats(env: Env, includePrivate = false) {
   const year = new Date().getFullYear().toString();
   const visibleSql = includePrivate ? "items.status != 'deleted'" : `items.status != 'deleted' AND ${publicItemWhereSql("items")}`;
   const visibleItemsSql = visibleSql;
-  const inboxSql = includePrivate ? "status IN ('raw', 'partial')" : `status IN ('raw', 'partial') AND ${publicItemWhereSql("items")}`;
+  const inboxSql = includePrivate ? inboxWhereSql("items") : `${inboxWhereSql("items")} AND ${publicItemWhereSql("items")}`;
   const [
     total,
     currentYear,
