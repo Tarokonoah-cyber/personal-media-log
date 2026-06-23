@@ -1,4 +1,5 @@
 import type { ItemInput } from "./types";
+import { hasPrivateSignalValues, isPrivateMarker as isPrivateMarkerValue } from "./privacy";
 
 export function parseJsonItems(content: string): ItemInput[] {
   const parsed = JSON.parse(content) as unknown;
@@ -112,7 +113,7 @@ function normalizeExternalRow(value: unknown): ItemInput {
     rating: asNumber(row.rating),
     rewatch_score: asNumber(row.rewatch_score),
     favorite: asBoolean(row.favorite),
-    is_private: asBoolean(row.is_private) || hasPrivateSignal(row),
+    is_private: asBoolean(row.is_private) || hasPrivateSignalValues([row.type, row.category, row.platform, row.metadata_json, row.genres, row.tags]),
     status: asStatus(row.status),
     quick_note: asString(row.quick_note ?? row.note),
     long_note: asString(row.long_note),
@@ -120,7 +121,7 @@ function normalizeExternalRow(value: unknown): ItemInput {
     cover_url: asString(row.cover_url),
     metadata_json: asString(row.metadata_json),
     progress_json: asString(row.progress_json),
-    tags: asList(row.tags).filter((tag) => !isPrivateMarker(tag)),
+    tags: asList(row.tags).filter((tag) => !isPrivateMarkerValue(tag)),
     people: asList(row.people),
     collections: asList(row.collections)
   };

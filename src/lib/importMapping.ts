@@ -1,4 +1,5 @@
 import Papa from "papaparse";
+import { hasPrivateSignal as hasPrivateSignalValues, isPrivateMarker as isPrivateMarkerValue } from "./privacy";
 import type { ItemInput } from "../types";
 
 export const importFields = [
@@ -67,7 +68,7 @@ function normalizeItem(row: Record<string, unknown>): ItemInput {
     rating: numberValue(row.rating),
     rewatch_score: numberValue(row.rewatch_score),
     favorite: booleanValue(row.favorite),
-    is_private: booleanValue(row.is_private) || hasPrivateSignal(row),
+    is_private: booleanValue(row.is_private) || hasPrivateSignalValues([row.type, row.category, row.platform, row.metadata_json, row.genres, row.tags]),
     status: statusValue(row.status),
     quick_note: nullableString(row.quick_note),
     long_note: nullableString(row.long_note),
@@ -75,7 +76,7 @@ function normalizeItem(row: Record<string, unknown>): ItemInput {
     cover_url: nullableString(row.cover_url),
     metadata_json: nullableString(row.metadata_json),
     progress_json: nullableString(row.progress_json),
-    tags: listValue(row.tags).filter((tag) => !isPrivateMarker(tag)),
+    tags: listValue(row.tags).filter((tag) => !isPrivateMarkerValue(tag)),
     people: listValue(row.people),
     collections: listValue(row.collections)
   };

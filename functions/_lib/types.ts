@@ -62,6 +62,7 @@ export interface ItemListParams {
   favorite?: boolean;
   highRated?: boolean;
   includePrivate?: boolean;
+  privateOnly?: boolean;
   type?: string;
   tag?: string;
   year?: number;

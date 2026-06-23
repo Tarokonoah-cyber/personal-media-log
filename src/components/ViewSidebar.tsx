@@ -1,6 +1,7 @@
 import { Clapperboard, ChevronLeft, ChevronRight, Film, Folder, Hash, Heart, Home, Layers, Settings, Tags, Tv, X } from "lucide-react";
 import { useState } from "react";
 import type { ReactNode } from "react";
+import { isPrivateLibraryLabel } from "../lib/privacy";
 import { libraryTree } from "../lib/taxonomy";
 import type { ListFilters, MediaItem } from "../types";
 import { HomeDashboard } from "./HomeDashboard";
@@ -56,7 +57,7 @@ export function ViewSidebar({
   const [showAllTags, setShowAllTags] = useState(false);
   const showText = !collapsed || mobileOpen;
   const visibleTags = showAllTags ? tags : tags.slice(0, 3);
-  const libraryItems = libraryTree.filter((entry) => !safeMode || entry.label !== "私密");
+  const libraryItems = libraryTree.filter((entry) => !safeMode || !isPrivateLibraryLabel(entry.label));
 
   return (
     <>

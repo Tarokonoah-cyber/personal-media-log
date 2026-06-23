@@ -182,6 +182,7 @@ function getListParams(url: URL): ItemListParams {
     favorite: url.searchParams.get("favorite") === "true",
     highRated: url.searchParams.get("highRated") === "true",
     includePrivate: url.searchParams.get("includePrivate") === "true",
+    privateOnly: url.searchParams.get("privateOnly") === "true",
     type: optional(url.searchParams.get("type")),
     tag: optional(url.searchParams.get("tag")),
     year: optionalNumber(url.searchParams.get("year")),

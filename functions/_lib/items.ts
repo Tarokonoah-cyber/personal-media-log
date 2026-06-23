@@ -1,4 +1,5 @@
 import { HttpError } from "./http";
+import { hasPrivateSignalValues, isPrivateMarker as isPrivateMarkerValue, privateItemWhereSql, publicItemWhereSql } from "./privacy";
 import { newId, nowIso } from "./ids";
 import type { Actor, Env, ItemInput, ItemListParams, ItemRecord, ItemStatus } from "./types";
 
@@ -52,7 +53,8 @@ export async function listItems(env: Env, params: ItemListParams) {
   }
 
   if (params.favorite) where.push("items.favorite = 1");
-  if (!params.includePrivate) where.push("items.is_private = 0");
+  if (params.privateOnly) where.push(privateItemWhereSql("items"));
+  else if (!params.includePrivate) where.push(publicItemWhereSql("items"));
   if (params.highRated) where.push("items.rating >= 4");
   if (params.type) {
     where.push("items.type = ?");
@@ -251,9 +253,9 @@ export async function exportItems(env: Env) {
 
 export async function getStats(env: Env, includePrivate = false) {
   const year = new Date().getFullYear().toString();
-  const visibleSql = includePrivate ? "status != 'deleted'" : "status != 'deleted' AND is_private = 0";
-  const visibleItemsSql = includePrivate ? "items.status != 'deleted'" : "items.status != 'deleted' AND items.is_private = 0";
-  const inboxSql = includePrivate ? "status IN ('raw', 'partial')" : "status IN ('raw', 'partial') AND is_private = 0";
+  const visibleSql = includePrivate ? "items.status != 'deleted'" : `items.status != 'deleted' AND ${publicItemWhereSql("items")}`;
+  const visibleItemsSql = visibleSql;
+  const inboxSql = includePrivate ? "status IN ('raw', 'partial')" : `status IN ('raw', 'partial') AND ${publicItemWhereSql("items")}`;
   const [
     total,
     currentYear,
@@ -459,14 +461,22 @@ function normalizeInput(input: ItemInput): Required<ItemInput> {
     cover_url: cleanString(input.cover_url),
     metadata_json: cleanString(input.metadata_json),
     progress_json: cleanString(input.progress_json),
-    tags: (input.tags || []).filter((tag) => !isPrivateMarker(tag)),
+    tags: (input.tags || []).filter((tag) => !isPrivateMarkerValue(tag)),
     people: input.people || [],
     collections: input.collections || []
   };
 }
 
 function hasPrivateSignal(input: ItemInput) {
-  const genres = (input as { genres?: unknown }).genres;
+  const genres = (input as { genres?: any }).genres;
+  return hasPrivateSignalValues([
+    input.type,
+    input.category,
+    input.platform,
+    input.metadata_json,
+    ...(input.tags || []),
+    ...(Array.isArray(genres) ? genres.map(String) : typeof genres === "string" ? [genres] : [])
+  ]);
   const text = [
     input.type,
     input.category,

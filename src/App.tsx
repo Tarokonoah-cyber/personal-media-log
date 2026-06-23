@@ -11,6 +11,7 @@ import { Toast } from "./components/Toast";
 import { ViewSidebar } from "./components/ViewSidebar";
 import { applyMetadata, createItem, deleteItem, listItems, parseSmartAdd, searchMetadata, updateItem } from "./lib/api";
 import { toItemInput } from "./lib/itemTransforms";
+import { isPrivateItem, isPrivateLibraryLabel, isPrivateMarker } from "./lib/privacy";
 import { parseQuickEntry } from "./lib/quickParse";
 import { classifyItem, libraryTree } from "./lib/taxonomy";
 import { getWatchStatus, updateWatchProgress } from "./lib/watch";
@@ -67,6 +68,8 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebarCollapsed") === "true");
   const [dark, setDark] = useState(() => localStorage.getItem("theme") !== "light");
+  const privateView = isPrivateLibraryLabel(activeView);
+  const includePrivate = privateView && !safeMode;
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -91,11 +94,11 @@ export default function App() {
 
   useEffect(() => {
     void loadItems();
-  }, [filters, safeMode]);
+  }, [filters, includePrivate]);
 
   useEffect(() => {
     void loadSummary();
-  }, [safeMode]);
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -103,24 +106,24 @@ export default function App() {
     return () => window.clearTimeout(id);
   }, [toast]);
 
-  const includePrivate = !safeMode;
   const pageCount = useMemo(() => Math.max(1, Math.ceil(total / filters.pageSize)), [total, filters.pageSize]);
   const knownTags = useMemo(() => Array.from(new Set(summaryItems.flatMap((item) => item.tags))).sort((a, b) => a.localeCompare(b, "zh-Hant")), [summaryItems]);
-  const libraryTypes = useMemo(() => new Set<string>(libraryTree.filter((entry) => includePrivate || entry.label !== "私密").map((entry) => entry.label)), [includePrivate]);
+  const libraryTypes = useMemo(() => new Set<string>(libraryTree.map((entry) => entry.label)), []);
   const visibleItems = useMemo(() => {
-    if (activeCategory) return items.filter((item) => classifyItem(item).category === activeCategory);
-    if (libraryTypes.has(activeView)) return items.filter((item) => classifyItem(item).type === activeView);
+    const scopedItems = includePrivate ? items.filter(isPrivateItem) : items.filter((item) => !isPrivateItem(item));
+    if (activeCategory) return scopedItems.filter((item) => classifyItem(item).category === activeCategory);
+    if (libraryTypes.has(activeView)) return scopedItems.filter((item) => classifyItem(item).type === activeView);
     if (["plan_to_watch", "watching", "completed", "paused", "dropped", "rewatching"].includes(activeView)) {
-      return items.filter((item) => getWatchStatus(item) === activeView);
+      return scopedItems.filter((item) => getWatchStatus(item) === activeView);
     }
-    return items;
-  }, [activeCategory, activeView, items, libraryTypes]);
+    return scopedItems;
+  }, [activeCategory, activeView, includePrivate, items, libraryTypes]);
 
   async function loadItems() {
     setLoading(true);
     setError("");
     try {
-      const result = await listItems({ ...filters, includePrivate });
+      const result = await listItems({ ...filters, includePrivate, privateOnly: includePrivate });
       setItems(result.items);
       setTotal(result.total);
     } catch (err) {
@@ -133,8 +136,8 @@ export default function App() {
   async function loadSummary() {
     try {
       const [all, inbox] = await Promise.all([
-        listItems({ ...defaultFilters, includePrivate, pageSize: 100 }),
-        listItems({ ...defaultFilters, includePrivate, status: "inbox", pageSize: 1 })
+        listItems({ ...defaultFilters, includePrivate: false, privateOnly: false, pageSize: 100 }),
+        listItems({ ...defaultFilters, includePrivate: false, privateOnly: false, status: "inbox", pageSize: 1 })
       ]);
       setSummaryItems(all.items);
       setInboxTotal(inbox.total);
@@ -285,7 +288,7 @@ export default function App() {
   function toggleSafeMode() {
     setSafeMode((current) => {
       const next = !current;
-      if (next && activeView === "私密") {
+      if (next && isPrivateLibraryLabel(activeView)) {
         setActiveView("home");
         setActiveCategory("");
       }
@@ -432,6 +435,7 @@ export default function App() {
               <ItemList
                 items={visibleItems}
                 view={displayView}
+                privateMode={privateView && includePrivate}
                 density={displayDensity}
                 loading={loading}
                 emptyMessage="還沒有紀錄，先從上方快速新增一筆就好。"
@@ -444,7 +448,7 @@ export default function App() {
             </>
           )}
 
-          {tab === "stats" && <StatsPanel includePrivate={includePrivate} />}
+          {tab === "stats" && <StatsPanel includePrivate={false} />}
           {tab === "data" && <ImportExport safeMode={safeMode} onImported={refreshVisibleData} />}
           {tab === "settings" && (
             <SettingsPanel
@@ -582,7 +586,7 @@ function SmartAddPreview({
 }
 
 function splitTags(value: string) {
-  return Array.from(new Set(value.split(/[,，#]/).map((tag) => tag.trim()).filter(Boolean).filter((tag) => !/^(adult|nsfw|private|成人|私密)$/i.test(tag))));
+  return Array.from(new Set(value.split(/[,，#]/).map((tag) => tag.trim()).filter(Boolean).filter((tag) => !isPrivateMarker(tag))));
 }
 
 function SettingsPanel({

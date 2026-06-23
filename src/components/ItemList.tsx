@@ -1,6 +1,7 @@
 import { Sparkles, Star, Trash2 } from "lucide-react";
 import { MouseEvent } from "react";
 import { displayDate } from "../lib/date";
+import { privateItemDetails } from "../lib/privacy";
 import { classifyItem, libraryTree } from "../lib/taxonomy";
 import { displayDateForItem, getWatchProgress, getWatchStatus, isSeriesLike, progressLabel, watchStatusLabel } from "../lib/watch";
 import type { ItemInput, MediaItem } from "../types";
@@ -10,6 +11,7 @@ const typeOptions: string[] = libraryTree.map((entry) => entry.label);
 export function ItemList({
   items,
   view,
+  privateMode = false,
   density,
   loading,
   emptyMessage = "還沒有紀錄，先從上方快速新增一筆就好。",
@@ -21,6 +23,7 @@ export function ItemList({
 }: {
   items: MediaItem[];
   view: "table" | "list" | "poster";
+  privateMode?: boolean;
   density: "comfortable" | "standard" | "compact";
   loading: boolean;
   emptyMessage?: string;
@@ -36,7 +39,11 @@ export function ItemList({
 
   return (
     <>
-      {view === "table" && (
+      {view === "table" && privateMode && (
+        <PrivateTable items={items} density={density} onSelect={onSelect} onToggleFavorite={onToggleFavorite} onDelete={onDelete} onMetadata={onMetadata} />
+      )}
+
+      {view === "table" && !privateMode && (
         <div className={`database-table-wrap density-${density}`}>
           <table className="database-table">
             <thead>
@@ -145,6 +152,76 @@ function PosterWall({ items, onSelect }: { items: MediaItem[]; onSelect: (item: 
           </span>
         </button>
       ))}
+    </div>
+  );
+}
+
+function PrivateTable({
+  items,
+  density,
+  onSelect,
+  onToggleFavorite,
+  onDelete,
+  onMetadata
+}: {
+  items: MediaItem[];
+  density: "comfortable" | "standard" | "compact";
+  onSelect: (item: MediaItem) => void;
+  onToggleFavorite?: (item: MediaItem) => Promise<void>;
+  onDelete?: (id: string) => Promise<void>;
+  onMetadata?: (item: MediaItem) => void;
+}) {
+  return (
+    <div className={`database-table-wrap density-${density}`}>
+      <table className="database-table">
+        <thead>
+          <tr>
+            <th>番號</th>
+            <th className="title-col">片名</th>
+            <th>女優・演員</th>
+            <th>片商</th>
+            <th>發售年份</th>
+            <th>類型</th>
+            <th>評分</th>
+            <th>標籤</th>
+            <th>更新日</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => {
+            const details = privateItemDetails(item);
+            return (
+              <tr key={item.id} onClick={() => onSelect(item)}>
+                <td className="muted-cell">{details.code}</td>
+                <td className="title-cell">
+                  <div className="title-cell-inner">
+                    {item.cover_url ? (
+                      <img className="table-cover" src={item.cover_url} alt="" loading="lazy" />
+                    ) : (
+                      <span className="table-cover placeholder">{coverInitial(item)}</span>
+                    )}
+                    <span className="title-copy">
+                      <strong>{details.title}</strong>
+                      {item.quick_note && <small>{item.quick_note}</small>}
+                    </span>
+                  </div>
+                </td>
+                <td className="muted-cell">{details.performers}</td>
+                <td className="muted-cell">{details.studio}</td>
+                <td className="muted-cell">{details.releaseYear}</td>
+                <td className="muted-cell">{details.type}</td>
+                <td><RatingValue item={item} /></td>
+                <td><Tags tags={item.tags} /></td>
+                <td className="muted-cell">{dateLabel(item)}</td>
+                <td>
+                  <RowActions item={item} onToggleFavorite={onToggleFavorite} onDelete={onDelete} onMetadata={onMetadata} />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
