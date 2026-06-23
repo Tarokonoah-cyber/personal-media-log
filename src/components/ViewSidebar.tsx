@@ -6,7 +6,7 @@ import { libraryTree } from "../lib/taxonomy";
 import type { ListFilters, MediaItem } from "../types";
 import { HomeDashboard } from "./HomeDashboard";
 
-type DisplayView = "table" | "list" | "poster";
+type DisplayView = "table" | "list" | "poster" | "calendar";
 type ToolTab = "stats" | "data" | "settings";
 
 const mainItems = [

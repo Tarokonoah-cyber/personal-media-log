@@ -77,6 +77,14 @@ export async function listItems(env: Env, params: ItemListParams) {
     where.push("items.watched_at <= ?");
     bind.push(params.watchedTo);
   }
+  if (params.viewedFrom) {
+    where.push("date(coalesce(items.watched_at, items.created_at)) >= date(?)");
+    bind.push(params.viewedFrom);
+  }
+  if (params.viewedTo) {
+    where.push("date(coalesce(items.watched_at, items.created_at)) <= date(?)");
+    bind.push(params.viewedTo);
+  }
   if (params.tag) {
     where.push(`EXISTS (
       SELECT 1 FROM item_tags it

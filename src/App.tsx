@@ -4,6 +4,7 @@ import { FilterSheet } from "./components/FilterSheet";
 import { ImportExport } from "./components/ImportExport";
 import { ItemEditor } from "./components/ItemEditor";
 import { ItemList } from "./components/ItemList";
+import { CalendarView } from "./components/CalendarView";
 import { MetadataLookupModal } from "./components/MetadataLookupModal";
 import { QuickCapture } from "./components/QuickCapture";
 import { StatsPanel } from "./components/StatsPanel";
@@ -33,9 +34,9 @@ const defaultFilters: ListFilters = {
 };
 
 type Tab = "log" | "stats" | "data" | "settings";
-type DisplayView = "table" | "list" | "poster";
+type DisplayView = "table" | "list" | "poster" | "calendar";
 type DisplayDensity = "comfortable" | "standard" | "compact";
-const displayViews: DisplayView[] = ["table", "list", "poster"];
+const displayViews: DisplayView[] = ["table", "list", "poster", "calendar"];
 const displayDensities: DisplayDensity[] = ["comfortable", "standard", "compact"];
 const quickStatusViews = ["home", "watching", "plan_to_watch", "completed"];
 
@@ -405,12 +406,14 @@ export default function App() {
           {tab === "log" && (
             <>
               <div className="database-meta">
-                <span>{viewLabel(activeView)} · {visibleItems.length === items.length ? total : visibleItems.length} 筆</span>
-                <div>
-                  <button disabled={filters.page <= 1} onClick={() => patchFilters({ page: filters.page - 1 })}>上一頁</button>
-                  <span>{filters.page} / {pageCount}</span>
-                  <button disabled={filters.page >= pageCount} onClick={() => patchFilters({ page: filters.page + 1 })}>下一頁</button>
-                </div>
+                <span>{displayView === "calendar" ? "月曆視圖" : `${viewLabel(activeView)} · ${visibleItems.length === items.length ? total : visibleItems.length} 筆`}</span>
+                {displayView !== "calendar" && (
+                  <div>
+                    <button disabled={filters.page <= 1} onClick={() => patchFilters({ page: filters.page - 1 })}>上一頁</button>
+                    <span>{filters.page} / {pageCount}</span>
+                    <button disabled={filters.page >= pageCount} onClick={() => patchFilters({ page: filters.page + 1 })}>下一頁</button>
+                  </div>
+                )}
               </div>
               <div className="database-toolbar">
                 <div className="toolbar-control-row">
@@ -432,19 +435,29 @@ export default function App() {
                   <button className="filter-toggle advanced-filter" onClick={() => setFiltersOpen(true)}><SlidersHorizontal size={16} />進階篩選</button>
                 </div>
               </div>
-              <ItemList
-                items={visibleItems}
-                view={displayView}
-                privateMode={privateView && includePrivate}
-                density={displayDensity}
-                loading={loading}
-                emptyMessage="還沒有紀錄，先從上方快速新增一筆就好。"
-                onSelect={setSelected}
-                onToggleFavorite={toggleFavorite}
-                onDelete={removeItem}
-                onMetadata={openMetadataLookup}
-                onQuickUpdate={quickUpdate}
-              />
+              {displayView === "calendar" ? (
+                <CalendarView
+                  filters={filters}
+                  includePrivate={includePrivate}
+                  activeView={activeView}
+                  activeCategory={activeCategory}
+                  libraryTypes={libraryTypes}
+                />
+              ) : (
+                <ItemList
+                  items={visibleItems}
+                  view={displayView}
+                  privateMode={privateView && includePrivate}
+                  density={displayDensity}
+                  loading={loading}
+                  emptyMessage="還沒有紀錄，先從上方快速新增一筆就好。"
+                  onSelect={setSelected}
+                  onToggleFavorite={toggleFavorite}
+                  onDelete={removeItem}
+                  onMetadata={openMetadataLookup}
+                  onQuickUpdate={quickUpdate}
+                />
+              )}
             </>
           )}
 
@@ -490,6 +503,7 @@ function viewLabel(view: string) {
     table: "表格",
     list: "清單",
     poster: "海報牆",
+    calendar: "月曆",
     favorites: "收藏",
     plan_to_watch: "待觀看",
     watching: "觀看中",

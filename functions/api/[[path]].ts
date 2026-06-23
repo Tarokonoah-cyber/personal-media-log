@@ -189,6 +189,8 @@ function getListParams(url: URL): ItemListParams {
     platform: optional(url.searchParams.get("platform")),
     watchedFrom: optional(url.searchParams.get("watchedFrom")),
     watchedTo: optional(url.searchParams.get("watchedTo")),
+    viewedFrom: optional(url.searchParams.get("viewedFrom")),
+    viewedTo: optional(url.searchParams.get("viewedTo")),
     page: optionalNumber(url.searchParams.get("page")) || 1,
     pageSize: optionalNumber(url.searchParams.get("pageSize")) || 25
   };

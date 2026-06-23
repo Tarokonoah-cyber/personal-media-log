@@ -58,6 +58,8 @@ export interface ListFilters {
   platform: string;
   watchedFrom: string;
   watchedTo: string;
+  viewedFrom?: string;
+  viewedTo?: string;
   page: number;
   pageSize: number;
 }

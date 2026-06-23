@@ -69,6 +69,8 @@ export interface ItemListParams {
   platform?: string;
   watchedFrom?: string;
   watchedTo?: string;
+  viewedFrom?: string;
+  viewedTo?: string;
   page: number;
   pageSize: number;
 }
