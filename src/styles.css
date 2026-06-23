@@ -13,8 +13,8 @@
   --panel-soft: #252525;
   --field: #1f1f1f;
   --text: #e7e4dc;
-  --muted: #a7a29a;
-  --faint: #78736c;
+  --muted: #b9b3aa;
+  --faint: #928c84;
   --line: rgba(255, 255, 255, 0.09);
   --line-strong: rgba(255, 255, 255, 0.16);
   --hover: rgba(255, 255, 255, 0.055);
@@ -136,7 +136,7 @@ label {
   display: grid;
   gap: 6px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 h1,
@@ -194,29 +194,37 @@ h2 {
 
 .eyebrow {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   margin-bottom: 3px;
 }
 
 .icon-button,
 .ghost-icon,
 .row-icon {
-  width: 32px;
-  min-height: 32px;
+  width: 34px;
+  min-height: 34px;
   padding: 0;
 }
 
 .row-action {
-  min-height: 28px;
+  min-height: 30px;
   padding: 0 7px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .row-actions {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
+}
+
+.subtle-action {
+  color: var(--muted);
+}
+
+.subtle-action:hover {
+  color: var(--text);
 }
 
 .primary {
@@ -244,7 +252,7 @@ h2 {
   min-height: 34px;
   border: 0;
   background: transparent;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .compact-add {
@@ -414,32 +422,32 @@ h2 {
 
 .sidebar-brand p {
   color: var(--faint);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .sidebar-brand strong {
   color: var(--text);
-  font-size: 17px;
+  font-size: 18px;
   line-height: 1.25;
 }
 
 .sidebar-primary button {
-  min-height: 34px;
+  min-height: 36px;
   color: var(--text);
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .sidebar-secondary button {
-  min-height: 28px;
+  min-height: 31px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .sidebar-tags button,
 .sidebar-tools button {
-  min-height: 27px;
+  min-height: 30px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .sidebar-more {
@@ -495,7 +503,7 @@ h2 {
   gap: 6px;
   margin-left: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -513,7 +521,7 @@ h2 {
   gap: 12px;
   padding: 6px 0 8px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .database-meta > span {
@@ -528,8 +536,8 @@ h2 {
 }
 
 .database-meta button {
-  min-height: 28px;
-  padding: 0 8px;
+  min-height: 30px;
+  padding: 0 9px;
   color: var(--muted);
 }
 
@@ -584,7 +592,7 @@ h2 {
   border-radius: 7px;
   color: var(--muted);
   background: rgba(255, 255, 255, 0.018);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
@@ -605,7 +613,7 @@ h2 {
 .density-segment button {
   min-height: 26px;
   padding: 0 9px;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .database-table-wrap {
@@ -646,7 +654,7 @@ h2 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .compact-title svg,
@@ -701,68 +709,18 @@ h2 {
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
   max-width: 100%;
-  color: var(--text);
+  min-height: 24px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.055);
+  color: #ddd8cf;
   font-size: 13px;
-}
-
-.platform-badge > span:last-child {
-  min-width: 0;
+  font-weight: 650;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.platform-mark {
-  width: 28px;
-  height: 22px;
-  flex: 0 0 auto;
-  display: inline-grid;
-  place-items: center;
-  border-radius: 5px;
-  color: #fff;
-  background: #3a3a3a;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0;
-  line-height: 1;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
-}
-
-.platform-badge.netflix .platform-mark {
-  background: #e50914;
-  font-size: 16px;
-}
-
-.platform-badge.crunchyroll .platform-mark {
-  background: #f47521;
-  color: #151515;
-  font-size: 15px;
-}
-
-.platform-badge.prime .platform-mark {
-  width: 36px;
-  background: #00a8e1;
-  color: #061018;
-}
-
-.platform-badge.disney .platform-mark {
-  background: #113ccf;
-}
-
-.platform-badge.max .platform-mark {
-  background: #2738ff;
-}
-
-.platform-badge.hbo .platform-mark {
-  width: 34px;
-  background: #6b46ff;
-  font-size: 9px;
-}
-
-.platform-badge.youtube .platform-mark {
-  background: #ff0033;
 }
 
 .compact-meta,
@@ -772,7 +730,7 @@ h2 {
   flex-wrap: wrap;
   gap: 7px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .compact-sub {
@@ -853,18 +811,18 @@ h2 {
 
 .mini-tags span,
 .status-pill {
-  min-height: 20px;
+  min-height: 22px;
   display: inline-flex;
   align-items: center;
   border-radius: 5px;
   padding: 0 6px;
-  font-size: 12px;
+  font-size: 13px;
   background: var(--panel-soft);
   color: var(--muted);
 }
 
 .mini-tags span {
-  max-width: 92px;
+  max-width: 104px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1441,7 +1399,7 @@ h2 {
     gap: 6px;
     min-height: 58px;
     color: var(--muted);
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .database-sidebar.collapsed .sidebar-top {
@@ -1463,19 +1421,19 @@ h2 {
     gap: 5px;
     margin: 8px 0 3px;
     color: var(--faint);
-    font-size: 12px;
+    font-size: 13px;
   }
 
   .sidebar-group em {
     color: var(--faint);
-    font-size: 12px;
+    font-size: 13px;
     padding: 6px 8px;
     font-style: normal;
   }
 
   .sidebar-group button {
     justify-content: flex-start;
-    min-height: 30px;
+    min-height: 32px;
     color: var(--muted);
     padding: 0 8px;
     width: 100%;
@@ -1486,8 +1444,8 @@ h2 {
   }
 
   .sidebar-primary button {
-    min-height: 34px;
-    font-size: 14px;
+    min-height: 36px;
+    font-size: 15px;
   }
 
   .sidebar-secondary {
@@ -1495,7 +1453,7 @@ h2 {
   }
 
   .sidebar-secondary button {
-    min-height: 28px;
+    min-height: 31px;
     color: var(--muted);
   }
 
@@ -1511,8 +1469,8 @@ h2 {
 
   .sidebar-tags button,
   .sidebar-tools button {
-    min-height: 27px;
-    font-size: 12px;
+    min-height: 30px;
+    font-size: 13px;
   }
 
   .sidebar-tools {
@@ -1585,24 +1543,24 @@ h2 {
     border-radius: 8px;
     background: color-mix(in srgb, var(--panel) 92%, #05070b);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
-    --row-height: 46px;
-    --cell-py: 6px;
-    --cell-px: 10px;
-    --cover-size: 34px;
+    --row-height: 50px;
+    --cell-py: 7px;
+    --cell-px: 11px;
+    --cover-size: 36px;
   }
 
   .database-table-wrap.density-comfortable {
-    --row-height: 54px;
-    --cell-py: 8px;
-    --cell-px: 11px;
-    --cover-size: 40px;
+    --row-height: 58px;
+    --cell-py: 9px;
+    --cell-px: 12px;
+    --cover-size: 42px;
   }
 
   .database-table-wrap.density-compact {
-    --row-height: 38px;
-    --cell-py: 4px;
-    --cell-px: 8px;
-    --cover-size: 28px;
+    --row-height: 42px;
+    --cell-py: 5px;
+    --cell-px: 9px;
+    --cover-size: 30px;
   }
 
   .database-table {
@@ -1618,13 +1576,13 @@ h2 {
     border-bottom: 1px solid var(--line);
     text-align: left;
     vertical-align: middle;
-    font-size: 13px;
+    font-size: 14px;
     height: var(--row-height);
   }
 
   .database-table th {
-    color: var(--faint);
-    font-size: 12px;
+    color: var(--muted);
+    font-size: 13px;
     font-weight: 650;
     background: color-mix(in srgb, var(--panel) 74%, #05070b);
   }
@@ -1730,7 +1688,7 @@ h2 {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--faint);
+    color: var(--muted);
     margin-top: 2px;
   }
 
@@ -1745,8 +1703,8 @@ h2 {
   .inline-rating,
   .inline-type,
   .inline-status {
-    min-height: 26px;
-    padding: 2px 6px;
+    min-height: 30px;
+    padding: 3px 8px;
     background-color: var(--field);
     border-color: transparent;
     color: var(--text);

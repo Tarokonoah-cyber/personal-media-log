@@ -179,11 +179,9 @@ function RatingValue({ item }: { item: MediaItem }) {
 
 function PlatformBadge({ platform }: { platform: string | null }) {
   if (!platform) return <span className="muted-cell">-</span>;
-  const meta = platformMeta(platform);
   return (
-    <span className={`platform-badge ${meta.className}`} title={platform}>
-      <span className="platform-mark">{meta.mark}</span>
-      <span>{platform}</span>
+    <span className="platform-badge" title={platform}>
+      {platform}
     </span>
   );
 }
@@ -204,9 +202,8 @@ function RowActions({
       <button className={item.favorite ? "row-icon active" : "row-icon"} onClick={(event) => action(event, () => onToggleFavorite?.(item))} title="切換收藏">
         <Star size={15} fill={item.favorite ? "currentColor" : "none"} />
       </button>
-      <button className="row-action" onClick={(event) => action(event, () => onMetadata?.(item))} title="補資料">
+      <button className="row-icon subtle-action" onClick={(event) => action(event, () => onMetadata?.(item))} title="補資料" aria-label="補資料">
         <Sparkles size={14} />
-        補資料
       </button>
       <button className="row-icon danger-button" onClick={(event) => action(event, () => onDelete?.(item.id))} title="刪除">
         <Trash2 size={15} />
@@ -245,18 +242,6 @@ function tableProgressLabel(item: MediaItem) {
 
 function coverInitial(item: MediaItem) {
   return (item.official_title || item.raw_title || "?").trim().slice(0, 1).toUpperCase();
-}
-
-function platformMeta(platform: string) {
-  const normalized = platform.toLowerCase();
-  if (normalized.includes("netflix")) return { className: "netflix", mark: "N" };
-  if (normalized.includes("crunchyroll")) return { className: "crunchyroll", mark: "C" };
-  if (normalized.includes("prime") || normalized.includes("amazon")) return { className: "prime", mark: "prime" };
-  if (normalized.includes("disney")) return { className: "disney", mark: "D+" };
-  if (normalized.includes("hbo")) return { className: "hbo", mark: "HBO" };
-  if (normalized.includes("max")) return { className: "max", mark: "max" };
-  if (normalized.includes("youtube")) return { className: "youtube", mark: "YT" };
-  return { className: "default", mark: platform.trim().slice(0, 1).toUpperCase() || "P" };
 }
 
 function dateLabel(item: MediaItem) {
