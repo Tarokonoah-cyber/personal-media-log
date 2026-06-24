@@ -3,10 +3,10 @@ import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import { displayDate } from "../lib/date";
 import { privateItemDetails } from "../lib/privacy";
-import { getItemReflection } from "../lib/reflection";
+import { getItemReflection, moodOptions, rewatchIntentOptions } from "../lib/reflection";
 import { classifyItem, libraryTree } from "../lib/taxonomy";
-import { displayDateForItem, getWatchProgress, getWatchStatus, isSeriesLike, progressLabel, watchStatusLabel } from "../lib/watch";
-import type { ItemInput, MediaItem } from "../types";
+import { displayDateForItem, getWatchProgress, getWatchStatus, isSeriesLike, progressLabel, updateWatchProgress, watchStatusLabel, watchStatuses } from "../lib/watch";
+import type { ItemInput, MediaItem, WatchStatus } from "../types";
 
 type ColumnId = string;
 
@@ -28,6 +28,8 @@ type CustomColumn = {
 
 const typeOptions: string[] = libraryTree.map((entry) => entry.label);
 const platformOptions = ["Netflix", "Disney+", "Prime Video", "Apple TV+", "HBO Max", "YouTube", "Crunchyroll", "電影院", "DVD / BD", "其他"];
+const shadiaoType = "沙雕动画";
+const shadiaoUpdateStatuses = ["連載中", "已完結", "已斷更", "休更中", "不確定"];
 const columnStoragePrefix = "itemTableColumns";
 const customColumnStoragePrefix = "itemTableCustomColumns";
 
@@ -45,7 +47,8 @@ export function ItemList({
   onToggleFavorite,
   onDelete,
   onMetadata,
-  onQuickUpdate
+  onQuickUpdate,
+  onQuickCreate
 }: {
   items: MediaItem[];
   view: "table" | "list" | "poster";
@@ -61,9 +64,11 @@ export function ItemList({
   onDelete?: (id: string) => Promise<void>;
   onMetadata?: (item: MediaItem) => void;
   onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
+  onQuickCreate?: (input: ItemInput) => Promise<void>;
 }) {
   const storageKey = `${columnStoragePrefix}:${privateMode ? "private" : "public"}:${columnScope}`;
   const customStorageKey = `${customColumnStoragePrefix}:${privateMode ? "private" : "public"}:${columnScope}`;
+  const sheetMode = !privateMode && isShadiaoScope(columnScope);
   const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
   const allColumns = useMemo(
     () => [
@@ -135,7 +140,7 @@ export function ItemList({
   }
 
   if (loading) return <div className="empty">讀取中...</div>;
-  if (items.length === 0) return <div className="empty">{emptyMessage}</div>;
+  if (items.length === 0 && !(sheetMode && view === "table")) return <div className="empty">{emptyMessage}</div>;
   if (view === "poster") return <PosterWall items={items} onSelect={onSelect} />;
 
   return (
@@ -145,8 +150,10 @@ export function ItemList({
           items={items}
           density={density}
           privateMode={privateMode}
+          sheetMode={sheetMode}
           columns={visibleColumns}
           onSelect={onSelect}
+          onQuickCreate={onQuickCreate}
         />
       )}
 
@@ -203,18 +210,22 @@ function DataTable({
   items,
   density,
   privateMode,
+  sheetMode,
   columns,
-  onSelect
+  onSelect,
+  onQuickCreate
 }: {
   items: MediaItem[];
   density: "comfortable" | "standard" | "compact";
   privateMode: boolean;
+  sheetMode: boolean;
   columns: ColumnDef[];
   onSelect: (item: MediaItem) => void;
+  onQuickCreate?: (input: ItemInput) => Promise<void>;
 }) {
   return (
-    <div className={`database-table-wrap ${privateMode ? "private-table-wrap" : ""} density-${density}`}>
-      <table className={privateMode ? "database-table private-table" : "database-table"}>
+    <div className={`database-table-wrap ${privateMode ? "private-table-wrap" : ""} ${sheetMode ? "shadiao-sheet-wrap" : ""} density-${density}`}>
+      <table className={privateMode ? "database-table private-table" : sheetMode ? "database-table shadiao-sheet-table" : "database-table"}>
         <colgroup>
           {columns.map((column) => <col key={column.id} className={column.colClassName} />)}
         </colgroup>
@@ -234,8 +245,81 @@ function DataTable({
             </tr>
           ))}
         </tbody>
+        {sheetMode && <ShadiaoAddFooter columns={columns} onQuickCreate={onQuickCreate} />}
       </table>
     </div>
+  );
+}
+
+function ShadiaoAddFooter({ columns, onQuickCreate }: { columns: ColumnDef[]; onQuickCreate?: (input: ItemInput) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState({
+    title: "",
+    author: "",
+    animationStatus: "watching" as WatchStatus,
+    updateStatus: "連載中",
+    progress: "",
+    rating: "",
+    mood: "",
+    rewatch: "",
+    tags: ""
+  });
+
+  async function save() {
+    if (!draft.title.trim() || !onQuickCreate) return;
+    setSaving(true);
+    try {
+      const progress = numberOrNull(draft.progress);
+      const metadata = {
+        ...(draft.updateStatus ? { update_status: draft.updateStatus } : {}),
+        reflection: {
+          ...(draft.mood ? { mood: draft.mood } : {}),
+          ...(draft.rewatch ? { rewatch_intent: draft.rewatch } : {})
+        }
+      };
+      await onQuickCreate({
+        raw_title: draft.title.trim(),
+        type: shadiaoType,
+        platform: "B站",
+        status: watchStatuses.find((entry) => entry.value === draft.animationStatus)?.legacy || "partial",
+        rating: numberOrNull(draft.rating),
+        tags: splitTags(draft.tags),
+        people: draft.author.trim() ? [draft.author.trim()] : [],
+        metadata_json: JSON.stringify(metadata),
+        progress_json: JSON.stringify({
+          watch_status: draft.animationStatus,
+          current_episode: progress,
+          total_episodes: null
+        })
+      });
+      setDraft({ title: "", author: "", animationStatus: "watching", updateStatus: "連載中", progress: "", rating: "", mood: "", rewatch: "", tags: "" });
+      setOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <tfoot>
+        <tr className="sheet-plus-row">
+          <td colSpan={columns.length}>
+            <button type="button" onClick={() => setOpen(true)} title="新增一筆沙雕动画">+</button>
+          </td>
+        </tr>
+      </tfoot>
+    );
+  }
+
+  return (
+    <tfoot>
+      <tr className="sheet-draft-row">
+        {columns.map((column) => (
+          <td key={column.id}>{renderShadiaoDraftCell(column.id, draft, setDraft, save, saving)}</td>
+        ))}
+      </tr>
+    </tfoot>
   );
 }
 
@@ -338,6 +422,122 @@ function generalColumnDefs({
   onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
 }): ColumnDef[] {
   return [
+    {
+      id: "sheet_title",
+      label: "標題",
+      colClassName: "sheet-title-col",
+      cellClassName: "sheet-text-cell",
+      render: (item) => (
+        <InlineText
+          value={item.official_title || item.raw_title}
+          onCommit={(value) => onQuickUpdate?.(item, { raw_title: value, official_title: value })}
+        />
+      )
+    },
+    {
+      id: "shadiao_author",
+      label: "動畫作者",
+      colClassName: "sheet-author-col",
+      cellClassName: "sheet-text-cell",
+      render: (item) => (
+        <InlineText
+          value={item.people[0] || ""}
+          placeholder="-"
+          onCommit={(value) => onQuickUpdate?.(item, { people: value ? [value] : [] })}
+        />
+      )
+    },
+    {
+      id: "shadiao_status",
+      label: "動畫狀態",
+      colClassName: "sheet-status-col",
+      render: (item) => (
+        <select className="sheet-select" value={getWatchStatus(item)} onClick={stop} onChange={(event) => onQuickUpdate?.(item, updateWatchProgress(item, { watch_status: event.target.value as WatchStatus }))}>
+          {watchStatuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
+        </select>
+      )
+    },
+    {
+      id: "shadiao_update_status",
+      label: "更新狀態",
+      colClassName: "sheet-status-col",
+      render: (item) => (
+        <select className="sheet-select" value={metadataText(item, "update_status")} onClick={stop} onChange={(event) => onQuickUpdate?.(item, { metadata_json: mergeMetadata(item.metadata_json, "update_status", event.target.value) })}>
+          <option value="">-</option>
+          {shadiaoUpdateStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+        </select>
+      )
+    },
+    {
+      id: "shadiao_progress",
+      label: "追更進度",
+      colClassName: "sheet-progress-col",
+      render: (item) => {
+        const progress = getWatchProgress(item);
+        return (
+          <InlineText
+            value={progress.current_episode ? String(progress.current_episode) : ""}
+            inputMode="numeric"
+            placeholder="-"
+            onCommit={(value) => onQuickUpdate?.(item, updateWatchProgress(item, { current_episode: numberOrNull(value), total_episodes: progress.total_episodes || null }))}
+          />
+        );
+      }
+    },
+    {
+      id: "sheet_rating",
+      label: "評分",
+      colClassName: "sheet-rating-col",
+      render: (item) => (
+        <InlineText
+          value={item.rating ? String(item.rating) : ""}
+          inputMode="decimal"
+          placeholder="-"
+          onCommit={(value) => onQuickUpdate?.(item, { rating: numberOrNull(value) })}
+        />
+      )
+    },
+    {
+      id: "sheet_mood",
+      label: "心情",
+      colClassName: "sheet-mood-col",
+      render: (item) => {
+        const reflection = getItemReflection(item);
+        return (
+          <select className="sheet-select" value={reflection.mood} onClick={stop} onChange={(event) => onQuickUpdate?.(item, { metadata_json: mergeReflectionField(item.metadata_json, "mood", event.target.value) })}>
+            <option value="">-</option>
+            {moodOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
+        );
+      }
+    },
+    {
+      id: "sheet_rewatch",
+      label: "重看",
+      colClassName: "sheet-rewatch-col",
+      render: (item) => {
+        const reflection = getItemReflection(item);
+        return (
+          <select className="sheet-select" value={reflection.rewatch_intent} onClick={stop} onChange={(event) => onQuickUpdate?.(item, { metadata_json: mergeReflectionField(item.metadata_json, "rewatch_intent", event.target.value) })}>
+            <option value="">-</option>
+            {rewatchIntentOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
+        );
+      }
+    },
+    {
+      id: "sheet_tags",
+      label: "標籤",
+      colClassName: "sheet-tags-col",
+      cellClassName: "sheet-text-cell",
+      render: (item) => (
+        <InlineText
+          value={item.tags.join(", ")}
+          placeholder="-"
+          onCommit={(value) => onQuickUpdate?.(item, { tags: splitTags(value) })}
+        />
+      )
+    },
     {
       id: "title",
       label: "標題",
@@ -458,8 +658,9 @@ function customColumnDef(column: CustomColumn): ColumnDef {
 
 function defaultColumnsForScope(scope: string, privateMode: boolean): ColumnId[] {
   if (privateMode) return ["code", "title", "performers", "studio", "year", "rating", "mood", "rewatch_intent", "collection_level", "tags"];
+  if (isShadiaoScope(scope)) return ["sheet_title", "shadiao_author", "shadiao_status", "shadiao_update_status", "shadiao_progress", "sheet_rating", "sheet_mood", "sheet_rewatch", "sheet_tags", "updated", "actions"];
   if (scope.includes("電影")) return ["title", "year", "status", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];
-  if (scope.includes("影集") || scope.includes("動畫") || scope.includes("沙雕动画")) return ["title", "year", "status", "progress", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];
+  if (scope.includes("影集") || scope.includes("動畫")) return ["title", "year", "status", "progress", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];
   if (scope.includes("YouTube")) return ["title", "status", "platform", "rating", "mood", "tags", "updated", "actions"];
   if (scope.includes("其他")) return ["title", "type", "status", "rating", "mood", "tags", "updated", "actions"];
   return ["title", "type", "year", "status", "progress", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];
@@ -526,6 +727,165 @@ function scopeLabel(scope: string) {
   if (scope === "completed") return "看完";
   if (scope === "favorites") return "收藏";
   return scope;
+}
+
+function isShadiaoScope(scope: string) {
+  return scope.includes(shadiaoType);
+}
+
+function renderShadiaoDraftCell(
+  id: ColumnId,
+  draft: {
+    title: string;
+    author: string;
+    animationStatus: WatchStatus;
+    updateStatus: string;
+    progress: string;
+    rating: string;
+    mood: string;
+    rewatch: string;
+    tags: string;
+  },
+  setDraft: (draft: {
+    title: string;
+    author: string;
+    animationStatus: WatchStatus;
+    updateStatus: string;
+    progress: string;
+    rating: string;
+    mood: string;
+    rewatch: string;
+    tags: string;
+  }) => void,
+  onSave: () => void,
+  saving: boolean
+) {
+  const patch = (next: Partial<typeof draft>) => setDraft({ ...draft, ...next });
+  if (id === "sheet_title") return <input className="sheet-input" value={draft.title} onChange={(event) => patch({ title: event.target.value })} onKeyDown={(event) => { if (event.key === "Enter") void onSave(); }} placeholder="標題" autoFocus />;
+  if (id === "shadiao_author") return <input className="sheet-input" value={draft.author} onChange={(event) => patch({ author: event.target.value })} placeholder="動畫作者" />;
+  if (id === "type") return <span className="muted-cell">{shadiaoType}</span>;
+  if (id === "shadiao_status") {
+    return (
+      <select className="sheet-select" value={draft.animationStatus} onChange={(event) => patch({ animationStatus: event.target.value as WatchStatus })}>
+        {watchStatuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
+      </select>
+    );
+  }
+  if (id === "shadiao_update_status") {
+    return (
+      <select className="sheet-select" value={draft.updateStatus} onChange={(event) => patch({ updateStatus: event.target.value })}>
+        {shadiaoUpdateStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+      </select>
+    );
+  }
+  if (id === "shadiao_progress") return <input className="sheet-input" value={draft.progress} onChange={(event) => patch({ progress: event.target.value })} inputMode="numeric" placeholder="0" />;
+  if (id === "sheet_rating") return <input className="sheet-input" value={draft.rating} onChange={(event) => patch({ rating: event.target.value })} inputMode="decimal" placeholder="0-10" />;
+  if (id === "sheet_mood") {
+    return (
+      <select className="sheet-select" value={draft.mood} onChange={(event) => patch({ mood: event.target.value })}>
+        <option value="">-</option>
+        {moodOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+      </select>
+    );
+  }
+  if (id === "sheet_rewatch") {
+    return (
+      <select className="sheet-select" value={draft.rewatch} onChange={(event) => patch({ rewatch: event.target.value })}>
+        <option value="">-</option>
+        {rewatchIntentOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+      </select>
+    );
+  }
+  if (id === "sheet_tags") return <input className="sheet-input" value={draft.tags} onChange={(event) => patch({ tags: event.target.value })} placeholder="標籤" />;
+  if (id === "actions") return <button type="button" className="sheet-save" onClick={() => void onSave()} disabled={saving || !draft.title.trim()}>{saving ? "..." : "新增"}</button>;
+  return <span className="muted-cell">-</span>;
+}
+
+function InlineText({
+  value,
+  onCommit,
+  placeholder,
+  inputMode
+}: {
+  value: string;
+  onCommit?: (value: string) => void | Promise<void>;
+  placeholder?: string;
+  inputMode?: "numeric" | "decimal";
+}) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  function commit() {
+    const next = draft.trim();
+    if (next === value.trim()) return;
+    void onCommit?.(next);
+  }
+
+  return (
+    <input
+      className="sheet-input"
+      value={draft}
+      placeholder={placeholder}
+      inputMode={inputMode}
+      onClick={stop}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Escape") {
+          setDraft(value);
+          event.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
+function metadataText(item: MediaItem, key: string) {
+  const value = parseMetadata(item.metadata_json)[key];
+  return typeof value === "string" ? value : "";
+}
+
+function mergeMetadata(value: string | null, key: string, nextValue: string) {
+  const metadata = parseMetadata(value);
+  if (nextValue.trim()) metadata[key] = nextValue.trim();
+  else delete metadata[key];
+  return JSON.stringify(metadata);
+}
+
+function mergeReflectionField(value: string | null, key: "mood" | "rewatch_intent", nextValue: string) {
+  const metadata = parseMetadata(value);
+  const reflection = metadata.reflection && typeof metadata.reflection === "object" && !Array.isArray(metadata.reflection)
+    ? metadata.reflection as Record<string, unknown>
+    : {};
+  if (nextValue.trim()) reflection[key] = nextValue.trim();
+  else delete reflection[key];
+  if (Object.keys(reflection).length > 0) metadata.reflection = reflection;
+  else delete metadata.reflection;
+  return JSON.stringify(metadata);
+}
+
+function parseMetadata(value: string | null) {
+  if (!value) return {} as Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function splitTags(value: string) {
+  return value.split(/[#,，、\s]+/).map((tag) => tag.trim()).filter(Boolean);
+}
+
+function numberOrNull(value: string) {
+  if (!value.trim()) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function PosterWall({ items, onSelect }: { items: MediaItem[]; onSelect: (item: MediaItem) => void }) {

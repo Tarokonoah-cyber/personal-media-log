@@ -273,6 +273,13 @@ export default function App() {
     await refreshVisibleData();
   }
 
+  async function quickCreateFromTable(input: ItemInput) {
+    await createItem(input);
+    setToast("已新增");
+    setFilters((current) => ({ ...current, status: "all", page: 1 }));
+    await refreshVisibleData();
+  }
+
   async function openMetadataLookup(item: MediaItem) {
     setMetadataTarget(item);
     setMetadataCandidates([]);
@@ -493,6 +500,7 @@ export default function App() {
                   onDelete={removeItem}
                   onMetadata={openMetadataLookup}
                   onQuickUpdate={quickUpdate}
+                  onQuickCreate={quickCreateFromTable}
                 />
               )}
             </>

@@ -2002,6 +2002,113 @@ h2 {
     --cell-px: 8px;
   }
 
+  .shadiao-sheet-wrap {
+    --row-height: 34px;
+    --cell-py: 2px;
+    --cell-px: 6px;
+    background: var(--bg);
+  }
+
+  .shadiao-sheet-table {
+    min-width: 1180px;
+  }
+
+  .shadiao-sheet-table th,
+  .shadiao-sheet-table td {
+    height: var(--row-height);
+    line-height: 1.2;
+    white-space: nowrap;
+    border-right: 1px solid var(--line);
+  }
+
+  .shadiao-sheet-table th {
+    color: var(--text);
+    font-size: 13px;
+    background: color-mix(in srgb, var(--panel) 88%, #05070b);
+  }
+
+  .shadiao-sheet-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.032);
+  }
+
+  .sheet-title-col {
+    width: 220px;
+  }
+
+  .sheet-author-col {
+    width: 136px;
+  }
+
+  .sheet-status-col {
+    width: 118px;
+  }
+
+  .sheet-progress-col,
+  .sheet-rating-col,
+  .sheet-mood-col,
+  .sheet-rewatch-col {
+    width: 86px;
+  }
+
+  .sheet-tags-col {
+    width: 150px;
+  }
+
+  .sheet-text-cell {
+    min-width: 0;
+  }
+
+  .sheet-input,
+  .sheet-select {
+    width: 100%;
+    min-height: 26px;
+    padding: 2px 5px;
+    border-color: transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text);
+    font-size: 13px;
+  }
+
+  .sheet-input:focus,
+  .sheet-select:focus {
+    background: var(--field);
+    border-color: var(--accent);
+  }
+
+  .sheet-plus-row td {
+    height: 26px;
+    padding: 0;
+    background: transparent;
+  }
+
+  .sheet-plus-row button {
+    width: 100%;
+    min-height: 26px;
+    justify-content: flex-start;
+    padding-left: 10px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--faint);
+    font-size: 16px;
+  }
+
+  .sheet-plus-row button:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.035);
+  }
+
+  .sheet-draft-row td {
+    background: color-mix(in srgb, var(--panel) 80%, #05070b);
+  }
+
+  .sheet-save {
+    width: 100%;
+    min-height: 26px;
+    padding: 0 8px;
+  }
+
   .private-table-wrap.density-comfortable {
     --row-height: 34px;
     --cell-py: 3px;
