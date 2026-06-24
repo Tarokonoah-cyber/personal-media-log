@@ -342,7 +342,7 @@ type FormState = ReturnType<typeof toForm>;
 function toInput(form: FormState): ItemInput {
   if (form.is_private) return toPrivateInput(form);
 
-  const progressPatch = progressInput(form, form.type === "影集");
+  const progressPatch = progressInput(form, isSeriesType(form.type));
   const metadata = mergeReflectionMetadata(form.metadata_json, reflectionInput(form));
   return {
     raw_title: form.raw_title,
@@ -455,6 +455,10 @@ function privateHeader(form: FormState) {
 function typeOptions(current: string) {
   const options: string[] = libraryTree.map((entry) => entry.label);
   return current && !options.includes(current) ? [...options, current] : options;
+}
+
+function isSeriesType(type: string) {
+  return ["影集", "沙雕动画"].includes(type);
 }
 
 function mergePrivateMetadata(value: string, update: { code: string; title: string; performers: string[]; studio: string; releaseYear: string; type: string }) {

@@ -42,7 +42,7 @@ export function updateWatchProgress(item: MediaItem, patch: WatchProgress): Part
 }
 
 export function isSeriesLike(item: MediaItem) {
-  return classifyItem(item).type === "影集";
+  return ["影集", "沙雕动画"].includes(classifyItem(item).type);
 }
 
 export function progressLabel(item: MediaItem) {

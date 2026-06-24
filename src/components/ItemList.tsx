@@ -459,7 +459,7 @@ function customColumnDef(column: CustomColumn): ColumnDef {
 function defaultColumnsForScope(scope: string, privateMode: boolean): ColumnId[] {
   if (privateMode) return ["code", "title", "performers", "studio", "year", "rating", "mood", "rewatch_intent", "collection_level", "tags"];
   if (scope.includes("電影")) return ["title", "year", "status", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];
-  if (scope.includes("影集") || scope.includes("動畫")) return ["title", "year", "status", "progress", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];
+  if (scope.includes("影集") || scope.includes("動畫") || scope.includes("沙雕动画")) return ["title", "year", "status", "progress", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];
   if (scope.includes("YouTube")) return ["title", "status", "platform", "rating", "mood", "tags", "updated", "actions"];
   if (scope.includes("其他")) return ["title", "type", "status", "rating", "mood", "tags", "updated", "actions"];
   return ["title", "type", "year", "status", "progress", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];

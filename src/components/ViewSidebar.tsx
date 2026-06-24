@@ -155,6 +155,7 @@ function iconFor(label: string) {
   if (label === "電影") return <Film size={15} />;
   if (label === "影集") return <Tv size={15} />;
   if (label === "動畫") return <Clapperboard size={15} />;
+  if (label === "沙雕动画") return <Clapperboard size={15} />;
   if (label === "YouTube") return <Layers size={15} />;
   return <Folder size={15} />;
 }

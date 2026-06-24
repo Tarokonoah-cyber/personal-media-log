@@ -5,6 +5,7 @@ export const libraryTree = [
   { id: "movie", label: "電影", children: [] },
   { id: "series", label: "影集", children: [] },
   { id: "anime", label: "動畫", children: [] },
+  { id: "shadiao-anime", label: "沙雕动画", children: [] },
   { id: "youtube", label: "YouTube", children: [] },
   { id: "private", label: PRIVATE_LIBRARY_LABEL, children: [] },
   { id: "other", label: "其他", children: [] }
@@ -18,6 +19,9 @@ export function classifyItem(item: MediaItem) {
 
   if (includesAny(haystack, ["adult", "nsfw", "jav", "av ", "18+", "r18", "xxx", "adult content", "成人", "私密"])) {
     return { type: PRIVATE_LIBRARY_LABEL, category: "" };
+  }
+  if (includesAny(haystack, ["沙雕动画", "沙雕動畫", "b站", "bilibili", "宗门食神", "宗門食神", "回档修仙", "回檔修仙", "修仙"])) {
+    return { type: "沙雕动画", category: "" };
   }
   if (includesAny(haystack, ["youtube", "yt"])) return { type: "YouTube", category: "" };
   if (includesAny(haystack, ["anime", "animation", "anime series", "動畫", "動漫"])) {
