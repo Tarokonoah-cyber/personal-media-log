@@ -477,6 +477,7 @@ export default function App() {
                 <ItemList
                   items={visibleItems}
                   view={displayView}
+                  columnScope={privateView && includePrivate ? PRIVATE_LIBRARY_LABEL : activeView}
                   privateMode={privateView && includePrivate}
                   density={displayDensity}
                   loading={loading}

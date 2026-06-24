@@ -525,6 +525,30 @@ h2 {
   background: var(--hover);
 }
 
+.table-view-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.table-view-controls > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.column-toggle {
+  flex: 0 0 auto;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
 .database-meta {
   min-height: 36px;
   display: flex;
@@ -1132,6 +1156,71 @@ h2 {
 }
 
 .simple-add-actions {
+  justify-content: flex-end;
+}
+
+.column-manager-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 57;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.44);
+}
+
+.column-manager {
+  width: min(460px, 100%);
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow: 0 20px 64px rgba(0, 0, 0, 0.32);
+}
+
+.column-manager-head,
+.column-manager-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.column-manager-head h2 {
+  font-size: 17px;
+}
+
+.column-option-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.column-option {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.column-option input {
+  width: auto;
+}
+
+.column-option span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.column-manager-actions {
   justify-content: flex-end;
 }
 
@@ -1810,48 +1899,43 @@ h2 {
     width: 300px;
   }
 
-  .database-table th:nth-child(2),
-  .database-table td:nth-child(2) {
+  .general-title-col {
+    width: 300px;
+  }
+
+  .general-type-col {
     width: 112px;
   }
 
-  .database-table th:nth-child(3),
-  .database-table td:nth-child(3) {
+  .general-year-col {
     width: 76px;
   }
 
-  .database-table th:nth-child(4),
-  .database-table td:nth-child(4) {
+  .general-status-col {
     width: 112px;
   }
 
-  .database-table th:nth-child(5),
-  .database-table td:nth-child(5) {
+  .general-progress-col {
     width: 86px;
   }
 
-  .database-table th:nth-child(6),
-  .database-table td:nth-child(6) {
+  .general-platform-col {
     width: 176px;
   }
 
-  .database-table th:nth-child(7),
-  .database-table td:nth-child(7) {
+  .general-rating-col {
     width: 82px;
   }
 
-  .database-table th:nth-child(8),
-  .database-table td:nth-child(8) {
+  .general-tags-col {
     width: 170px;
   }
 
-  .database-table th:nth-child(9),
-  .database-table td:nth-child(9) {
+  .general-updated-col {
     width: 112px;
   }
 
-  .database-table th:nth-child(10),
-  .database-table td:nth-child(10) {
+  .general-actions-col {
     width: 150px;
   }
 
@@ -1912,41 +1996,6 @@ h2 {
   }
 
   .private-tags-col {
-    width: 230px;
-  }
-
-  .private-table th:nth-child(1),
-  .private-table td:nth-child(1) {
-    width: 132px;
-  }
-
-  .private-table th:nth-child(2),
-  .private-table td:nth-child(2) {
-    width: auto;
-  }
-
-  .private-table th:nth-child(3),
-  .private-table td:nth-child(3) {
-    width: 220px;
-  }
-
-  .private-table th:nth-child(4),
-  .private-table td:nth-child(4) {
-    width: 170px;
-  }
-
-  .private-table th:nth-child(5),
-  .private-table td:nth-child(5) {
-    width: 76px;
-  }
-
-  .private-table th:nth-child(6),
-  .private-table td:nth-child(6) {
-    width: 78px;
-  }
-
-  .private-table th:nth-child(7),
-  .private-table td:nth-child(7) {
     width: 230px;
   }
 

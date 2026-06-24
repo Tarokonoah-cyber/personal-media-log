@@ -1,16 +1,43 @@
-import { Sparkles, Star, Trash2 } from "lucide-react";
-import { MouseEvent } from "react";
+import { Columns3, RotateCcw, Sparkles, Star, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { displayDate } from "../lib/date";
 import { privateItemDetails } from "../lib/privacy";
 import { classifyItem, libraryTree } from "../lib/taxonomy";
 import { displayDateForItem, getWatchProgress, getWatchStatus, isSeriesLike, progressLabel, watchStatusLabel } from "../lib/watch";
 import type { ItemInput, MediaItem } from "../types";
 
+type ColumnId =
+  | "title"
+  | "type"
+  | "year"
+  | "status"
+  | "progress"
+  | "platform"
+  | "rating"
+  | "tags"
+  | "updated"
+  | "actions"
+  | "code"
+  | "performers"
+  | "studio";
+
+type ColumnDef = {
+  id: ColumnId;
+  label: string;
+  colClassName: string;
+  headerClassName?: string;
+  cellClassName?: string;
+  render: (item: MediaItem) => ReactNode;
+};
+
 const typeOptions: string[] = libraryTree.map((entry) => entry.label);
+const columnStoragePrefix = "itemTableColumns";
 
 export function ItemList({
   items,
   view,
+  columnScope = "home",
   privateMode = false,
   density,
   loading,
@@ -23,6 +50,7 @@ export function ItemList({
 }: {
   items: MediaItem[];
   view: "table" | "list" | "poster";
+  columnScope?: string;
   privateMode?: boolean;
   density: "comfortable" | "standard" | "compact";
   loading: boolean;
@@ -33,74 +61,74 @@ export function ItemList({
   onMetadata?: (item: MediaItem) => void;
   onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
 }) {
+  const [columnManagerOpen, setColumnManagerOpen] = useState(false);
+  const storageKey = `${columnStoragePrefix}:${privateMode ? "private" : "public"}:${columnScope}`;
+  const allColumns = useMemo(
+    () => privateMode ? privateColumnDefs() : generalColumnDefs({ onToggleFavorite, onDelete, onMetadata, onQuickUpdate }),
+    [privateMode, onDelete, onMetadata, onQuickUpdate, onToggleFavorite]
+  );
+  const defaultColumnIds = useMemo(() => defaultColumnsForScope(columnScope, privateMode), [columnScope, privateMode]);
+  const [selectedColumnIds, setSelectedColumnIds] = useState<ColumnId[]>(defaultColumnIds);
+
+  useEffect(() => {
+    const available = new Set(allColumns.map((column) => column.id));
+    const stored = loadStoredColumns(storageKey, available);
+    setSelectedColumnIds(stored.length > 0 ? stored : defaultColumnIds.filter((id) => available.has(id)));
+  }, [allColumns, defaultColumnIds, storageKey]);
+
+  const visibleColumns = useMemo(() => {
+    const selected = new Set(selectedColumnIds);
+    const columns = allColumns.filter((column) => selected.has(column.id));
+    return columns.length > 0 ? columns : allColumns.filter((column) => defaultColumnIds.includes(column.id));
+  }, [allColumns, defaultColumnIds, selectedColumnIds]);
+
+  function updateColumns(next: ColumnId[]) {
+    const available = new Set(allColumns.map((column) => column.id));
+    const clean = next.filter((id) => available.has(id));
+    const fallback = defaultColumnIds.filter((id) => available.has(id));
+    const value = clean.length > 0 ? clean : fallback;
+    setSelectedColumnIds(value);
+    localStorage.setItem(storageKey, JSON.stringify(value));
+  }
+
+  function toggleColumn(id: ColumnId) {
+    if (selectedColumnIds.includes(id)) {
+      updateColumns(selectedColumnIds.filter((columnId) => columnId !== id));
+      return;
+    }
+    const order = allColumns.map((column) => column.id);
+    updateColumns([...selectedColumnIds, id].sort((a, b) => order.indexOf(a) - order.indexOf(b)));
+  }
+
+  function resetColumns() {
+    localStorage.removeItem(storageKey);
+    setSelectedColumnIds(defaultColumnIds);
+  }
+
   if (loading) return <div className="empty">讀取中...</div>;
   if (items.length === 0) return <div className="empty">{emptyMessage}</div>;
   if (view === "poster") return <PosterWall items={items} onSelect={onSelect} />;
 
   return (
     <>
-      {view === "table" && privateMode && (
-        <PrivateTable items={items} density={density} onSelect={onSelect} />
+      {view === "table" && (
+        <div className="table-view-controls">
+          <span>{privateMode ? "私密欄位" : "欄位顯示"} · {scopeLabel(columnScope)}</span>
+          <button className="filter-toggle column-toggle" onClick={() => setColumnManagerOpen(true)}>
+            <Columns3 size={15} />
+            欄位
+          </button>
+        </div>
       )}
 
-      {view === "table" && !privateMode && (
-        <div className={`database-table-wrap density-${density}`}>
-          <table className="database-table">
-            <thead>
-              <tr>
-                <th className="title-col">標題</th>
-                <th>類型</th>
-                <th>年份</th>
-                <th>狀態</th>
-                <th>進度</th>
-                <th>平台</th>
-                <th>評分</th>
-                <th>標籤</th>
-                <th>更新日</th>
-                <th>更多操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => {
-                const classification = classifyItem(item);
-                return (
-                  <tr key={item.id} onClick={() => onSelect(item)}>
-                    <td className="title-cell">
-                      <div className="title-cell-inner">
-                        {item.cover_url ? (
-                          <img className="table-cover" src={item.cover_url} alt="" loading="lazy" />
-                        ) : (
-                          <span className="table-cover placeholder">{coverInitial(item)}</span>
-                        )}
-                        <span className="title-copy">
-                          <strong>{item.official_title || item.raw_title}</strong>
-                          {item.code && <small>{item.code}</small>}
-                          {item.quick_note && <small>{item.quick_note}</small>}
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <select className="inline-type" value={displayType(item, classification)} onClick={stop} onChange={(event) => onQuickUpdate?.(item, { type: event.target.value })}>
-                        {typeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
-                        {!typeOptions.includes(displayType(item, classification)) && <option value={displayType(item, classification)}>{displayType(item, classification)}</option>}
-                      </select>
-                    </td>
-                    <td className="muted-cell">{item.release_year || "-"}</td>
-                    <td><StatusPill item={item} /></td>
-                    <td className="muted-cell">{tableProgressLabel(item)}</td>
-                    <td><PlatformBadge platform={item.platform} /></td>
-                    <td><RatingValue item={item} /></td>
-                    <td><Tags tags={item.tags} /></td>
-                    <td className="muted-cell">{dateLabel(item)}</td>
-                    <td>
-                      <RowActions item={item} onToggleFavorite={onToggleFavorite} onDelete={onDelete} onMetadata={onMetadata} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      {view === "table" && (
+        <DataTable
+          items={items}
+          density={density}
+          privateMode={privateMode}
+          columns={visibleColumns}
+          onSelect={onSelect}
+        />
       )}
 
       <div className={view === "list" ? "compact-list force-list" : "compact-list"}>
@@ -135,8 +163,246 @@ export function ItemList({
           </article>
         ))}
       </div>
+
+      {columnManagerOpen && (
+        <ColumnManager
+          columns={allColumns}
+          selectedColumnIds={selectedColumnIds}
+          scope={scopeLabel(columnScope)}
+          onToggle={toggleColumn}
+          onReset={resetColumns}
+          onClose={() => setColumnManagerOpen(false)}
+        />
+      )}
     </>
   );
+}
+
+function DataTable({
+  items,
+  density,
+  privateMode,
+  columns,
+  onSelect
+}: {
+  items: MediaItem[];
+  density: "comfortable" | "standard" | "compact";
+  privateMode: boolean;
+  columns: ColumnDef[];
+  onSelect: (item: MediaItem) => void;
+}) {
+  return (
+    <div className={`database-table-wrap ${privateMode ? "private-table-wrap" : ""} density-${density}`}>
+      <table className={privateMode ? "database-table private-table" : "database-table"}>
+        <colgroup>
+          {columns.map((column) => <col key={column.id} className={column.colClassName} />)}
+        </colgroup>
+        <thead>
+          <tr>
+            {columns.map((column) => (
+              <th key={column.id} className={column.headerClassName}>{column.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <tr key={item.id} onClick={() => onSelect(item)}>
+              {columns.map((column) => (
+                <td key={column.id} className={column.cellClassName}>{column.render(item)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ColumnManager({
+  columns,
+  selectedColumnIds,
+  scope,
+  onToggle,
+  onReset,
+  onClose
+}: {
+  columns: ColumnDef[];
+  selectedColumnIds: ColumnId[];
+  scope: string;
+  onToggle: (id: ColumnId) => void;
+  onReset: () => void;
+  onClose: () => void;
+}) {
+  function handleBackdropClick(event: MouseEvent<HTMLDivElement>) {
+    if (event.target === event.currentTarget) onClose();
+  }
+
+  return (
+    <div className="column-manager-backdrop" onClick={handleBackdropClick}>
+      <section className="column-manager" role="dialog" aria-modal="true" aria-label="欄位顯示設定">
+        <header className="column-manager-head">
+          <div>
+            <p className="eyebrow">欄位顯示設定</p>
+            <h2>{scope}</h2>
+          </div>
+          <button className="icon-button" onClick={onClose} aria-label="關閉">
+            <X size={17} />
+          </button>
+        </header>
+        <div className="column-option-grid">
+          {columns.map((column) => (
+            <label className="column-option" key={column.id}>
+              <input
+                type="checkbox"
+                checked={selectedColumnIds.includes(column.id)}
+                onChange={() => onToggle(column.id)}
+              />
+              <span>{column.label}</span>
+            </label>
+          ))}
+        </div>
+        <footer className="column-manager-actions">
+          <button onClick={onReset}>
+            <RotateCcw size={15} />
+            重設此分類
+          </button>
+          <button className="primary" onClick={onClose}>完成</button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function generalColumnDefs({
+  onToggleFavorite,
+  onDelete,
+  onMetadata,
+  onQuickUpdate
+}: {
+  onToggleFavorite?: (item: MediaItem) => Promise<void>;
+  onDelete?: (id: string) => Promise<void>;
+  onMetadata?: (item: MediaItem) => void;
+  onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
+}): ColumnDef[] {
+  return [
+    {
+      id: "title",
+      label: "標題",
+      colClassName: "general-title-col",
+      headerClassName: "title-col",
+      cellClassName: "title-cell",
+      render: (item) => (
+        <div className="title-cell-inner">
+          {item.cover_url ? (
+            <img className="table-cover" src={item.cover_url} alt="" loading="lazy" />
+          ) : (
+            <span className="table-cover placeholder">{coverInitial(item)}</span>
+          )}
+          <span className="title-copy">
+            <strong>{item.official_title || item.raw_title}</strong>
+            {item.code && <small>{item.code}</small>}
+            {item.quick_note && <small>{item.quick_note}</small>}
+          </span>
+        </div>
+      )
+    },
+    {
+      id: "type",
+      label: "類型",
+      colClassName: "general-type-col",
+      render: (item) => {
+        const classification = classifyItem(item);
+        return (
+          <select className="inline-type" value={displayType(item, classification)} onClick={stop} onChange={(event) => onQuickUpdate?.(item, { type: event.target.value })}>
+            {typeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
+            {!typeOptions.includes(displayType(item, classification)) && <option value={displayType(item, classification)}>{displayType(item, classification)}</option>}
+          </select>
+        );
+      }
+    },
+    { id: "year", label: "年份", colClassName: "general-year-col", cellClassName: "muted-cell", render: (item) => item.release_year || "-" },
+    { id: "status", label: "狀態", colClassName: "general-status-col", render: (item) => <StatusPill item={item} /> },
+    { id: "progress", label: "進度", colClassName: "general-progress-col", cellClassName: "muted-cell", render: tableProgressLabel },
+    { id: "platform", label: "平台", colClassName: "general-platform-col", render: (item) => <PlatformBadge platform={item.platform} /> },
+    { id: "rating", label: "評分", colClassName: "general-rating-col", render: (item) => <RatingValue item={item} /> },
+    { id: "tags", label: "標籤", colClassName: "general-tags-col", render: (item) => <Tags tags={item.tags} /> },
+    { id: "updated", label: "更新日", colClassName: "general-updated-col", cellClassName: "muted-cell", render: dateLabel },
+    {
+      id: "actions",
+      label: "更多操作",
+      colClassName: "general-actions-col",
+      render: (item) => <RowActions item={item} onToggleFavorite={onToggleFavorite} onDelete={onDelete} onMetadata={onMetadata} />
+    }
+  ];
+}
+
+function privateColumnDefs(): ColumnDef[] {
+  return [
+    { id: "code", label: "番號", colClassName: "private-code-col", cellClassName: "private-code-cell", render: (item) => privateItemDetails(item).code },
+    {
+      id: "title",
+      label: "片名",
+      colClassName: "private-title-col",
+      cellClassName: "private-title-cell",
+      render: (item) => {
+        const title = privateItemDetails(item).title;
+        return <strong title={title}>{title}</strong>;
+      }
+    },
+    {
+      id: "performers",
+      label: "女優・演員",
+      colClassName: "private-performer-col",
+      cellClassName: "private-text-cell",
+      render: (item) => {
+        const performers = privateItemDetails(item).performers;
+        return <span title={performers}>{performers}</span>;
+      }
+    },
+    {
+      id: "studio",
+      label: "片商",
+      colClassName: "private-studio-col",
+      cellClassName: "private-text-cell",
+      render: (item) => {
+        const studio = privateItemDetails(item).studio;
+        return <span title={studio}>{studio}</span>;
+      }
+    },
+    { id: "year", label: "年份", colClassName: "private-year-col", cellClassName: "muted-cell private-year-cell", render: (item) => privateItemDetails(item).releaseYear },
+    { id: "rating", label: "評分", colClassName: "private-rating-col", render: (item) => <RatingValue item={item} /> },
+    { id: "tags", label: "標籤", colClassName: "private-tags-col", render: (item) => <Tags tags={item.tags} limit={4} /> }
+  ];
+}
+
+function defaultColumnsForScope(scope: string, privateMode: boolean): ColumnId[] {
+  if (privateMode) return ["code", "title", "performers", "studio", "year", "rating", "tags"];
+  if (scope.includes("電影")) return ["title", "year", "status", "platform", "rating", "tags", "updated", "actions"];
+  if (scope.includes("影集") || scope.includes("動畫")) return ["title", "year", "status", "progress", "platform", "rating", "tags", "updated", "actions"];
+  if (scope.includes("YouTube")) return ["title", "status", "platform", "rating", "tags", "updated", "actions"];
+  if (scope.includes("其他")) return ["title", "type", "status", "rating", "tags", "updated", "actions"];
+  return ["title", "type", "year", "status", "progress", "platform", "rating", "tags", "updated", "actions"];
+}
+
+function loadStoredColumns(key: string, available: Set<ColumnId>) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((id): id is ColumnId => typeof id === "string" && available.has(id as ColumnId));
+  } catch {
+    return [];
+  }
+}
+
+function scopeLabel(scope: string) {
+  if (scope === "home") return "全部";
+  if (scope === "plan_to_watch") return "待觀看";
+  if (scope === "watching") return "觀看中";
+  if (scope === "completed") return "已完成";
+  if (scope === "favorites") return "收藏";
+  return scope;
 }
 
 function PosterWall({ items, onSelect }: { items: MediaItem[]; onSelect: (item: MediaItem) => void }) {
@@ -154,61 +420,6 @@ function PosterWall({ items, onSelect }: { items: MediaItem[]; onSelect: (item: 
           </span>
         </button>
       ))}
-    </div>
-  );
-}
-
-function PrivateTable({
-  items,
-  density,
-  onSelect
-}: {
-  items: MediaItem[];
-  density: "comfortable" | "standard" | "compact";
-  onSelect: (item: MediaItem) => void;
-}) {
-  return (
-    <div className={`database-table-wrap private-table-wrap density-${density}`}>
-      <table className="database-table private-table">
-        <colgroup>
-          <col className="private-code-col" />
-          <col className="private-title-col" />
-          <col className="private-performer-col" />
-          <col className="private-studio-col" />
-          <col className="private-year-col" />
-          <col className="private-rating-col" />
-          <col className="private-tags-col" />
-        </colgroup>
-        <thead>
-          <tr>
-            <th>番號</th>
-            <th>片名</th>
-            <th>女優・演員</th>
-            <th>片商</th>
-            <th>年份</th>
-            <th>評分</th>
-            <th>標籤</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item) => {
-            const details = privateItemDetails(item);
-            return (
-              <tr key={item.id} onClick={() => onSelect(item)}>
-                <td className="private-code-cell">{details.code}</td>
-                <td className="private-title-cell">
-                  <strong title={details.title}>{details.title}</strong>
-                </td>
-                <td className="private-text-cell" title={details.performers}>{details.performers}</td>
-                <td className="private-text-cell" title={details.studio}>{details.studio}</td>
-                <td className="muted-cell private-year-cell">{details.releaseYear}</td>
-                <td><RatingValue item={item} /></td>
-                <td><Tags tags={item.tags} limit={4} /></td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
     </div>
   );
 }
