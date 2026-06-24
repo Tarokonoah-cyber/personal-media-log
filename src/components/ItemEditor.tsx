@@ -5,6 +5,8 @@ import { classifyItem, libraryTree } from "../lib/taxonomy";
 import { getWatchProgress, getWatchStatus, isSeriesLike, updateWatchProgress, watchStatuses } from "../lib/watch";
 import type { ItemInput, MediaItem, WatchStatus } from "../types";
 
+const platformOptions = ["Netflix", "Disney+", "Prime Video", "Apple TV+", "HBO Max", "YouTube", "Crunchyroll", "電影院", "DVD / BD", "其他"];
+
 export function ItemEditor({
   item,
   privateMode = false,
@@ -136,7 +138,7 @@ function GeneralForm({
         </select>
       </label>
       <Field label="分類 / 地區" value={form.category} onChange={(value) => setForm({ ...form, category: value })} />
-      <Field label="平台" value={form.platform} onChange={(value) => setForm({ ...form, platform: value })} />
+      <PlatformField value={form.platform} onChange={(value) => setForm({ ...form, platform: value })} />
       <Field label="年份" value={form.release_year} onChange={(value) => setForm({ ...form, release_year: value })} inputMode="numeric" />
 
       <Field label="預計看" value={form.planned_at} onChange={(value) => setForm({ ...form, planned_at: value })} type="date" />
@@ -144,19 +146,21 @@ function GeneralForm({
       <Field label="看完" value={form.completed_at} onChange={(value) => setForm({ ...form, completed_at: value })} type="date" />
       <Field label="紀錄日期" value={form.watched_at} onChange={(value) => setForm({ ...form, watched_at: value })} type="date" />
 
-      {seriesLike && (
-        <section className="editor-section wide">
-          <h3>追劇進度</h3>
-          <div className="form-grid nested">
+      <section className="editor-section wide">
+        <h3>{seriesLike ? "追劇進度" : "觀看進度"}</h3>
+        <div className="form-grid nested">
+          {seriesLike && (
+            <>
             <Field label="目前季數" value={form.current_season} onChange={(value) => setForm({ ...form, current_season: value })} inputMode="numeric" />
-            <Field label="目前集數" value={form.current_episode} onChange={(value) => setForm({ ...form, current_episode: value })} inputMode="numeric" />
             <Field label="總季數" value={form.total_seasons} onChange={(value) => setForm({ ...form, total_seasons: value })} inputMode="numeric" />
-            <Field label="總集數" value={form.total_episodes} onChange={(value) => setForm({ ...form, total_episodes: value })} inputMode="numeric" />
-            <Field label="單集分鐘" value={form.episode_runtime} onChange={(value) => setForm({ ...form, episode_runtime: value })} inputMode="numeric" />
-            <Field label="進度備註" value={form.progress_note} onChange={(value) => setForm({ ...form, progress_note: value })} />
-          </div>
-        </section>
-      )}
+            </>
+          )}
+          <Field label={seriesLike ? "目前集數" : "目前進度"} value={form.current_episode} onChange={(value) => setForm({ ...form, current_episode: value })} inputMode="numeric" />
+          <Field label={seriesLike ? "總集數" : "總進度"} value={form.total_episodes} onChange={(value) => setForm({ ...form, total_episodes: value })} inputMode="numeric" />
+          <Field label="單集分鐘" value={form.episode_runtime} onChange={(value) => setForm({ ...form, episode_runtime: value })} inputMode="numeric" />
+          <Field label="進度備註" value={form.progress_note} onChange={(value) => setForm({ ...form, progress_note: value })} />
+        </div>
+      </section>
 
       <section className="editor-section wide">
         <h3>觀看心得</h3>
@@ -237,6 +241,19 @@ function Field({ label, value, onChange, required, type = "text", inputMode }: {
     <label>
       {label}
       <input value={value} onChange={(event) => onChange(event.target.value)} required={required} type={type} inputMode={inputMode} />
+    </label>
+  );
+}
+
+function PlatformField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const options = value && !platformOptions.includes(value) ? [...platformOptions, value] : platformOptions;
+  return (
+    <label>
+      平台
+      <input list="platform-options" value={value} onChange={(event) => onChange(event.target.value)} />
+      <datalist id="platform-options">
+        {options.map((platform) => <option key={platform} value={platform} />)}
+      </datalist>
     </label>
   );
 }

@@ -1,4 +1,4 @@
-import { Columns3, RotateCcw, Sparkles, Star, Trash2, X } from "lucide-react";
+import { Plus, RotateCcw, Sparkles, Star, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import { displayDate } from "../lib/date";
@@ -7,20 +7,7 @@ import { classifyItem, libraryTree } from "../lib/taxonomy";
 import { displayDateForItem, getWatchProgress, getWatchStatus, isSeriesLike, progressLabel, watchStatusLabel } from "../lib/watch";
 import type { ItemInput, MediaItem } from "../types";
 
-type ColumnId =
-  | "title"
-  | "type"
-  | "year"
-  | "status"
-  | "progress"
-  | "platform"
-  | "rating"
-  | "tags"
-  | "updated"
-  | "actions"
-  | "code"
-  | "performers"
-  | "studio";
+type ColumnId = string;
 
 type ColumnDef = {
   id: ColumnId;
@@ -28,16 +15,27 @@ type ColumnDef = {
   colClassName: string;
   headerClassName?: string;
   cellClassName?: string;
+  custom?: boolean;
   render: (item: MediaItem) => ReactNode;
 };
 
+type CustomColumn = {
+  id: string;
+  label: string;
+  source: string;
+};
+
 const typeOptions: string[] = libraryTree.map((entry) => entry.label);
+const platformOptions = ["Netflix", "Disney+", "Prime Video", "Apple TV+", "HBO Max", "YouTube", "Crunchyroll", "電影院", "DVD / BD", "其他"];
 const columnStoragePrefix = "itemTableColumns";
+const customColumnStoragePrefix = "itemTableCustomColumns";
 
 export function ItemList({
   items,
   view,
   columnScope = "home",
+  columnManagerOpen = false,
+  onColumnManagerClose,
   privateMode = false,
   density,
   loading,
@@ -51,6 +49,8 @@ export function ItemList({
   items: MediaItem[];
   view: "table" | "list" | "poster";
   columnScope?: string;
+  columnManagerOpen?: boolean;
+  onColumnManagerClose?: () => void;
   privateMode?: boolean;
   density: "comfortable" | "standard" | "compact";
   loading: boolean;
@@ -61,11 +61,15 @@ export function ItemList({
   onMetadata?: (item: MediaItem) => void;
   onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
 }) {
-  const [columnManagerOpen, setColumnManagerOpen] = useState(false);
   const storageKey = `${columnStoragePrefix}:${privateMode ? "private" : "public"}:${columnScope}`;
+  const customStorageKey = `${customColumnStoragePrefix}:${privateMode ? "private" : "public"}:${columnScope}`;
+  const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
   const allColumns = useMemo(
-    () => privateMode ? privateColumnDefs() : generalColumnDefs({ onToggleFavorite, onDelete, onMetadata, onQuickUpdate }),
-    [privateMode, onDelete, onMetadata, onQuickUpdate, onToggleFavorite]
+    () => [
+      ...(privateMode ? privateColumnDefs() : generalColumnDefs({ onToggleFavorite, onDelete, onMetadata, onQuickUpdate })),
+      ...customColumns.map(customColumnDef)
+    ],
+    [customColumns, privateMode, onDelete, onMetadata, onQuickUpdate, onToggleFavorite]
   );
   const defaultColumnIds = useMemo(() => defaultColumnsForScope(columnScope, privateMode), [columnScope, privateMode]);
   const [selectedColumnIds, setSelectedColumnIds] = useState<ColumnId[]>(defaultColumnIds);
@@ -75,6 +79,10 @@ export function ItemList({
     const stored = loadStoredColumns(storageKey, available);
     setSelectedColumnIds(stored.length > 0 ? stored : defaultColumnIds.filter((id) => available.has(id)));
   }, [allColumns, defaultColumnIds, storageKey]);
+
+  useEffect(() => {
+    setCustomColumns(loadCustomColumns(customStorageKey));
+  }, [customStorageKey]);
 
   const visibleColumns = useMemo(() => {
     const selected = new Set(selectedColumnIds);
@@ -105,22 +113,32 @@ export function ItemList({
     setSelectedColumnIds(defaultColumnIds);
   }
 
+  function addCustomColumn(label: string, source: string) {
+    const nextColumn = {
+      id: `custom:${Date.now().toString(36)}`,
+      label: label.trim(),
+      source: source.trim()
+    };
+    if (!nextColumn.label || !nextColumn.source) return;
+    const next = [...customColumns, nextColumn];
+    setCustomColumns(next);
+    localStorage.setItem(customStorageKey, JSON.stringify(next));
+    updateColumns([...selectedColumnIds, nextColumn.id]);
+  }
+
+  function deleteCustomColumn(id: string) {
+    const next = customColumns.filter((column) => column.id !== id);
+    setCustomColumns(next);
+    localStorage.setItem(customStorageKey, JSON.stringify(next));
+    updateColumns(selectedColumnIds.filter((columnId) => columnId !== id));
+  }
+
   if (loading) return <div className="empty">讀取中...</div>;
   if (items.length === 0) return <div className="empty">{emptyMessage}</div>;
   if (view === "poster") return <PosterWall items={items} onSelect={onSelect} />;
 
   return (
     <>
-      {view === "table" && (
-        <div className="table-view-controls">
-          <span>{privateMode ? "私密欄位" : "欄位顯示"} · {scopeLabel(columnScope)}</span>
-          <button className="filter-toggle column-toggle" onClick={() => setColumnManagerOpen(true)}>
-            <Columns3 size={15} />
-            欄位
-          </button>
-        </div>
-      )}
-
       {view === "table" && (
         <DataTable
           items={items}
@@ -171,7 +189,9 @@ export function ItemList({
           scope={scopeLabel(columnScope)}
           onToggle={toggleColumn}
           onReset={resetColumns}
-          onClose={() => setColumnManagerOpen(false)}
+          onAddCustom={addCustomColumn}
+          onDeleteCustom={deleteCustomColumn}
+          onClose={onColumnManagerClose || (() => undefined)}
         />
       )}
     </>
@@ -224,6 +244,8 @@ function ColumnManager({
   scope,
   onToggle,
   onReset,
+  onAddCustom,
+  onDeleteCustom,
   onClose
 }: {
   columns: ColumnDef[];
@@ -231,10 +253,21 @@ function ColumnManager({
   scope: string;
   onToggle: (id: ColumnId) => void;
   onReset: () => void;
+  onAddCustom: (label: string, source: string) => void;
+  onDeleteCustom: (id: string) => void;
   onClose: () => void;
 }) {
+  const [customLabel, setCustomLabel] = useState("");
+  const [customSource, setCustomSource] = useState("");
+
   function handleBackdropClick(event: MouseEvent<HTMLDivElement>) {
     if (event.target === event.currentTarget) onClose();
+  }
+
+  function submitCustomColumn() {
+    onAddCustom(customLabel, customSource);
+    setCustomLabel("");
+    setCustomSource("");
   }
 
   return (
@@ -258,8 +291,27 @@ function ColumnManager({
                 onChange={() => onToggle(column.id)}
               />
               <span>{column.label}</span>
+              {column.custom && (
+                <button type="button" className="column-delete" onClick={(event) => action(event, () => onDeleteCustom(column.id))} aria-label={`刪除 ${column.label}`}>
+                  <Trash2 size={14} />
+                </button>
+              )}
             </label>
           ))}
+        </div>
+        <div className="custom-column-form">
+          <label>
+            欄位名稱
+            <input value={customLabel} onChange={(event) => setCustomLabel(event.target.value)} placeholder="例如：導演" />
+          </label>
+          <label>
+            資料鍵
+            <input value={customSource} onChange={(event) => setCustomSource(event.target.value)} placeholder="例如：director" />
+          </label>
+          <button type="button" onClick={submitCustomColumn} disabled={!customLabel.trim() || !customSource.trim()}>
+            <Plus size={15} />
+            新增欄位
+          </button>
         </div>
         <footer className="column-manager-actions">
           <button onClick={onReset}>
@@ -323,7 +375,18 @@ function generalColumnDefs({
     { id: "year", label: "年份", colClassName: "general-year-col", cellClassName: "muted-cell", render: (item) => item.release_year || "-" },
     { id: "status", label: "狀態", colClassName: "general-status-col", render: (item) => <StatusPill item={item} /> },
     { id: "progress", label: "進度", colClassName: "general-progress-col", cellClassName: "muted-cell", render: tableProgressLabel },
-    { id: "platform", label: "平台", colClassName: "general-platform-col", render: (item) => <PlatformBadge platform={item.platform} /> },
+    {
+      id: "platform",
+      label: "平台",
+      colClassName: "general-platform-col",
+      render: (item) => (
+        <select className="inline-platform" value={item.platform || ""} onClick={stop} onChange={(event) => onQuickUpdate?.(item, { platform: event.target.value || null })}>
+          <option value="">-</option>
+          {platformOptions.map((platform) => <option key={platform} value={platform}>{platform}</option>)}
+          {item.platform && !platformOptions.includes(item.platform) && <option value={item.platform}>{item.platform}</option>}
+        </select>
+      )
+    },
     { id: "rating", label: "評分", colClassName: "general-rating-col", render: (item) => <RatingValue item={item} /> },
     { id: "tags", label: "標籤", colClassName: "general-tags-col", render: (item) => <Tags tags={item.tags} /> },
     { id: "updated", label: "更新日", colClassName: "general-updated-col", cellClassName: "muted-cell", render: dateLabel },
@@ -375,6 +438,17 @@ function privateColumnDefs(): ColumnDef[] {
   ];
 }
 
+function customColumnDef(column: CustomColumn): ColumnDef {
+  return {
+    id: column.id,
+    label: column.label,
+    colClassName: "custom-data-col",
+    cellClassName: "muted-cell custom-data-cell",
+    custom: true,
+    render: (item) => readCustomColumn(item, column.source) || "-"
+  };
+}
+
 function defaultColumnsForScope(scope: string, privateMode: boolean): ColumnId[] {
   if (privateMode) return ["code", "title", "performers", "studio", "year", "rating", "tags"];
   if (scope.includes("電影")) return ["title", "year", "status", "platform", "rating", "tags", "updated", "actions"];
@@ -394,6 +468,48 @@ function loadStoredColumns(key: string, available: Set<ColumnId>) {
   } catch {
     return [];
   }
+}
+
+function loadCustomColumns(key: string): CustomColumn[] {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((entry): entry is CustomColumn => (
+        entry &&
+        typeof entry === "object" &&
+        typeof entry.id === "string" &&
+        typeof entry.label === "string" &&
+        typeof entry.source === "string"
+      ))
+      .filter((entry) => entry.label.trim() && entry.source.trim());
+  } catch {
+    return [];
+  }
+}
+
+function readCustomColumn(item: MediaItem, source: string) {
+  const key = source.trim();
+  if (!key) return "";
+  const directValue = (item as unknown as Record<string, unknown>)[key];
+  const directText = valueToText(directValue);
+  if (directText) return directText;
+  if (!item.metadata_json) return "";
+  try {
+    const metadata = JSON.parse(item.metadata_json) as Record<string, unknown>;
+    return valueToText(metadata[key]);
+  } catch {
+    return "";
+  }
+}
+
+function valueToText(value: unknown) {
+  if (value === null || value === undefined || value === "") return "";
+  if (Array.isArray(value)) return value.map(String).join(", ");
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
 }
 
 function scopeLabel(scope: string) {

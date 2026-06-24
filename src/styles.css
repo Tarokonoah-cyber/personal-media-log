@@ -525,28 +525,18 @@ h2 {
   background: var(--hover);
 }
 
-.table-view-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin: 0 0 8px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.table-view-controls > span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .column-toggle {
   flex: 0 0 auto;
   gap: 6px;
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 14px;
   font-weight: 650;
+}
+
+.column-toggle:hover {
+  color: var(--text);
+  border-color: rgba(96, 165, 250, 0.42);
+  background: var(--hover);
 }
 
 .database-meta {
@@ -1033,6 +1023,10 @@ h2 {
     grid-template-columns: 1fr;
   }
 
+  .custom-column-form {
+    grid-template-columns: 1fr;
+  }
+
   .mobile-sidebar-button {
     grid-column: 1;
     grid-row: 1;
@@ -1200,7 +1194,8 @@ h2 {
 
 .column-option {
   min-height: 36px;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   padding: 0 9px;
@@ -1218,6 +1213,33 @@ h2 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.column-delete {
+  width: 26px;
+  min-height: 26px;
+  padding: 0;
+  color: var(--danger);
+}
+
+.custom-column-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.custom-column-form label {
+  font-size: 12px;
+}
+
+.custom-column-form input {
+  min-height: 32px;
+  padding: 6px 8px;
 }
 
 .column-manager-actions {
@@ -1939,6 +1961,10 @@ h2 {
     width: 150px;
   }
 
+  .custom-data-col {
+    width: 160px;
+  }
+
   .private-table-wrap {
     --row-height: 30px;
     --cell-py: 2px;
@@ -2108,6 +2134,7 @@ h2 {
 
   .inline-rating,
   .inline-type,
+  .inline-platform,
   .inline-status {
     min-height: 30px;
     padding: 3px 8px;
@@ -2118,6 +2145,10 @@ h2 {
 
   .inline-type {
     width: 96px;
+  }
+
+  .inline-platform {
+    width: 140px;
   }
 
   .inline-status {

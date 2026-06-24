@@ -1,4 +1,4 @@
-import { Menu, Moon, Search, SlidersHorizontal, Sun } from "lucide-react";
+import { Columns3, Menu, Moon, Search, SlidersHorizontal, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { FilterSheet } from "./components/FilterSheet";
 import { ImportExport } from "./components/ImportExport";
@@ -73,6 +73,7 @@ export default function App() {
   const [toast, setToast] = useState("");
   const [error, setError] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [columnManagerOpen, setColumnManagerOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebarCollapsed") === "true");
   const [dark, setDark] = useState(() => localStorage.getItem("theme") !== "light");
@@ -462,6 +463,9 @@ export default function App() {
                       </button>
                     ))}
                   </div>
+                  {displayView !== "calendar" && (
+                    <button className="filter-toggle column-toggle" onClick={() => setColumnManagerOpen(true)}><Columns3 size={16} />欄位</button>
+                  )}
                   <button className="filter-toggle advanced-filter" onClick={() => setFiltersOpen(true)}><SlidersHorizontal size={16} />進階篩選</button>
                 </div>
               </div>
@@ -478,6 +482,8 @@ export default function App() {
                   items={visibleItems}
                   view={displayView}
                   columnScope={privateView && includePrivate ? PRIVATE_LIBRARY_LABEL : activeView}
+                  columnManagerOpen={columnManagerOpen}
+                  onColumnManagerClose={() => setColumnManagerOpen(false)}
                   privateMode={privateView && includePrivate}
                   density={displayDensity}
                   loading={loading}
