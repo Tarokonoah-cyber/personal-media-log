@@ -1,7 +1,8 @@
 import { PRIVATE_LIBRARY_LABEL } from "./privacy";
+import { hasReflection, mergeReflectionMetadata, reflectionFromText } from "./reflection";
 import type { ItemInput } from "../types";
 
-const ratingPattern = /(?:^|\s)([0-5](?:\.\d)?)\s*(?:\/5|分)?(?:\s|$)/;
+const ratingPattern = /(?:^|\s)(10(?:\.0)?|[0-9](?:\.\d)?)\s*(?:\/10|\/5|分)?(?:\s|$)/;
 const codePattern = /\b[A-Z]{2,10}[-_ ]?\d{2,8}\b|FC2[-_\s]*(?:PPV[-_\s]*)?\d{4,8}/i;
 
 export function parseQuickEntry(input: string, options: { privateMode?: boolean } = {}): ItemInput {
@@ -10,6 +11,7 @@ export function parseQuickEntry(input: string, options: { privateMode?: boolean 
   const favorite = tags.some((tag) => ["收藏", "favorite", "fav", "愛"].includes(tag.toLowerCase()));
   const ratingMatch = input.match(ratingPattern);
   const rating = ratingMatch ? Number(ratingMatch[1]) : ratingFromWords(input);
+  const reflection = reflectionFromText(input);
   const withoutTags = stripTagText(input).replace(/\s+/g, " ").trim();
   const withoutRating = ratingMatch ? withoutTags.replace(ratingPattern, " ").replace(/\s+/g, " ").trim() : withoutTags;
   const parts = withoutRating.split(/\s+/);
@@ -23,6 +25,7 @@ export function parseQuickEntry(input: string, options: { privateMode?: boolean 
     rating,
     watched_at: dateFromWords(input),
     quick_note: noteParts.join(" ").trim() || null,
+    metadata_json: hasReflection(reflection) ? JSON.stringify(mergeReflectionMetadata(null, reflection)) : null,
     tags: tags.filter((tag) => tag !== "收藏"),
     favorite,
     status: "raw"
@@ -35,12 +38,14 @@ function parsePrivateQuickEntry(input: string): ItemInput {
   const code = codeMatch ? normalizeCode(codeMatch[0]) : "";
   const ratingMatch = input.match(ratingPattern);
   const rating = ratingMatch ? Number(ratingMatch[1]) : ratingFromWords(input);
+  const reflection = reflectionFromText(input);
   const watchedAt = dateFromWords(input);
   const title = stripPrivateNoise(input, code).trim();
-  const metadata = {
+  const metadata = mergeReflectionMetadata(null, reflection);
+  Object.assign(metadata, {
     ...(code ? { code } : {}),
     ...(title ? { title } : {})
-  };
+  });
 
   return {
     raw_title: title || code || input.trim(),
@@ -77,7 +82,7 @@ function stripPrivateNoise(input: string, code: string) {
   text = text
     .replace(ratingPattern, " ")
     .replace(/今天|今日|昨天|昨日|前天/g, " ")
-    .replace(/看了|看完|已看|普通|尚可|一般|好看|很好|超好|神作|難看|很差|爛/g, " ")
+    .replace(/看了|看完|已看|普通|尚可|一般|好看|很好|超好|神作|難看|很差|爛|爽|失望|想重看|可重看|不會重看|喜歡|私藏/g, " ")
     .replace(/[，,。；;：:]+/g, " ")
     .replace(/\s+/g, " ");
   return text;

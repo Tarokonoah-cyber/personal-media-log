@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import { displayDate } from "../lib/date";
 import { privateItemDetails } from "../lib/privacy";
+import { getItemReflection } from "../lib/reflection";
 import { classifyItem, libraryTree } from "../lib/taxonomy";
 import { displayDateForItem, getWatchProgress, getWatchStatus, isSeriesLike, progressLabel, watchStatusLabel } from "../lib/watch";
 import type { ItemInput, MediaItem } from "../types";
@@ -388,6 +389,9 @@ function generalColumnDefs({
       )
     },
     { id: "rating", label: "評分", colClassName: "general-rating-col", render: (item) => <RatingValue item={item} /> },
+    { id: "mood", label: "心情", colClassName: "reflection-col", render: (item) => <ReflectionBadge value={getItemReflection(item).mood} /> },
+    { id: "rewatch_intent", label: "重看", colClassName: "reflection-col", render: (item) => <ReflectionBadge value={getItemReflection(item).rewatch_intent} /> },
+    { id: "collection_level", label: "收藏等級", colClassName: "reflection-col", render: (item) => <ReflectionBadge value={getItemReflection(item).collection_level} /> },
     { id: "tags", label: "標籤", colClassName: "general-tags-col", render: (item) => <Tags tags={item.tags} /> },
     { id: "updated", label: "更新日", colClassName: "general-updated-col", cellClassName: "muted-cell", render: dateLabel },
     {
@@ -434,6 +438,9 @@ function privateColumnDefs(): ColumnDef[] {
     },
     { id: "year", label: "年份", colClassName: "private-year-col", cellClassName: "muted-cell private-year-cell", render: (item) => privateItemDetails(item).releaseYear },
     { id: "rating", label: "評分", colClassName: "private-rating-col", render: (item) => <RatingValue item={item} /> },
+    { id: "mood", label: "心情", colClassName: "reflection-col", render: (item) => <ReflectionBadge value={getItemReflection(item).mood} /> },
+    { id: "rewatch_intent", label: "重看", colClassName: "reflection-col", render: (item) => <ReflectionBadge value={getItemReflection(item).rewatch_intent} /> },
+    { id: "collection_level", label: "收藏等級", colClassName: "reflection-col", render: (item) => <ReflectionBadge value={getItemReflection(item).collection_level} /> },
     { id: "tags", label: "標籤", colClassName: "private-tags-col", render: (item) => <Tags tags={item.tags} limit={4} /> }
   ];
 }
@@ -450,12 +457,12 @@ function customColumnDef(column: CustomColumn): ColumnDef {
 }
 
 function defaultColumnsForScope(scope: string, privateMode: boolean): ColumnId[] {
-  if (privateMode) return ["code", "title", "performers", "studio", "year", "rating", "tags"];
-  if (scope.includes("電影")) return ["title", "year", "status", "platform", "rating", "tags", "updated", "actions"];
-  if (scope.includes("影集") || scope.includes("動畫")) return ["title", "year", "status", "progress", "platform", "rating", "tags", "updated", "actions"];
-  if (scope.includes("YouTube")) return ["title", "status", "platform", "rating", "tags", "updated", "actions"];
-  if (scope.includes("其他")) return ["title", "type", "status", "rating", "tags", "updated", "actions"];
-  return ["title", "type", "year", "status", "progress", "platform", "rating", "tags", "updated", "actions"];
+  if (privateMode) return ["code", "title", "performers", "studio", "year", "rating", "mood", "rewatch_intent", "collection_level", "tags"];
+  if (scope.includes("電影")) return ["title", "year", "status", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];
+  if (scope.includes("影集") || scope.includes("動畫")) return ["title", "year", "status", "progress", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];
+  if (scope.includes("YouTube")) return ["title", "status", "platform", "rating", "mood", "tags", "updated", "actions"];
+  if (scope.includes("其他")) return ["title", "type", "status", "rating", "mood", "tags", "updated", "actions"];
+  return ["title", "type", "year", "status", "progress", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];
 }
 
 function loadStoredColumns(key: string, available: Set<ColumnId>) {
@@ -566,6 +573,11 @@ function RatingValue({ item }: { item: MediaItem }) {
       {Number(item.rating).toFixed(1)}
     </span>
   );
+}
+
+function ReflectionBadge({ value }: { value: string }) {
+  if (!value) return <span className="muted-cell">-</span>;
+  return <span className="reflection-badge">{value}</span>;
 }
 
 function PlatformBadge({ platform }: { platform: string | null }) {

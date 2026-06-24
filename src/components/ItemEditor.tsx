@@ -1,6 +1,7 @@
 import { Save, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { isPrivateItem, PRIVATE_LIBRARY_LABEL, privateItemDetails } from "../lib/privacy";
+import { collectionLevelOptions, getReflectionFromMetadata, mergeReflectionMetadata, moodOptions, rewatchIntentOptions } from "../lib/reflection";
 import { classifyItem, libraryTree } from "../lib/taxonomy";
 import { getWatchProgress, getWatchStatus, isSeriesLike, updateWatchProgress, watchStatuses } from "../lib/watch";
 import type { ItemInput, MediaItem, WatchStatus } from "../types";
@@ -165,9 +166,12 @@ function GeneralForm({
       <section className="editor-section wide">
         <h3>觀看心得</h3>
         <div className="form-grid nested">
-          <Field label="評分" value={form.rating} onChange={(value) => setForm({ ...form, rating: value })} inputMode="decimal" />
-          <Field label="重看分數" value={form.rewatch_score} onChange={(value) => setForm({ ...form, rewatch_score: value })} inputMode="decimal" />
-          <label className="check"><input type="checkbox" checked={form.favorite} onChange={(event) => setForm({ ...form, favorite: event.target.checked })} />收藏</label>
+          <Field label="評分（0-10）" value={form.rating} onChange={(value) => setForm({ ...form, rating: value })} inputMode="decimal" />
+          <Field label="重看分數（0-10）" value={form.rewatch_score} onChange={(value) => setForm({ ...form, rewatch_score: value })} inputMode="decimal" />
+          <SelectField label="心情" value={form.mood} options={moodOptions} onChange={(value) => setForm({ ...form, mood: value })} />
+          <SelectField label="重看" value={form.rewatch_intent} options={rewatchIntentOptions} onChange={(value) => setForm({ ...form, rewatch_intent: value })} />
+          <SelectField label="收藏等級" value={form.collection_level} options={collectionLevelOptions} onChange={(value) => setForm({ ...form, collection_level: value })} />
+          <label className="check"><input type="checkbox" checked={form.favorite} onChange={(event) => setForm({ ...form, favorite: event.target.checked })} />星標收藏</label>
           <Field label="標籤" value={form.tags} onChange={(value) => setForm({ ...form, tags: value })} />
           <label className="wide">快速筆記<textarea value={form.quick_note} onChange={(event) => setForm({ ...form, quick_note: event.target.value })} rows={3} /></label>
           <label className="wide">長筆記<textarea value={form.long_note} onChange={(event) => setForm({ ...form, long_note: event.target.value })} rows={6} /></label>
@@ -218,8 +222,11 @@ function PrivateForm({
               {watchStatuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
             </select>
           </label>
-          <Field label="評分" value={form.rating} onChange={(value) => setForm({ ...form, rating: value })} inputMode="decimal" />
-          <label className="check"><input type="checkbox" checked={form.favorite} onChange={(event) => setForm({ ...form, favorite: event.target.checked })} />收藏</label>
+          <Field label="評分（0-10）" value={form.rating} onChange={(value) => setForm({ ...form, rating: value })} inputMode="decimal" />
+          <SelectField label="心情" value={form.mood} options={moodOptions} onChange={(value) => setForm({ ...form, mood: value })} />
+          <SelectField label="重看" value={form.rewatch_intent} options={rewatchIntentOptions} onChange={(value) => setForm({ ...form, rewatch_intent: value })} />
+          <SelectField label="收藏等級" value={form.collection_level} options={collectionLevelOptions} onChange={(value) => setForm({ ...form, collection_level: value })} />
+          <label className="check"><input type="checkbox" checked={form.favorite} onChange={(event) => setForm({ ...form, favorite: event.target.checked })} />星標收藏</label>
           <Field label="標籤" value={form.tags} onChange={(value) => setForm({ ...form, tags: value })} />
           <label className="wide">快速筆記<textarea value={form.quick_note} onChange={(event) => setForm({ ...form, quick_note: event.target.value })} rows={3} /></label>
           <label className="wide">長筆記<textarea value={form.long_note} onChange={(event) => setForm({ ...form, long_note: event.target.value })} rows={6} /></label>
@@ -258,11 +265,24 @@ function PlatformField({ value, onChange }: { value: string; onChange: (value: s
   );
 }
 
+function SelectField({ label, value, options, onChange }: { label: string; value: string; options: readonly string[]; onChange: (value: string) => void }) {
+  return (
+    <label>
+      {label}
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">未設定</option>
+        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+      </select>
+    </label>
+  );
+}
+
 function toForm(item: MediaItem) {
   const progress = getWatchProgress(item);
   const classification = classifyItem(item);
   const details = privateItemDetails(item);
   const metadata = parseMetadata(item.metadata_json);
+  const reflection = getReflectionFromMetadata(metadata);
   const privateTitle = details.title === "-" ? "" : details.title;
   const privateType = details.type === PRIVATE_LIBRARY_LABEL ? "" : details.type;
   const isPrivate = item.is_private || isPrivateItem(item);
@@ -298,6 +318,9 @@ function toForm(item: MediaItem) {
     tags: item.tags.join(", "),
     people: item.people.join(", "),
     collections: item.collections.join(", "),
+    mood: reflection.mood,
+    rewatch_intent: reflection.rewatch_intent,
+    collection_level: reflection.collection_level,
     private_code: details.code !== "-" ? details.code : "",
     private_title: privateTitle,
     private_performers: details.performers !== "-" ? details.performers : metadataList(metadata, ["actresses", "performers", "cast", "actors"]),
@@ -312,6 +335,7 @@ function toInput(form: FormState): ItemInput {
   if (form.is_private) return toPrivateInput(form);
 
   const progressPatch = progressInput(form);
+  const metadata = mergeReflectionMetadata(form.metadata_json, reflectionInput(form));
   return {
     raw_title: form.raw_title,
     official_title: emptyToNull(form.official_title),
@@ -333,7 +357,7 @@ function toInput(form: FormState): ItemInput {
     long_note: emptyToNull(form.long_note),
     source_url: emptyToNull(form.source_url),
     cover_url: emptyToNull(form.cover_url),
-    metadata_json: emptyToNull(form.metadata_json),
+    metadata_json: metadataToString(metadata),
     tags: splitList(form.tags),
     people: splitList(form.people),
     collections: splitList(form.collections),
@@ -355,6 +379,7 @@ function toPrivateInput(form: FormState): ItemInput {
     releaseYear: form.release_year.trim(),
     type: privateType
   });
+  const metadataWithReflection = mergeReflectionMetadata(JSON.stringify(metadata), reflectionInput(form));
 
   return {
     raw_title: title || code || form.raw_title,
@@ -377,7 +402,7 @@ function toPrivateInput(form: FormState): ItemInput {
     long_note: emptyToNull(form.long_note),
     source_url: emptyToNull(form.source_url),
     cover_url: emptyToNull(form.cover_url),
-    metadata_json: JSON.stringify(metadata),
+    metadata_json: metadataToString(metadataWithReflection),
     tags: splitList(form.tags),
     people: performers,
     collections: splitList(form.collections),
@@ -395,6 +420,14 @@ function progressInput(form: FormState) {
     episode_runtime: numberOrNull(form.episode_runtime),
     progress_note: form.progress_note.trim()
   });
+}
+
+function reflectionInput(form: FormState) {
+  return {
+    mood: form.mood,
+    rewatch_intent: form.rewatch_intent,
+    collection_level: form.collection_level
+  };
 }
 
 function canSave(form: FormState) {
@@ -461,6 +494,10 @@ function numberOrNull(value: string) {
   if (!value.trim()) return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function metadataToString(metadata: Record<string, unknown>) {
+  return Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null;
 }
 
 function splitList(value: string) {
