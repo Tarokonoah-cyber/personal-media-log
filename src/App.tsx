@@ -12,7 +12,7 @@ import { Toast } from "./components/Toast";
 import { ViewSidebar } from "./components/ViewSidebar";
 import { applyMetadata, createItem, deleteItem, listItems, parseSmartAdd, searchMetadata, updateItem } from "./lib/api";
 import { toItemInput } from "./lib/itemTransforms";
-import { isPrivateItem, isPrivateLibraryLabel, isPrivateMarker } from "./lib/privacy";
+import { isPrivateItem, isPrivateLibraryLabel, isPrivateMarker, PRIVATE_LIBRARY_LABEL } from "./lib/privacy";
 import { parseQuickEntry } from "./lib/quickParse";
 import { classifyItem, libraryTree } from "./lib/taxonomy";
 import { getWatchStatus, updateWatchProgress } from "./lib/watch";
@@ -27,8 +27,14 @@ const defaultFilters: ListFilters = {
   tag: "",
   year: "",
   platform: "",
+  codeQuery: "",
+  titleQuery: "",
+  person: "",
+  studio: "",
   watchedFrom: "",
   watchedTo: "",
+  updatedFrom: "",
+  updatedTo: "",
   page: 1,
   pageSize: 100
 };
@@ -61,6 +67,7 @@ export default function App() {
   const [metadataError, setMetadataError] = useState("");
   const [smartPreview, setSmartPreview] = useState<SmartAddResponse | null>(null);
   const [smartDraft, setSmartDraft] = useState<ItemInput | null>(null);
+  const [simpleAddOpen, setSimpleAddOpen] = useState(false);
   const [smartLoading, setSmartLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState("");
@@ -109,6 +116,10 @@ export default function App() {
 
   const pageCount = useMemo(() => Math.max(1, Math.ceil(total / filters.pageSize)), [total, filters.pageSize]);
   const knownTags = useMemo(() => Array.from(new Set(summaryItems.flatMap((item) => item.tags))).sort((a, b) => a.localeCompare(b, "zh-Hant")), [summaryItems]);
+  const sidebarTags = useMemo(() => {
+    if (!includePrivate) return knownTags;
+    return Array.from(new Set(items.filter(isPrivateItem).flatMap((item) => item.tags))).sort((a, b) => a.localeCompare(b, "zh-Hant"));
+  }, [includePrivate, items, knownTags]);
   const libraryTypes = useMemo(() => new Set<string>(libraryTree.map((entry) => entry.label)), []);
   const visibleItems = useMemo(() => {
     const scopedItems = includePrivate ? items.filter(isPrivateItem) : items.filter((item) => !isPrivateItem(item));
@@ -152,18 +163,36 @@ export default function App() {
   }
 
   async function submitQuick() {
-    const parsed = parseQuickEntry(quickText);
+    const parsed = parseQuickEntry(quickText, { privateMode: includePrivate });
     if (!parsed.raw_title.trim()) return;
     setLoading(true);
     try {
-      await createItem({
+      await createItem(includePrivate ? parsed : {
         ...parsed,
         ...updateWatchProgress({ ...emptyItem(), raw_title: parsed.raw_title } as MediaItem, { watch_status: "plan_to_watch" })
       });
       setQuickText("");
-      setToast("已新增到待觀看");
+      setToast(includePrivate ? "已新增私密紀錄" : "已新增到待觀看");
       setTab("log");
-      setActiveView("plan_to_watch");
+      setActiveView(includePrivate ? PRIVATE_LIBRARY_LABEL : "plan_to_watch");
+      setActiveCategory("");
+      setFilters((current) => ({ ...current, status: "all", page: 1 }));
+      await refreshVisibleData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "新增紀錄失敗");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function submitSimpleAdd(input: ItemInput) {
+    setLoading(true);
+    try {
+      await createItem(input);
+      setSimpleAddOpen(false);
+      setToast(input.is_private ? "已新增私密紀錄" : "已新增紀錄");
+      setTab("log");
+      if (input.is_private) setActiveView(PRIVATE_LIBRARY_LABEL);
       setActiveCategory("");
       setFilters((current) => ({ ...current, status: "all", page: 1 }));
       await refreshVisibleData();
@@ -354,6 +383,7 @@ export default function App() {
               setSmartDraft(null);
             }}
             onSubmit={submitQuick}
+            onSimpleAdd={() => setSimpleAddOpen(true)}
             onSmartAdd={requestSmartAdd}
           />
           <div className="search-field header-search">
@@ -388,7 +418,7 @@ export default function App() {
           activeTool={tab === "stats" || tab === "data" || tab === "settings" ? tab : null}
           summaryItems={summaryItems}
           inboxTotal={inboxTotal}
-          tags={knownTags}
+          tags={sidebarTags}
           filters={filters}
           safeMode={safeMode}
           collapsed={sidebarCollapsed}
@@ -476,9 +506,17 @@ export default function App() {
         </section>
       </main>
 
-      <FilterSheet open={filtersOpen} filters={filters} onChange={patchFilters} onClose={() => setFiltersOpen(false)} />
+      <FilterSheet open={filtersOpen} filters={filters} privateMode={privateView && includePrivate} onChange={patchFilters} onClose={() => setFiltersOpen(false)} />
 
-      {selected && <ItemEditor item={selected} onClose={() => setSelected(null)} onSave={saveItem} onDelete={removeItem} />}
+      {simpleAddOpen && (
+        <SimpleAddModal
+          privateMode={includePrivate}
+          loading={loading}
+          onClose={() => setSimpleAddOpen(false)}
+          onSubmit={submitSimpleAdd}
+        />
+      )}
+      {selected && <ItemEditor item={selected} privateMode={privateView && includePrivate} onClose={() => setSelected(null)} onSave={saveItem} onDelete={removeItem} />}
       {metadataTarget && (
         <MetadataLookupModal
           item={metadataTarget}
@@ -541,6 +579,133 @@ function densityLabel(density: string) {
     compact: "緊湊"
   };
   return labels[density] || density;
+}
+
+function SimpleAddModal({
+  privateMode,
+  loading,
+  onClose,
+  onSubmit
+}: {
+  privateMode: boolean;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (input: ItemInput) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState({
+    code: "",
+    title: "",
+    rating: "",
+    tags: "",
+    watched_at: todayDate()
+  });
+  const canSubmit = privateMode ? Boolean(draft.code.trim() || draft.title.trim()) : Boolean(draft.title.trim());
+
+  function patch(patch: Partial<typeof draft>) {
+    setDraft((current) => ({ ...current, ...patch }));
+  }
+
+  function submit() {
+    if (!canSubmit) return;
+    void onSubmit(simpleDraftToInput(draft, privateMode));
+  }
+
+  function handleBackdropClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (event.target === event.currentTarget) onClose();
+  }
+
+  return (
+    <div className="simple-add-backdrop" onClick={handleBackdropClick}>
+      <section className="simple-add-modal" role="dialog" aria-modal="true" aria-label={privateMode ? "簡單新增私密紀錄" : "簡單新增紀錄"}>
+        <header className="simple-add-head">
+          <div>
+            <p className="eyebrow">簡單新增</p>
+            <h2>{privateMode ? "私密核心欄位" : "核心欄位"}</h2>
+          </div>
+          <button className="icon-button" onClick={onClose} aria-label="關閉">×</button>
+        </header>
+        <div className="simple-add-grid">
+          {privateMode && <Field label="番號" value={draft.code} onChange={(value) => patch({ code: value })} />}
+          <Field label={privateMode ? "片名" : "標題"} value={draft.title} onChange={(value) => patch({ title: value })} required={!privateMode} />
+          <Field label="評分" value={draft.rating} onChange={(value) => patch({ rating: value })} inputMode="decimal" />
+          <Field label="標籤" value={draft.tags} onChange={(value) => patch({ tags: value })} />
+          <Field label="觀看日" value={draft.watched_at} onChange={(value) => patch({ watched_at: value })} type="date" />
+        </div>
+        <footer className="simple-add-actions">
+          <button onClick={onClose}>取消</button>
+          <button className="primary" onClick={submit} disabled={loading || !canSubmit}>新增</button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  required,
+  type = "text",
+  inputMode
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  type?: string;
+  inputMode?: "numeric" | "decimal";
+}) {
+  return (
+    <label>
+      {label}
+      <input value={value} onChange={(event) => onChange(event.target.value)} required={required} type={type} inputMode={inputMode} />
+    </label>
+  );
+}
+
+function simpleDraftToInput(draft: { code: string; title: string; rating: string; tags: string; watched_at: string }, privateMode: boolean): ItemInput {
+  const code = draft.code.trim();
+  const title = draft.title.trim();
+  const tags = splitTags(draft.tags);
+  const rating = numberOrNull(draft.rating);
+  if (privateMode) {
+    return {
+      raw_title: title || code,
+      official_title: title || null,
+      code: code || null,
+      type: PRIVATE_LIBRARY_LABEL,
+      is_private: true,
+      watched_at: draft.watched_at || null,
+      rating,
+      tags,
+      metadata_json: JSON.stringify({
+        ...(code ? { code } : {}),
+        ...(title ? { title } : {})
+      }),
+      status: "raw"
+    };
+  }
+  return {
+    raw_title: title,
+    watched_at: draft.watched_at || null,
+    rating,
+    tags,
+    status: "raw"
+  };
+}
+
+function todayDate() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function numberOrNull(value: string) {
+  if (!value.trim()) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function SmartAddPreview({

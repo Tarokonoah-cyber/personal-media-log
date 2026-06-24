@@ -40,7 +40,7 @@ export function ItemList({
   return (
     <>
       {view === "table" && privateMode && (
-        <PrivateTable items={items} density={density} onSelect={onSelect} onToggleFavorite={onToggleFavorite} onDelete={onDelete} onMetadata={onMetadata} />
+        <PrivateTable items={items} density={density} onSelect={onSelect} />
       )}
 
       {view === "table" && !privateMode && (
@@ -126,9 +126,11 @@ export function ItemList({
             </div>
             <div className="compact-actions">
               <RatingStars item={item} onQuickUpdate={onQuickUpdate} compact />
-              <button className="row-icon" onClick={(event) => action(event, () => onMetadata?.(item))} title="補資料">
-                <Sparkles size={15} />
-              </button>
+              {!privateMode && (
+                <button className="row-icon" onClick={(event) => action(event, () => onMetadata?.(item))} title="補資料">
+                  <Sparkles size={15} />
+                </button>
+              )}
             </div>
           </article>
         ))}
@@ -159,33 +161,33 @@ function PosterWall({ items, onSelect }: { items: MediaItem[]; onSelect: (item: 
 function PrivateTable({
   items,
   density,
-  onSelect,
-  onToggleFavorite,
-  onDelete,
-  onMetadata
+  onSelect
 }: {
   items: MediaItem[];
   density: "comfortable" | "standard" | "compact";
   onSelect: (item: MediaItem) => void;
-  onToggleFavorite?: (item: MediaItem) => Promise<void>;
-  onDelete?: (id: string) => Promise<void>;
-  onMetadata?: (item: MediaItem) => void;
 }) {
   return (
-    <div className={`database-table-wrap density-${density}`}>
-      <table className="database-table">
+    <div className={`database-table-wrap private-table-wrap density-${density}`}>
+      <table className="database-table private-table">
+        <colgroup>
+          <col className="private-code-col" />
+          <col className="private-title-col" />
+          <col className="private-performer-col" />
+          <col className="private-studio-col" />
+          <col className="private-year-col" />
+          <col className="private-rating-col" />
+          <col className="private-tags-col" />
+        </colgroup>
         <thead>
           <tr>
             <th>番號</th>
-            <th className="title-col">片名</th>
+            <th>片名</th>
             <th>女優・演員</th>
             <th>片商</th>
-            <th>發售年份</th>
-            <th>類型</th>
+            <th>年份</th>
             <th>評分</th>
             <th>標籤</th>
-            <th>更新日</th>
-            <th>操作</th>
           </tr>
         </thead>
         <tbody>
@@ -193,30 +195,15 @@ function PrivateTable({
             const details = privateItemDetails(item);
             return (
               <tr key={item.id} onClick={() => onSelect(item)}>
-                <td className="muted-cell">{details.code}</td>
-                <td className="title-cell">
-                  <div className="title-cell-inner">
-                    {item.cover_url ? (
-                      <img className="table-cover" src={item.cover_url} alt="" loading="lazy" />
-                    ) : (
-                      <span className="table-cover placeholder">{coverInitial(item)}</span>
-                    )}
-                    <span className="title-copy">
-                      <strong>{details.title}</strong>
-                      {item.quick_note && <small>{item.quick_note}</small>}
-                    </span>
-                  </div>
+                <td className="private-code-cell">{details.code}</td>
+                <td className="private-title-cell">
+                  <strong title={details.title}>{details.title}</strong>
                 </td>
-                <td className="muted-cell">{details.performers}</td>
-                <td className="muted-cell">{details.studio}</td>
-                <td className="muted-cell">{details.releaseYear}</td>
-                <td className="muted-cell">{details.type}</td>
+                <td className="private-text-cell" title={details.performers}>{details.performers}</td>
+                <td className="private-text-cell" title={details.studio}>{details.studio}</td>
+                <td className="muted-cell private-year-cell">{details.releaseYear}</td>
                 <td><RatingValue item={item} /></td>
-                <td><Tags tags={item.tags} /></td>
-                <td className="muted-cell">{dateLabel(item)}</td>
-                <td>
-                  <RowActions item={item} onToggleFavorite={onToggleFavorite} onDelete={onDelete} onMetadata={onMetadata} />
-                </td>
+                <td><Tags tags={item.tags} limit={4} /></td>
               </tr>
             );
           })}
@@ -279,9 +266,11 @@ function RowActions({
       <button className={item.favorite ? "row-icon active" : "row-icon"} onClick={(event) => action(event, () => onToggleFavorite?.(item))} title="切換收藏">
         <Star size={15} fill={item.favorite ? "currentColor" : "none"} />
       </button>
-      <button className="row-icon subtle-action" onClick={(event) => action(event, () => onMetadata?.(item))} title="補資料" aria-label="補資料">
-        <Sparkles size={14} />
-      </button>
+      {onMetadata && (
+        <button className="row-icon subtle-action" onClick={(event) => action(event, () => onMetadata(item))} title="補資料" aria-label="補資料">
+          <Sparkles size={14} />
+        </button>
+      )}
       <button className="row-icon danger-button" onClick={(event) => action(event, () => onDelete?.(item.id))} title="刪除">
         <Trash2 size={15} />
       </button>
