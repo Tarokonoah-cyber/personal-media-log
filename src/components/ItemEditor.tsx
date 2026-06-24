@@ -130,7 +130,6 @@ function GeneralForm({
       <Field label="原始標題" value={form.raw_title} onChange={(value) => setForm({ ...form, raw_title: value })} required />
       <Field label="正式標題" value={form.official_title} onChange={(value) => setForm({ ...form, official_title: value })} />
       <Field label="原文標題" value={form.original_title} onChange={(value) => setForm({ ...form, original_title: value })} />
-      <Field label="代碼" value={form.code} onChange={(value) => setForm({ ...form, code: value })} />
 
       <label>
         類型
@@ -142,26 +141,20 @@ function GeneralForm({
       <PlatformField value={form.platform} onChange={(value) => setForm({ ...form, platform: value })} />
       <Field label="年份" value={form.release_year} onChange={(value) => setForm({ ...form, release_year: value })} inputMode="numeric" />
 
-      <Field label="預計看" value={form.planned_at} onChange={(value) => setForm({ ...form, planned_at: value })} type="date" />
-      <Field label="開始看" value={form.started_at} onChange={(value) => setForm({ ...form, started_at: value })} type="date" />
-      <Field label="看完" value={form.completed_at} onChange={(value) => setForm({ ...form, completed_at: value })} type="date" />
-      <Field label="紀錄日期" value={form.watched_at} onChange={(value) => setForm({ ...form, watched_at: value })} type="date" />
+      <Field label="想看日期" value={form.planned_at} onChange={(value) => setForm({ ...form, planned_at: value })} type="date" />
+      <Field label="觀看日期" value={form.watched_at} onChange={(value) => setForm({ ...form, watched_at: value })} type="date" />
 
-      <section className="editor-section wide">
-        <h3>{seriesLike ? "追劇進度" : "觀看進度"}</h3>
-        <div className="form-grid nested">
-          {seriesLike && (
-            <>
+      {seriesLike && (
+        <section className="editor-section wide">
+          <h3>追劇進度</h3>
+          <div className="form-grid nested">
             <Field label="目前季數" value={form.current_season} onChange={(value) => setForm({ ...form, current_season: value })} inputMode="numeric" />
             <Field label="總季數" value={form.total_seasons} onChange={(value) => setForm({ ...form, total_seasons: value })} inputMode="numeric" />
-            </>
-          )}
-          <Field label={seriesLike ? "目前集數" : "目前進度"} value={form.current_episode} onChange={(value) => setForm({ ...form, current_episode: value })} inputMode="numeric" />
-          <Field label={seriesLike ? "總集數" : "總進度"} value={form.total_episodes} onChange={(value) => setForm({ ...form, total_episodes: value })} inputMode="numeric" />
-          <Field label="單集分鐘" value={form.episode_runtime} onChange={(value) => setForm({ ...form, episode_runtime: value })} inputMode="numeric" />
-          <Field label="進度備註" value={form.progress_note} onChange={(value) => setForm({ ...form, progress_note: value })} />
-        </div>
-      </section>
+            <Field label="目前集數" value={form.current_episode} onChange={(value) => setForm({ ...form, current_episode: value })} inputMode="numeric" />
+            <Field label="總集數" value={form.total_episodes} onChange={(value) => setForm({ ...form, total_episodes: value })} inputMode="numeric" />
+          </div>
+        </section>
+      )}
 
       <section className="editor-section wide">
         <h3>觀看心得</h3>
@@ -295,7 +288,7 @@ function toForm(item: MediaItem) {
     category: item.category || classification.category || "",
     platform: item.platform || "",
     release_year: item.release_year?.toString() || (details.releaseYear !== "-" ? details.releaseYear : ""),
-    watched_at: item.watched_at || "",
+    watched_at: item.watched_at || item.completed_at || item.started_at || "",
     started_at: item.started_at || "",
     completed_at: item.completed_at || "",
     planned_at: item.planned_at || "",
@@ -334,7 +327,7 @@ type FormState = ReturnType<typeof toForm>;
 function toInput(form: FormState): ItemInput {
   if (form.is_private) return toPrivateInput(form);
 
-  const progressPatch = progressInput(form);
+  const progressPatch = progressInput(form, form.type === "影集");
   const metadata = mergeReflectionMetadata(form.metadata_json, reflectionInput(form));
   return {
     raw_title: form.raw_title,
@@ -346,8 +339,8 @@ function toInput(form: FormState): ItemInput {
     platform: emptyToNull(form.platform),
     release_year: numberOrNull(form.release_year),
     watched_at: emptyToNull(form.watched_at),
-    started_at: emptyToNull(form.started_at),
-    completed_at: emptyToNull(form.completed_at),
+    started_at: null,
+    completed_at: null,
     planned_at: emptyToNull(form.planned_at),
     rating: numberOrNull(form.rating),
     rewatch_score: numberOrNull(form.rewatch_score),
@@ -406,19 +399,22 @@ function toPrivateInput(form: FormState): ItemInput {
     tags: splitList(form.tags),
     people: performers,
     collections: splitList(form.collections),
-    ...progressInput(form)
+    ...progressInput(form, false)
   };
 }
 
-function progressInput(form: FormState) {
+function progressInput(form: FormState, includeSeriesProgress: boolean) {
+  if (!includeSeriesProgress) {
+    return updateWatchProgress({ ...({} as MediaItem), status: "raw", progress_json: null } as MediaItem, {
+      watch_status: form.watch_status
+    });
+  }
   return updateWatchProgress({ ...({} as MediaItem), status: "raw", progress_json: null } as MediaItem, {
     watch_status: form.watch_status,
     current_season: numberOrNull(form.current_season),
     current_episode: numberOrNull(form.current_episode),
     total_seasons: numberOrNull(form.total_seasons),
-    total_episodes: numberOrNull(form.total_episodes),
-    episode_runtime: numberOrNull(form.episode_runtime),
-    progress_note: form.progress_note.trim()
+    total_episodes: numberOrNull(form.total_episodes)
   });
 }
 

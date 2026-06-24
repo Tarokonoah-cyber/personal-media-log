@@ -552,7 +552,7 @@ function viewLabel(view: string) {
     favorites: "收藏",
     plan_to_watch: "待觀看",
     watching: "觀看中",
-    completed: "已完成",
+    completed: "看完",
     paused: "暫停",
     dropped: "已放棄",
     rewatching: "重看中",
@@ -573,7 +573,7 @@ function quickFilterLabel(view: string) {
     home: "全部",
     watching: "觀看中",
     plan_to_watch: "待觀看",
-    completed: "已完成",
+    completed: "看完",
     favorites: "收藏"
   };
   return labels[view] || view;

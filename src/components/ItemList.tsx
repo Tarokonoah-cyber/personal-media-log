@@ -523,7 +523,7 @@ function scopeLabel(scope: string) {
   if (scope === "home") return "全部";
   if (scope === "plan_to_watch") return "待觀看";
   if (scope === "watching") return "觀看中";
-  if (scope === "completed") return "已完成";
+  if (scope === "completed") return "看完";
   if (scope === "favorites") return "收藏";
   return scope;
 }

@@ -4,7 +4,7 @@ import type { ItemInput, ItemStatus, MediaItem, WatchProgress, WatchStatus } fro
 export const watchStatuses: Array<{ value: WatchStatus; label: string; legacy: ItemStatus }> = [
   { value: "plan_to_watch", label: "待觀看", legacy: "raw" },
   { value: "watching", label: "觀看中", legacy: "partial" },
-  { value: "completed", label: "已完成", legacy: "complete" },
+  { value: "completed", label: "看完", legacy: "complete" },
   { value: "paused", label: "暫停", legacy: "partial" },
   { value: "dropped", label: "已放棄", legacy: "archived" },
   { value: "rewatching", label: "重看中", legacy: "partial" }
@@ -22,7 +22,9 @@ export function getWatchProgress(item: MediaItem): WatchProgress {
 }
 
 export function getWatchStatus(item: MediaItem): WatchStatus {
-  return getWatchProgress(item).watch_status || legacyToWatchStatus(item.status);
+  const progress = getWatchProgress(item);
+  if (isProgressComplete(progress)) return "completed";
+  return progress.watch_status || legacyToWatchStatus(item.status);
 }
 
 export function watchToLegacyStatus(status: WatchStatus): ItemStatus {
@@ -32,10 +34,10 @@ export function watchToLegacyStatus(status: WatchStatus): ItemStatus {
 export function updateWatchProgress(item: MediaItem, patch: WatchProgress): Partial<ItemInput> {
   const current = getWatchProgress(item);
   const next = { ...current, ...patch };
-  const watchStatus = next.watch_status || getWatchStatus(item);
+  const watchStatus = isProgressComplete(next) ? "completed" : next.watch_status || getWatchStatus(item);
   return {
     status: watchToLegacyStatus(watchStatus),
-    progress_json: JSON.stringify(next)
+    progress_json: JSON.stringify({ ...next, watch_status: watchStatus })
   };
 }
 
@@ -57,7 +59,7 @@ export function progressLabel(item: MediaItem) {
 }
 
 export function displayDateForItem(item: MediaItem) {
-  return item.completed_at || item.started_at || item.planned_at || item.watched_at || item.created_at;
+  return item.watched_at || item.planned_at || item.completed_at || item.started_at || item.created_at;
 }
 
 export function watchStatusLabel(status: WatchStatus) {
@@ -69,6 +71,12 @@ function legacyToWatchStatus(status: ItemStatus): WatchStatus {
   if (status === "partial") return "watching";
   if (status === "archived") return "dropped";
   return "plan_to_watch";
+}
+
+function isProgressComplete(progress: WatchProgress) {
+  const total = numberOrNull(progress.total_episodes);
+  const current = numberOrNull(progress.current_episode);
+  return Boolean(total && current && current >= total);
 }
 
 function parseJson<T>(value: string | null): T {

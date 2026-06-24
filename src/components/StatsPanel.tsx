@@ -59,7 +59,7 @@ export function StatsPanel({ includePrivate }: { includePrivate: boolean }) {
       <Metric label="總數" value={stats.total} />
       <Metric label="待觀看" value={stats.plan} />
       <Metric label="觀看中" value={stats.watching} />
-      <Metric label="已完成" value={stats.completed} />
+      <Metric label="看完" value={stats.completed} />
       <Metric label="本月新增" value={stats.monthAdded} />
       <Metric label="平均評分" value={stats.average} />
       <Metric label="追劇中" value={stats.watchingSeries} />
