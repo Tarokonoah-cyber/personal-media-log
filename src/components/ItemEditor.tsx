@@ -144,6 +144,21 @@ function GeneralForm({
       <Field label="想看日期" value={form.planned_at} onChange={(value) => setForm({ ...form, planned_at: value })} type="date" />
       <Field label="觀看日期" value={form.watched_at} onChange={(value) => setForm({ ...form, watched_at: value })} type="date" />
 
+      {!seriesLike && (
+        <label className="check wide completion-check">
+          <input
+            type="checkbox"
+            checked={form.watch_status === "completed"}
+            onChange={(event) => setForm({
+              ...form,
+              watch_status: event.target.checked ? "completed" : "watching",
+              watched_at: event.target.checked && !form.watched_at ? todayDate() : form.watched_at
+            })}
+          />
+          看完（1/1）
+        </label>
+      )}
+
       {seriesLike && (
         <section className="editor-section wide">
           <h3>追劇進度</h3>
@@ -406,7 +421,9 @@ function toPrivateInput(form: FormState): ItemInput {
 function progressInput(form: FormState, includeSeriesProgress: boolean) {
   if (!includeSeriesProgress) {
     return updateWatchProgress({ ...({} as MediaItem), status: "raw", progress_json: null } as MediaItem, {
-      watch_status: form.watch_status
+      watch_status: form.watch_status,
+      current_episode: form.watch_status === "completed" ? 1 : null,
+      total_episodes: 1
     });
   }
   return updateWatchProgress({ ...({} as MediaItem), status: "raw", progress_json: null } as MediaItem, {
@@ -490,6 +507,14 @@ function numberOrNull(value: string) {
   if (!value.trim()) return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function todayDate() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function metadataToString(metadata: Record<string, unknown>) {

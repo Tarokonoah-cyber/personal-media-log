@@ -1104,6 +1104,16 @@ h2 {
   color: var(--muted);
 }
 
+.completion-check {
+  min-height: 42px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 650;
+}
+
 .check input {
   width: auto;
 }
