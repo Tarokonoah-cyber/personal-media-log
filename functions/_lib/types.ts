@@ -67,10 +67,16 @@ export interface ItemListParams {
   tag?: string;
   year?: number;
   platform?: string;
+  codeQuery?: string;
+  titleQuery?: string;
+  person?: string;
+  studio?: string;
   watchedFrom?: string;
   watchedTo?: string;
   viewedFrom?: string;
   viewedTo?: string;
+  updatedFrom?: string;
+  updatedTo?: string;
   page: number;
   pageSize: number;
 }

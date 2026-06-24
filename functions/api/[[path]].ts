@@ -187,10 +187,16 @@ function getListParams(url: URL): ItemListParams {
     tag: optional(url.searchParams.get("tag")),
     year: optionalNumber(url.searchParams.get("year")),
     platform: optional(url.searchParams.get("platform")),
+    codeQuery: optional(url.searchParams.get("codeQuery")),
+    titleQuery: optional(url.searchParams.get("titleQuery")),
+    person: optional(url.searchParams.get("person")),
+    studio: optional(url.searchParams.get("studio")),
     watchedFrom: optional(url.searchParams.get("watchedFrom")),
     watchedTo: optional(url.searchParams.get("watchedTo")),
     viewedFrom: optional(url.searchParams.get("viewedFrom")),
     viewedTo: optional(url.searchParams.get("viewedTo")),
+    updatedFrom: optional(url.searchParams.get("updatedFrom")),
+    updatedTo: optional(url.searchParams.get("updatedTo")),
     page: optionalNumber(url.searchParams.get("page")) || 1,
     pageSize: optionalNumber(url.searchParams.get("pageSize")) || 25
   };

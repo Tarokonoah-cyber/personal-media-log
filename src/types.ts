@@ -56,10 +56,16 @@ export interface ListFilters {
   tag: string;
   year: string;
   platform: string;
+  codeQuery: string;
+  titleQuery: string;
+  person: string;
+  studio: string;
   watchedFrom: string;
   watchedTo: string;
   viewedFrom?: string;
   viewedTo?: string;
+  updatedFrom: string;
+  updatedTo: string;
   page: number;
   pageSize: number;
 }

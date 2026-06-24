@@ -58,8 +58,8 @@ export async function listItems(env: Env, params: ItemListParams) {
   else if (!params.includePrivate) where.push(publicItemWhereSql("items"));
   if (params.highRated) where.push("items.rating >= 4");
   if (params.type) {
-    where.push("items.type = ?");
-    bind.push(params.type);
+    where.push("(items.type = ? OR items.category = ?)");
+    bind.push(params.type, params.type);
   }
   if (params.year) {
     where.push("items.release_year = ?");
@@ -68,6 +68,46 @@ export async function listItems(env: Env, params: ItemListParams) {
   if (params.platform) {
     where.push("items.platform = ?");
     bind.push(params.platform);
+  }
+  if (params.codeQuery) {
+    const like = `%${params.codeQuery.trim().toLowerCase()}%`;
+    where.push(`(
+      lower(coalesce(items.code, '')) LIKE ?
+      OR lower(coalesce(items.original_title, '')) LIKE ?
+      OR lower(coalesce(items.raw_title, '')) LIKE ?
+      OR lower(coalesce(items.metadata_json, '')) LIKE ?
+    )`);
+    bind.push(like, like, like, like);
+  }
+  if (params.titleQuery) {
+    const like = `%${params.titleQuery.trim().toLowerCase()}%`;
+    where.push(`(
+      lower(coalesce(items.raw_title, '')) LIKE ?
+      OR lower(coalesce(items.official_title, '')) LIKE ?
+      OR lower(coalesce(items.original_title, '')) LIKE ?
+      OR lower(coalesce(items.metadata_json, '')) LIKE ?
+    )`);
+    bind.push(like, like, like, like);
+  }
+  if (params.person) {
+    const like = `%${params.person.trim().toLowerCase()}%`;
+    where.push(`(
+      lower(coalesce(items.metadata_json, '')) LIKE ?
+      OR EXISTS (
+        SELECT 1 FROM item_people ip
+        JOIN people p ON p.id = ip.person_id
+        WHERE ip.item_id = items.id AND lower(p.name) LIKE ?
+      )
+    )`);
+    bind.push(like, like);
+  }
+  if (params.studio) {
+    const like = `%${params.studio.trim().toLowerCase()}%`;
+    where.push(`(
+      lower(coalesce(items.platform, '')) LIKE ?
+      OR lower(coalesce(items.metadata_json, '')) LIKE ?
+    )`);
+    bind.push(like, like);
   }
   if (params.watchedFrom) {
     where.push("items.watched_at >= ?");
@@ -84,6 +124,14 @@ export async function listItems(env: Env, params: ItemListParams) {
   if (params.viewedTo) {
     where.push("date(coalesce(items.watched_at, items.created_at)) <= date(?)");
     bind.push(params.viewedTo);
+  }
+  if (params.updatedFrom) {
+    where.push("date(items.updated_at) >= date(?)");
+    bind.push(params.updatedFrom);
+  }
+  if (params.updatedTo) {
+    where.push("date(items.updated_at) <= date(?)");
+    bind.push(params.updatedTo);
   }
   if (params.tag) {
     where.push(`EXISTS (

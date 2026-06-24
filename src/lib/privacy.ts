@@ -57,14 +57,26 @@ export function isPrivateMarker(value: string) {
 
 export function privateItemDetails(item: MediaItem): PrivateItemDetails {
   const metadata = parseMetadata(item.metadata_json);
+  const code = firstValue([item.code, metadataValue(metadata, CODE_KEYS), codeFromTitle(item.original_title), codeFromTitle(item.raw_title)]) || "-";
   return {
-    code: firstValue([codeFromTitle(item.raw_title), codeFromTitle(item.original_title), item.code, metadataValue(metadata, CODE_KEYS)]) || "-",
-    title: firstValue([metadataValue(metadata, TITLE_KEYS), item.official_title, item.raw_title, item.original_title]) || "-",
+    code,
+    title: privateTitle(item, metadata, code),
     performers: firstValue([metadataValue(metadata, PERFORMER_KEYS), item.people.join(", ")]) || "-",
     studio: metadataValue(metadata, STUDIO_KEYS) || "-",
-    releaseYear: firstValue([yearFromValue(metadataValue(metadata, YEAR_KEYS)), item.release_year?.toString()]) || "-",
-    type: firstValue([item.category, item.type, PRIVATE_LIBRARY_LABEL]) || PRIVATE_LIBRARY_LABEL
+    releaseYear: firstValue([item.release_year?.toString(), yearFromValue(metadataValue(metadata, YEAR_KEYS))]) || "-",
+    type: firstValue([item.category, item.type !== PRIVATE_LIBRARY_LABEL ? item.type : null, PRIVATE_LIBRARY_LABEL]) || PRIVATE_LIBRARY_LABEL
   };
+}
+
+function privateTitle(item: MediaItem, metadata: MetadataRecord, code: string) {
+  const title = firstValue([metadataValue(metadata, TITLE_KEYS), item.official_title, titleIfNotCode(item.raw_title, code), titleIfNotCode(item.original_title, code)]);
+  return title || "-";
+}
+
+function titleIfNotCode(value: string | null, code: string) {
+  if (!value) return null;
+  if (code !== "-" && normalize(value).replace(/[-_\s]+/g, "") === normalize(code).replace(/[-_\s]+/g, "")) return null;
+  return value;
 }
 
 function hasPrivateSignalText(value: string) {
