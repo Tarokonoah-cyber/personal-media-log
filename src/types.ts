@@ -52,7 +52,9 @@ export interface ListFilters {
   highRated: boolean;
   includePrivate?: boolean;
   privateOnly?: boolean;
+  watchStatus?: WatchStatus | "all";
   type: string;
+  category?: string;
   tag: string;
   year: string;
   platform: string;
@@ -77,7 +79,11 @@ export interface StatsResponse {
   inbox: number;
   top: MediaItem[];
   recent: MediaItem[];
+  watching: MediaItem[];
+  plan: MediaItem[];
   monthly: Array<{ month: string; count: number }>;
+  watchStatuses: Array<{ name: WatchStatus; label: string; count: number }>;
+  types: Array<{ name: string; count: number }>;
   categories: Array<{ name: string; count: number }>;
   platforms: Array<{ name: string; count: number }>;
   tags: Array<{ name: string; count: number }>;

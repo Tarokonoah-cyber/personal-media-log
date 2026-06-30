@@ -35,7 +35,7 @@ function GeneralFilters({ filters, onChange }: { filters: ListFilters; onChange:
   return (
     <div className="filter-grid">
       <label>
-        狀態
+        整理狀態
         <select value={filters.status} onChange={(event) => onChange({ status: event.target.value as ListFilters["status"] })}>
           <option value="all">全部</option>
           <option value="inbox">待整理</option>
@@ -46,8 +46,24 @@ function GeneralFilters({ filters, onChange }: { filters: ListFilters; onChange:
         </select>
       </label>
       <label>
+        觀看狀態
+        <select value={filters.watchStatus || "all"} onChange={(event) => onChange({ watchStatus: event.target.value as ListFilters["watchStatus"] })}>
+          <option value="all">全部</option>
+          <option value="plan_to_watch">待觀看</option>
+          <option value="watching">觀看中</option>
+          <option value="completed">看完</option>
+          <option value="paused">暫停</option>
+          <option value="dropped">已放棄</option>
+          <option value="rewatching">重看中</option>
+        </select>
+      </label>
+      <label>
         類型
         <input value={filters.type} onChange={(event) => onChange({ type: event.target.value })} placeholder="電影、影集、動畫..." />
+      </label>
+      <label>
+        分類
+        <input value={filters.category || ""} onChange={(event) => onChange({ category: event.target.value })} placeholder="韓劇、日本、動畫影集..." />
       </label>
       <label>
         標籤
@@ -101,6 +117,10 @@ function PrivateFilters({ filters, onChange }: { filters: ListFilters; onChange:
       <label>
         類型
         <input value={filters.type} onChange={(event) => onChange({ type: event.target.value })} placeholder="企劃、劇情、素人..." />
+      </label>
+      <label>
+        分類
+        <input value={filters.category || ""} onChange={(event) => onChange({ category: event.target.value })} placeholder="輸入分類..." />
       </label>
       <label>
         標籤

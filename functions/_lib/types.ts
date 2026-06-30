@@ -15,6 +15,7 @@ export interface Actor {
 }
 
 export type ItemStatus = "raw" | "partial" | "complete" | "archived" | "deleted";
+export type WatchStatus = "plan_to_watch" | "watching" | "completed" | "paused" | "dropped" | "rewatching";
 
 export interface ItemInput {
   raw_title?: string;
@@ -63,7 +64,9 @@ export interface ItemListParams {
   highRated?: boolean;
   includePrivate?: boolean;
   privateOnly?: boolean;
+  watchStatus?: WatchStatus | "all";
   type?: string;
+  category?: string;
   tag?: string;
   year?: number;
   platform?: string;

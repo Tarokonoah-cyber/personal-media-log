@@ -1,6 +1,7 @@
 import { Columns3, Menu, Moon, Search, SlidersHorizontal, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { FilterSheet } from "./components/FilterSheet";
+import { HomeDashboard } from "./components/HomeDashboard";
 import { ImportExport } from "./components/ImportExport";
 import { ItemEditor } from "./components/ItemEditor";
 import { ItemList } from "./components/ItemList";
@@ -23,7 +24,9 @@ const defaultFilters: ListFilters = {
   status: "all",
   favorite: false,
   highRated: false,
+  watchStatus: "all",
   type: "",
+  category: "",
   tag: "",
   year: "",
   platform: "",
@@ -124,11 +127,9 @@ export default function App() {
   const libraryTypes = useMemo(() => new Set<string>(libraryTree.map((entry) => entry.label)), []);
   const visibleItems = useMemo(() => {
     const scopedItems = includePrivate ? items.filter(isPrivateItem) : items.filter((item) => !isPrivateItem(item));
-    if (activeCategory) return scopedItems.filter((item) => classifyItem(item).category === activeCategory);
-    if (libraryTypes.has(activeView)) return scopedItems.filter((item) => classifyItem(item).type === activeView);
-    if (["plan_to_watch", "watching", "completed", "paused", "dropped", "rewatching"].includes(activeView)) {
-      return scopedItems.filter((item) => getWatchStatus(item) === activeView);
-    }
+    if (activeCategory) return scopedItems;
+    if (libraryTypes.has(activeView)) return scopedItems;
+    if (["plan_to_watch", "watching", "completed", "paused", "dropped", "rewatching"].includes(activeView)) return scopedItems;
     return scopedItems;
   }, [activeCategory, activeView, includePrivate, items, libraryTypes]);
 
@@ -280,6 +281,36 @@ export default function App() {
     await refreshVisibleData();
   }
 
+  async function batchUpdate(targets: MediaItem[], patch: Partial<ItemInput> | ((item: MediaItem) => Partial<ItemInput>)) {
+    if (targets.length === 0) return;
+    setLoading(true);
+    try {
+      await Promise.all(targets.map((item) => updateItem(item.id, { ...toItemInput(item), ...(typeof patch === "function" ? patch(item) : patch) })));
+      setToast(`已更新 ${targets.length} 筆`);
+      await refreshVisibleData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "批次更新失敗");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function batchDelete(targets: MediaItem[]) {
+    if (targets.length === 0) return;
+    if (!window.confirm(`確定要刪除 ${targets.length} 筆紀錄嗎？`)) return;
+    setLoading(true);
+    try {
+      await Promise.all(targets.map((item) => deleteItem(item.id)));
+      setSelected(null);
+      setToast(`已刪除 ${targets.length} 筆`);
+      await refreshVisibleData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "批次刪除失敗");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function openMetadataLookup(item: MediaItem) {
     setMetadataTarget(item);
     setMetadataCandidates([]);
@@ -340,6 +371,8 @@ export default function App() {
     setActiveCategory("");
     const base = { ...defaultFilters, query: filters.query };
     if (view === "favorites") setFilters({ ...base, favorite: true });
+    else if (isWatchStatusView(view)) setFilters({ ...base, watchStatus: view as typeof defaultFilters.watchStatus });
+    else if (view === "database") setFilters({ ...base, status: "all", watchStatus: "all" });
     else setFilters(base);
     setSidebarOpen(false);
   }
@@ -357,7 +390,7 @@ export default function App() {
     setTab("log");
     setActiveView(category ? `${type}/${category}` : type);
     setActiveCategory(category || "");
-    setFilters({ ...defaultFilters, status: "all", query: filters.query, pageSize: 100 });
+    setFilters({ ...defaultFilters, status: "all", watchStatus: "all", type, category: category || "", query: filters.query, pageSize: 100 });
     setSidebarOpen(false);
   }
 
@@ -443,8 +476,17 @@ export default function App() {
         <section className="database-main">
           {tab === "log" && (
             <>
+              {activeView === "home" && !filters.query && !filters.favorite ? (
+                <HomeDashboard
+                  variant="main"
+                  includePrivate={includePrivate}
+                  onView={selectView}
+                  onSelect={setSelected}
+                />
+              ) : (
+              <>
               <div className="database-meta">
-                <span>{displayView === "calendar" ? "月曆視圖" : `${viewLabel(activeView)} · ${visibleItems.length === items.length ? total : visibleItems.length} 筆`}</span>
+                <span>{displayView === "calendar" ? "月曆視圖" : `${viewLabel(activeView)} · ${total} 筆`}</span>
                 {displayView !== "calendar" && (
                   <div>
                     <button disabled={filters.page <= 1} onClick={() => patchFilters({ page: filters.page - 1 })}>上一頁</button>
@@ -501,7 +543,11 @@ export default function App() {
                   onMetadata={openMetadataLookup}
                   onQuickUpdate={quickUpdate}
                   onQuickCreate={quickCreateFromTable}
+                  onBatchUpdate={batchUpdate}
+                  onBatchDelete={batchDelete}
                 />
+              )}
+              </>
               )}
             </>
           )}
@@ -547,6 +593,10 @@ export default function App() {
       <Toast message={toast} onClose={() => setToast("")} />
     </div>
   );
+}
+
+function isWatchStatusView(view: string) {
+  return ["plan_to_watch", "watching", "completed", "paused", "dropped", "rewatching"].includes(view);
 }
 
 function viewLabel(view: string) {

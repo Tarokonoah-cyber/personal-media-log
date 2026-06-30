@@ -1,71 +1,40 @@
 import { useEffect, useMemo, useState } from "react";
-import { listItems } from "../lib/api";
-import { classifyItem } from "../lib/taxonomy";
-import { getWatchStatus, isSeriesLike, watchStatusLabel } from "../lib/watch";
-import type { MediaItem } from "../types";
+import { getStats } from "../lib/api";
+import type { StatsResponse } from "../types";
 
 export function StatsPanel({ includePrivate }: { includePrivate: boolean }) {
-  const [items, setItems] = useState<MediaItem[]>([]);
+  const [stats, setStats] = useState<StatsResponse | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    listItems({
-      query: "",
-      status: "all",
-      favorite: false,
-      highRated: false,
-      type: "",
-      tag: "",
-      year: "",
-      platform: "",
-      codeQuery: "",
-      titleQuery: "",
-      person: "",
-      studio: "",
-      watchedFrom: "",
-      watchedTo: "",
-      updatedFrom: "",
-      updatedTo: "",
-      page: 1,
-      pageSize: 100,
-      includePrivate
-    }).then((result) => setItems(result.items)).catch((err) => setError(err instanceof Error ? err.message : "讀取統計失敗"));
+    getStats(includePrivate).then(setStats).catch((err) => setError(err instanceof Error ? err.message : "讀取統計失敗"));
   }, [includePrivate]);
 
-  const stats = useMemo(() => {
-    const month = new Date().toISOString().slice(0, 7);
-    const rated = items.filter((item) => item.rating !== null);
-    const typeCounts = countBy(items, (item) => classifyItem(item).type);
-    const statusCounts = countBy(items, (item) => watchStatusLabel(getWatchStatus(item)));
-    return {
-      total: items.length,
-      plan: items.filter((item) => getWatchStatus(item) === "plan_to_watch").length,
-      watching: items.filter((item) => getWatchStatus(item) === "watching").length,
-      completed: items.filter((item) => getWatchStatus(item) === "completed").length,
-      monthAdded: items.filter((item) => item.created_at.startsWith(month)).length,
-      average: rated.length ? (rated.reduce((sum, item) => sum + (item.rating || 0), 0) / rated.length).toFixed(2) : "-",
-      top: [...rated].sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 10),
-      typeCounts,
-      statusCounts,
-      watchingSeries: items.filter((item) => isSeriesLike(item) && getWatchStatus(item) === "watching").length
-    };
-  }, [items]);
+  const metrics = useMemo(() => ({
+    plan: stats?.watchStatuses.find((row) => row.name === "plan_to_watch")?.count || 0,
+    watching: stats?.watchStatuses.find((row) => row.name === "watching")?.count || 0,
+    completed: stats?.watchStatuses.find((row) => row.name === "completed")?.count || 0,
+    monthAdded: stats?.monthly[0]?.count || 0,
+    watchingSeries: stats?.watching.length || 0
+  }), [stats]);
 
   if (error) return <div className="notice danger">{error}</div>;
-  if (items.length === 0) return <div className="empty">還沒有紀錄。</div>;
+  if (!stats) return <div className="empty">統計載入中...</div>;
+  if (stats.total === 0) return <div className="empty">還沒有紀錄。</div>;
 
   return (
     <div className="stats-grid">
       <Metric label="總數" value={stats.total} />
-      <Metric label="待觀看" value={stats.plan} />
-      <Metric label="觀看中" value={stats.watching} />
-      <Metric label="看完" value={stats.completed} />
-      <Metric label="本月新增" value={stats.monthAdded} />
-      <Metric label="平均評分" value={stats.average} />
-      <Metric label="追劇中" value={stats.watchingSeries} />
+      <Metric label="待觀看" value={metrics.plan} />
+      <Metric label="觀看中" value={metrics.watching} />
+      <Metric label="看完" value={metrics.completed} />
+      <Metric label="最近月份" value={metrics.monthAdded} />
+      <Metric label="平均評分" value={stats.averageRating || "-"} />
+      <Metric label="追劇中" value={metrics.watchingSeries} />
       <Panel title="高分 Top 10" rows={stats.top.map((item) => `${item.rating ?? "-"} · ${item.official_title || item.raw_title}`)} />
-      <Panel title="各類型數量" rows={Object.entries(stats.typeCounts).map(([name, count]) => `${name} · ${count}`)} />
-      <Panel title="各觀看狀態數量" rows={Object.entries(stats.statusCounts).map(([name, count]) => `${name} · ${count}`)} />
+      <Panel title="各類型數量" rows={stats.types.map((row) => `${row.name} · ${row.count}`)} />
+      <Panel title="各觀看狀態數量" rows={stats.watchStatuses.map((row) => `${row.label} · ${row.count}`)} />
+      <Panel title="每月紀錄" rows={stats.monthly.map((row) => `${row.month} · ${row.count}`)} />
     </div>
   );
 }
@@ -76,12 +45,4 @@ function Metric({ label, value }: { label: string; value: string | number }) {
 
 function Panel({ title, rows }: { title: string; rows: string[] }) {
   return <section><h2>{title}</h2><ol className="rank-list">{rows.slice(0, 20).map((row) => <li key={row}>{row}</li>)}</ol></section>;
-}
-
-function countBy(items: MediaItem[], fn: (item: MediaItem) => string) {
-  return items.reduce<Record<string, number>>((acc, item) => {
-    const key = fn(item) || "其他";
-    acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
 }

@@ -4,7 +4,7 @@ import { parseCsv, parseJsonItems, toCsv } from "../_lib/importExport";
 import { createItem, exportItems, getItem, getStats, importItems, isLikelyDuplicate, listItems, softDeleteItem, updateItem } from "../_lib/items";
 import { parseSmartAdd } from "../_lib/smartAdd";
 import { applyTmdbMetadata, searchTmdb } from "../_lib/tmdb";
-import type { Env, ItemInput, ItemListParams, ItemStatus } from "../_lib/types";
+import type { Env, ItemInput, ItemListParams, ItemStatus, WatchStatus } from "../_lib/types";
 
 export const onRequest: PagesFunction<Env, "path"> = async (context) => {
   try {
@@ -183,7 +183,9 @@ function getListParams(url: URL): ItemListParams {
     highRated: url.searchParams.get("highRated") === "true",
     includePrivate: url.searchParams.get("includePrivate") === "true",
     privateOnly: url.searchParams.get("privateOnly") === "true",
+    watchStatus: isWatchStatusFilter(url.searchParams.get("watchStatus")) ? url.searchParams.get("watchStatus") as WatchStatus | "all" : "all",
     type: optional(url.searchParams.get("type")),
+    category: optional(url.searchParams.get("category")),
     tag: optional(url.searchParams.get("tag")),
     year: optionalNumber(url.searchParams.get("year")),
     platform: optional(url.searchParams.get("platform")),
@@ -214,4 +216,8 @@ function optionalNumber(value: string | null) {
 
 function isStatusFilter(value: string | null): value is ItemStatus | "all" | "inbox" | "organized" {
   return value === "all" || value === "inbox" || value === "organized" || value === "raw" || value === "partial" || value === "complete" || value === "archived" || value === "deleted";
+}
+
+function isWatchStatusFilter(value: string | null): value is WatchStatus | "all" {
+  return value === "all" || value === "plan_to_watch" || value === "watching" || value === "completed" || value === "paused" || value === "dropped" || value === "rewatching";
 }

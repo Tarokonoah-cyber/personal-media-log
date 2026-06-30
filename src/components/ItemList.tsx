@@ -1,4 +1,4 @@
-import { Plus, RotateCcw, Sparkles, Star, Trash2, X } from "lucide-react";
+import { Ban, CheckCircle2, Pause, Plus, Repeat2, RotateCcw, SkipForward, Sparkles, Star, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import { displayDate } from "../lib/date";
@@ -48,7 +48,9 @@ export function ItemList({
   onDelete,
   onMetadata,
   onQuickUpdate,
-  onQuickCreate
+  onQuickCreate,
+  onBatchUpdate,
+  onBatchDelete
 }: {
   items: MediaItem[];
   view: "table" | "list" | "poster";
@@ -65,6 +67,8 @@ export function ItemList({
   onMetadata?: (item: MediaItem) => void;
   onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
   onQuickCreate?: (input: ItemInput) => Promise<void>;
+  onBatchUpdate?: (items: MediaItem[], patch: Partial<ItemInput> | ((item: MediaItem) => Partial<ItemInput>)) => Promise<void>;
+  onBatchDelete?: (items: MediaItem[]) => Promise<void>;
 }) {
   const storageKey = `${columnStoragePrefix}:${privateMode ? "private" : "public"}:${columnScope}`;
   const customStorageKey = `${customColumnStoragePrefix}:${privateMode ? "private" : "public"}:${columnScope}`;
@@ -79,6 +83,8 @@ export function ItemList({
   );
   const defaultColumnIds = useMemo(() => defaultColumnsForScope(columnScope, privateMode), [columnScope, privateMode]);
   const [selectedColumnIds, setSelectedColumnIds] = useState<ColumnId[]>(defaultColumnIds);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const selectedItems = useMemo(() => items.filter((item) => selectedIds.includes(item.id)), [items, selectedIds]);
 
   useEffect(() => {
     const available = new Set(allColumns.map((column) => column.id));
@@ -89,6 +95,10 @@ export function ItemList({
   useEffect(() => {
     setCustomColumns(loadCustomColumns(customStorageKey));
   }, [customStorageKey]);
+
+  useEffect(() => {
+    setSelectedIds((current) => current.filter((id) => items.some((item) => item.id === id)));
+  }, [items]);
 
   const visibleColumns = useMemo(() => {
     const selected = new Set(selectedColumnIds);
@@ -146,15 +156,27 @@ export function ItemList({
   return (
     <>
       {view === "table" && (
-        <DataTable
-          items={items}
-          density={density}
-          privateMode={privateMode}
-          sheetMode={sheetMode}
-          columns={visibleColumns}
-          onSelect={onSelect}
-          onQuickCreate={onQuickCreate}
-        />
+        <>
+          <BatchToolbar
+            selectedItems={selectedItems}
+            privateMode={privateMode}
+            onUpdate={onBatchUpdate}
+            onDelete={onBatchDelete}
+            onClear={() => setSelectedIds([])}
+          />
+          <DataTable
+            items={items}
+            density={density}
+            privateMode={privateMode}
+            sheetMode={sheetMode}
+            columns={visibleColumns}
+            selectedIds={selectedIds}
+            onToggleSelected={(id) => setSelectedIds((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id])}
+            onToggleAll={() => setSelectedIds(selectedIds.length === items.length ? [] : items.map((item) => item.id))}
+            onSelect={onSelect}
+            onQuickCreate={onQuickCreate}
+          />
+        </>
       )}
 
       <div className={view === "list" ? "compact-list force-list" : "compact-list"}>
@@ -179,6 +201,7 @@ export function ItemList({
               )}
             </div>
             <div className="compact-actions">
+              <QuickProgressActions item={item} onQuickUpdate={onQuickUpdate} compact />
               <RatingStars item={item} onQuickUpdate={onQuickUpdate} compact />
               {!privateMode && (
                 <button className="row-icon" onClick={(event) => action(event, () => onMetadata?.(item))} title="補資料">
@@ -206,12 +229,78 @@ export function ItemList({
   );
 }
 
+function BatchToolbar({
+  selectedItems,
+  privateMode,
+  onUpdate,
+  onDelete,
+  onClear
+}: {
+  selectedItems: MediaItem[];
+  privateMode: boolean;
+  onUpdate?: (items: MediaItem[], patch: Partial<ItemInput> | ((item: MediaItem) => Partial<ItemInput>)) => Promise<void>;
+  onDelete?: (items: MediaItem[]) => Promise<void>;
+  onClear: () => void;
+}) {
+  const [watchStatus, setWatchStatus] = useState<WatchStatus | "">("");
+  const [type, setType] = useState("");
+  const [platform, setPlatform] = useState("");
+  const [tags, setTags] = useState("");
+  const disabled = selectedItems.length === 0;
+
+  async function applyWatchStatus() {
+    if (!watchStatus || disabled) return;
+    await onUpdate?.(selectedItems, (item) => updateWatchProgress(item, { watch_status: watchStatus }));
+    setWatchStatus("");
+  }
+
+  async function applyFields() {
+    if (disabled) return;
+    const patch: Partial<ItemInput> = {};
+    if (type.trim()) patch.type = type.trim();
+    if (platform.trim()) patch.platform = platform.trim();
+    if (Object.keys(patch).length === 0) return;
+    await onUpdate?.(selectedItems, patch);
+    setType("");
+    setPlatform("");
+  }
+
+  async function appendTags() {
+    const nextTags = splitTags(tags);
+    if (disabled || nextTags.length === 0) return;
+    await onUpdate?.(selectedItems, (item) => ({ tags: Array.from(new Set([...item.tags, ...nextTags])) }));
+    setTags("");
+  }
+
+  return (
+    <div className="batch-toolbar" aria-label="批次整理">
+      <strong>{selectedItems.length} 筆已選</strong>
+      <select value={watchStatus} onChange={(event) => setWatchStatus(event.target.value as WatchStatus | "")} disabled={disabled || privateMode}>
+        <option value="">觀看狀態</option>
+        {watchStatuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
+      </select>
+      <button onClick={applyWatchStatus} disabled={disabled || !watchStatus || privateMode}>套用</button>
+      <input value={type} onChange={(event) => setType(event.target.value)} placeholder="類型" disabled={disabled} />
+      <input value={platform} onChange={(event) => setPlatform(event.target.value)} placeholder={privateMode ? "片商" : "平台"} disabled={disabled} />
+      <button onClick={applyFields} disabled={disabled || (!type.trim() && !platform.trim())}>批次更新</button>
+      <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="加入標籤" disabled={disabled} />
+      <button onClick={appendTags} disabled={disabled || !tags.trim()}>加標籤</button>
+      <button onClick={() => onUpdate?.(selectedItems, { favorite: true })} disabled={disabled}>收藏</button>
+      <button className="danger-button" onClick={() => onDelete?.(selectedItems)} disabled={disabled}>刪除</button>
+      <button onClick={onClear} disabled={disabled}>清除選取</button>
+    </div>
+  );
+}
+
 function DataTable({
   items,
   density,
   privateMode,
   sheetMode,
   columns,
+  selectedIds,
+  onToggleSelected,
+  onToggleAll,
   onSelect,
   onQuickCreate
 }: {
@@ -220,17 +309,25 @@ function DataTable({
   privateMode: boolean;
   sheetMode: boolean;
   columns: ColumnDef[];
+  selectedIds: string[];
+  onToggleSelected: (id: string) => void;
+  onToggleAll: () => void;
   onSelect: (item: MediaItem) => void;
   onQuickCreate?: (input: ItemInput) => Promise<void>;
 }) {
+  const allSelected = items.length > 0 && selectedIds.length === items.length;
   return (
     <div className={`database-table-wrap ${privateMode ? "private-table-wrap" : ""} ${sheetMode ? "shadiao-sheet-wrap" : ""} density-${density}`}>
       <table className={privateMode ? "database-table private-table" : sheetMode ? "database-table shadiao-sheet-table" : "database-table"}>
         <colgroup>
+          <col className="select-col" />
           {columns.map((column) => <col key={column.id} className={column.colClassName} />)}
         </colgroup>
         <thead>
           <tr>
+            <th className="select-cell">
+              <input type="checkbox" checked={allSelected} onChange={onToggleAll} onClick={stop} aria-label="選取全部" />
+            </th>
             {columns.map((column) => (
               <th key={column.id} className={column.headerClassName}>{column.label}</th>
             ))}
@@ -238,20 +335,23 @@ function DataTable({
         </thead>
         <tbody>
           {items.map((item) => (
-            <tr key={item.id} onClick={() => onSelect(item)}>
+            <tr key={item.id} className={selectedIds.includes(item.id) ? "selected" : ""} onClick={() => onSelect(item)}>
+              <td className="select-cell">
+                <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => onToggleSelected(item.id)} onClick={stop} aria-label={`選取 ${item.official_title || item.raw_title}`} />
+              </td>
               {columns.map((column) => (
                 <td key={column.id} className={column.cellClassName}>{column.render(item)}</td>
               ))}
             </tr>
           ))}
         </tbody>
-        {sheetMode && <ShadiaoAddFooter columns={columns} onQuickCreate={onQuickCreate} />}
+        {sheetMode && <ShadiaoAddFooter columns={columns} extraColumns={1} onQuickCreate={onQuickCreate} />}
       </table>
     </div>
   );
 }
 
-function ShadiaoAddFooter({ columns, onQuickCreate }: { columns: ColumnDef[]; onQuickCreate?: (input: ItemInput) => Promise<void> }) {
+function ShadiaoAddFooter({ columns, extraColumns = 0, onQuickCreate }: { columns: ColumnDef[]; extraColumns?: number; onQuickCreate?: (input: ItemInput) => Promise<void> }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState({
@@ -304,7 +404,7 @@ function ShadiaoAddFooter({ columns, onQuickCreate }: { columns: ColumnDef[]; on
     return (
       <tfoot>
         <tr className="sheet-plus-row">
-          <td colSpan={columns.length}>
+          <td colSpan={columns.length + extraColumns}>
             <button type="button" onClick={() => setOpen(true)} title="新增一筆沙雕动画">+</button>
           </td>
         </tr>
@@ -315,6 +415,7 @@ function ShadiaoAddFooter({ columns, onQuickCreate }: { columns: ColumnDef[]; on
   return (
     <tfoot>
       <tr className="sheet-draft-row">
+        {extraColumns > 0 && <td />}
         {columns.map((column) => (
           <td key={column.id}>{renderShadiaoDraftCell(column.id, draft, setDraft, save, saving)}</td>
         ))}
@@ -598,7 +699,7 @@ function generalColumnDefs({
       id: "actions",
       label: "更多操作",
       colClassName: "general-actions-col",
-      render: (item) => <RowActions item={item} onToggleFavorite={onToggleFavorite} onDelete={onDelete} onMetadata={onMetadata} />
+      render: (item) => <RowActions item={item} onToggleFavorite={onToggleFavorite} onDelete={onDelete} onMetadata={onMetadata} onQuickUpdate={onQuickUpdate} />
     }
   ];
 }
@@ -953,15 +1054,18 @@ function RowActions({
   item,
   onToggleFavorite,
   onDelete,
-  onMetadata
+  onMetadata,
+  onQuickUpdate
 }: {
   item: MediaItem;
   onToggleFavorite?: (item: MediaItem) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
   onMetadata?: (item: MediaItem) => void;
+  onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
 }) {
   return (
     <div className="row-actions">
+      <QuickProgressActions item={item} onQuickUpdate={onQuickUpdate} />
       <button className={item.favorite ? "row-icon active" : "row-icon"} onClick={(event) => action(event, () => onToggleFavorite?.(item))} title="切換收藏">
         <Star size={15} fill={item.favorite ? "currentColor" : "none"} />
       </button>
@@ -974,6 +1078,38 @@ function RowActions({
         <Trash2 size={15} />
       </button>
     </div>
+  );
+}
+
+function QuickProgressActions({ item, compact, onQuickUpdate }: { item: MediaItem; compact?: boolean; onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void> }) {
+  if (!onQuickUpdate) return null;
+  const progress = getWatchProgress(item);
+  const current = Number(progress.current_episode || 0);
+  const total = Number(progress.total_episodes || 0);
+  const nextEpisode = total > 0 ? Math.min(total, current + 1) : current + 1;
+  const completeEpisode = total > 0 ? total : Math.max(1, current);
+  const size = compact ? 13 : 14;
+
+  return (
+    <span className={compact ? "quick-progress compact" : "quick-progress"} onClick={stop}>
+      {isSeriesLike(item) && (
+        <button className="row-icon" onClick={(event) => action(event, () => onQuickUpdate(item, updateWatchProgress(item, { watch_status: "watching", current_episode: nextEpisode, total_episodes: progress.total_episodes || null })))} title="下一集">
+          <SkipForward size={size} />
+        </button>
+      )}
+      <button className="row-icon" onClick={(event) => action(event, () => onQuickUpdate(item, updateWatchProgress(item, { watch_status: "completed", current_episode: completeEpisode, total_episodes: total || completeEpisode })))} title="標記看完">
+        <CheckCircle2 size={size} />
+      </button>
+      <button className="row-icon" onClick={(event) => action(event, () => onQuickUpdate(item, updateWatchProgress(item, { watch_status: "paused" })))} title="暫停">
+        <Pause size={size} />
+      </button>
+      <button className="row-icon" onClick={(event) => action(event, () => onQuickUpdate(item, updateWatchProgress(item, { watch_status: "dropped" })))} title="放棄">
+        <Ban size={size} />
+      </button>
+      <button className="row-icon" onClick={(event) => action(event, () => onQuickUpdate(item, updateWatchProgress(item, { watch_status: "rewatching" })))} title="重看">
+        <Repeat2 size={size} />
+      </button>
+    </span>
   );
 }
 

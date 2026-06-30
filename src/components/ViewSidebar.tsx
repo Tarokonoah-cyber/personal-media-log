@@ -1,4 +1,4 @@
-import { Clapperboard, ChevronLeft, ChevronRight, Film, Folder, Hash, Heart, Home, Layers, Settings, Tags, Tv, X } from "lucide-react";
+import { BarChart3, Clapperboard, ChevronLeft, ChevronRight, Database, Film, Folder, Hash, Heart, Home, Layers, Settings, Tags, Tv, X } from "lucide-react";
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { isPrivateLibraryLabel } from "../lib/privacy";
@@ -16,6 +16,8 @@ const mainItems = [
 ] as const;
 
 const toolItems = [
+  { id: "stats", label: "統計", icon: BarChart3 },
+  { id: "data", label: "資料備份", icon: Database },
   { id: "settings", label: "設定", icon: Settings }
 ] as const;
 

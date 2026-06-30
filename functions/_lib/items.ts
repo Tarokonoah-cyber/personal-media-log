@@ -2,7 +2,7 @@ import { HttpError } from "./http";
 import { inboxWhereSql } from "./organization";
 import { hasPrivateSignalValues, isPrivateMarker as isPrivateMarkerValue, privateItemWhereSql, publicItemWhereSql } from "./privacy";
 import { newId, nowIso } from "./ids";
-import type { Actor, Env, ItemInput, ItemListParams, ItemRecord, ItemStatus } from "./types";
+import type { Actor, Env, ItemInput, ItemListParams, ItemRecord, ItemStatus, WatchStatus } from "./types";
 
 type Row = Record<string, unknown>;
 
@@ -56,10 +56,17 @@ export async function listItems(env: Env, params: ItemListParams) {
   if (params.favorite) where.push("items.favorite = 1");
   if (params.privateOnly) where.push(privateItemWhereSql("items"));
   else if (!params.includePrivate) where.push(publicItemWhereSql("items"));
+  if (params.watchStatus && params.watchStatus !== "all") {
+    where.push(watchStatusWhereSql(params.watchStatus));
+  }
   if (params.highRated) where.push("items.rating >= 4");
   if (params.type) {
-    where.push("(items.type = ? OR items.category = ?)");
-    bind.push(params.type, params.type);
+    where.push(typeWhereSql(params.type));
+    bind.push(params.type, params.type, ...typeAliases(params.type).map((alias) => `%${alias.toLowerCase()}%`), ...typeAliases(params.type).map((alias) => `%${alias.toLowerCase()}%`));
+  }
+  if (params.category) {
+    where.push("lower(coalesce(items.category, '')) = ?");
+    bind.push(params.category.toLowerCase());
   }
   if (params.year) {
     where.push("items.release_year = ?");
@@ -320,7 +327,11 @@ export async function getStats(env: Env, includePrivate = false) {
     inbox,
     top,
     recent,
+    watching,
+    plan,
     monthly,
+    watchStatuses,
+    types,
     categories,
     platforms,
     tags
@@ -331,7 +342,11 @@ export async function getStats(env: Env, includePrivate = false) {
     env.MEDIA_LOG_DB.prepare(`SELECT COUNT(*) AS value FROM items WHERE ${inboxSql}`).first<{ value: number }>(),
     env.MEDIA_LOG_DB.prepare(`SELECT ${itemColumns} FROM items WHERE ${visibleSql} AND rating IS NOT NULL ORDER BY rating DESC, datetime(updated_at) DESC LIMIT 20`).all<Row>(),
     env.MEDIA_LOG_DB.prepare(`SELECT ${itemColumns} FROM items WHERE ${visibleSql} ORDER BY datetime(coalesce(watched_at, updated_at)) DESC LIMIT 12`).all<Row>(),
+    env.MEDIA_LOG_DB.prepare(`SELECT ${itemColumns} FROM items WHERE ${visibleSql} AND ${watchStatusWhereSql("watching")} ORDER BY datetime(updated_at) DESC LIMIT 12`).all<Row>(),
+    env.MEDIA_LOG_DB.prepare(`SELECT ${itemColumns} FROM items WHERE ${visibleSql} AND ${watchStatusWhereSql("plan_to_watch")} ORDER BY datetime(coalesce(planned_at, updated_at)) DESC LIMIT 12`).all<Row>(),
     env.MEDIA_LOG_DB.prepare(`SELECT substr(coalesce(watched_at, created_at), 1, 7) AS month, COUNT(*) AS count FROM items WHERE ${visibleSql} GROUP BY month ORDER BY month DESC LIMIT 18`).all(),
+    env.MEDIA_LOG_DB.prepare(`SELECT ${watchStatusCaseSql()} AS name, COUNT(*) AS count FROM items WHERE ${visibleSql} GROUP BY name ORDER BY count DESC`).all(),
+    env.MEDIA_LOG_DB.prepare(`SELECT coalesce(type, '其他') AS name, COUNT(*) AS count FROM items WHERE ${visibleSql} GROUP BY coalesce(type, '其他') ORDER BY count DESC`).all(),
     env.MEDIA_LOG_DB.prepare(`SELECT coalesce(category, '未分類') AS name, COUNT(*) AS count FROM items WHERE ${visibleSql} GROUP BY coalesce(category, '未分類') ORDER BY count DESC`).all(),
     env.MEDIA_LOG_DB.prepare(`SELECT coalesce(platform, '未設定') AS name, COUNT(*) AS count FROM items WHERE ${visibleSql} GROUP BY coalesce(platform, '未設定') ORDER BY count DESC`).all(),
     env.MEDIA_LOG_DB.prepare(`SELECT tags.name AS name, COUNT(*) AS count FROM tags JOIN item_tags ON item_tags.tag_id = tags.id JOIN items ON items.id = item_tags.item_id WHERE ${visibleItemsSql} GROUP BY tags.id ORDER BY count DESC, tags.name ASC LIMIT 100`).all()
@@ -344,12 +359,96 @@ export async function getStats(env: Env, includePrivate = false) {
     inbox: inbox?.value || 0,
     top: await hydrateItems(env, top.results || []),
     recent: await hydrateItems(env, recent.results || []),
+    watching: await hydrateItems(env, watching.results || []),
+    plan: await hydrateItems(env, plan.results || []),
     monthly: monthly.results || [],
+    watchStatuses: normalizeWatchStatusCounts(watchStatuses.results || []),
+    types: types.results || [],
     categories: categories.results || [],
     platforms: platforms.results || [],
     tags: tags.results || []
   };
 }
+
+function typeWhereSql(type: string) {
+  const aliases = typeAliases(type);
+  const aliasChecks = aliases.map(() => "lower(coalesce(items.type, '') || ' ' || coalesce(items.category, '') || ' ' || coalesce(items.platform, '') || ' ' || coalesce(items.metadata_json, '')) LIKE ?");
+  const tagChecks = aliases.map(() => `EXISTS (
+    SELECT 1 FROM item_tags it
+    JOIN tags t ON t.id = it.tag_id
+    WHERE it.item_id = items.id AND lower(t.name) LIKE ?
+  )`);
+  return `(items.type = ? OR items.category = ? OR ${[...aliasChecks, ...tagChecks].join(" OR ")})`;
+}
+
+function typeAliases(type: string) {
+  const normalized = type.trim().toLowerCase();
+  const aliases: Record<string, string[]> = {
+    "電影": ["電影", "movie", "film", "cinema"],
+    "影集": ["影集", "劇集", "劇", "series", "tv", "tv show", "drama"],
+    "動畫": ["動畫", "動漫", "anime", "animation"],
+    "沙雕动画": ["沙雕动画", "沙雕動畫", "b站", "bilibili", "修仙"],
+    "youtube": ["youtube", "yt"],
+    "其他": ["其他", "other"]
+  };
+  return aliases[type] || aliases[normalized] || [type];
+}
+
+function watchStatusWhereSql(status: WatchStatus) {
+  const explicit = watchStatusExprSql();
+  if (status === "completed") {
+    return `((${explicit}) = 'completed' OR (${progressCompleteSql()}) OR ((${explicit}) IS NULL AND items.status = 'complete'))`;
+  }
+  return `((${explicit}) = '${status}' OR ((${explicit}) IS NULL AND items.status = '${watchStatusLegacy(status)}'))`;
+}
+
+function watchStatusCaseSql() {
+  const explicit = watchStatusExprSql();
+  return `CASE
+    WHEN (${progressCompleteSql()}) THEN 'completed'
+    WHEN (${explicit}) IN ('plan_to_watch', 'watching', 'completed', 'paused', 'dropped', 'rewatching') THEN (${explicit})
+    WHEN items.status = 'complete' THEN 'completed'
+    WHEN items.status = 'partial' THEN 'watching'
+    WHEN items.status = 'archived' THEN 'dropped'
+    ELSE 'plan_to_watch'
+  END`;
+}
+
+function watchStatusExprSql() {
+  return "CASE WHEN json_valid(coalesce(items.progress_json, '')) THEN json_extract(items.progress_json, '$.watch_status') END";
+}
+
+function progressCompleteSql() {
+  return `(
+    json_valid(coalesce(items.progress_json, ''))
+    AND CAST(json_extract(items.progress_json, '$.total_episodes') AS REAL) > 0
+    AND CAST(json_extract(items.progress_json, '$.current_episode') AS REAL) >= CAST(json_extract(items.progress_json, '$.total_episodes') AS REAL)
+  )`;
+}
+
+function watchStatusLegacy(status: WatchStatus): ItemStatus {
+  if (status === "completed") return "complete";
+  if (status === "dropped") return "archived";
+  if (status === "watching" || status === "paused" || status === "rewatching") return "partial";
+  return "raw";
+}
+
+function normalizeWatchStatusCounts(rows: Row[]) {
+  const labels: Record<WatchStatus, string> = {
+    plan_to_watch: "待觀看",
+    watching: "觀看中",
+    completed: "看完",
+    paused: "暫停",
+    dropped: "已放棄",
+    rewatching: "重看中"
+  };
+  return (Object.keys(labels) as WatchStatus[]).map((name) => ({
+    name,
+    label: labels[name],
+    count: Number(rows.find((row) => row.name === name)?.count || 0)
+  }));
+}
+
 export async function importItems(env: Env, actor: Actor, rows: ItemInput[], sourceName: string, sourceType: "csv" | "json") {
   const jobId = newId("import");
   let imported = 0;
