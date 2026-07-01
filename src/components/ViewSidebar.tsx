@@ -59,7 +59,10 @@ export function ViewSidebar({
   const [showAllTags, setShowAllTags] = useState(false);
   const showText = !collapsed || mobileOpen;
   const visibleTags = showAllTags ? tags : tags.slice(0, 3);
-  const libraryItems = libraryTree.filter((entry) => !safeMode || !isPrivateLibraryLabel(entry.label));
+  const libraryItems = libraryTree.filter((entry) => {
+    if (activeView === "home" && entry.label === "沙雕动画") return false;
+    return !safeMode || !isPrivateLibraryLabel(entry.label);
+  });
 
   return (
     <>

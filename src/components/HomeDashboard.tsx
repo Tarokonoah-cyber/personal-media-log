@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { MediaItem, StatsResponse, WatchStatus } from "../types";
 
+const hiddenHomeTypes = new Set(["沙雕动画"]);
+
 export function HomeDashboard({
   items = [],
   inboxTotal = 0,
@@ -105,7 +107,7 @@ function MainDashboard({
           <StatusBars rows={stats.watchStatuses} onView={onView} />
         </DashboardPanel>
         <DashboardPanel title="類型分布">
-          <SimpleBars rows={stats.types.slice(0, 8)} />
+          <SimpleBars rows={stats.types.filter((row) => !hiddenHomeTypes.has(row.name)).slice(0, 8)} />
         </DashboardPanel>
       </div>
     </section>
