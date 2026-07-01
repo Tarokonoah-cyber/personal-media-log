@@ -1,6 +1,7 @@
 import { isThisWeek, isToday } from "../lib/date";
 import { getStats } from "../lib/api";
 import { getWatchStatus, progressLabel, watchStatusLabel } from "../lib/watch";
+import { classifyItem } from "../lib/taxonomy";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { MediaItem, StatsResponse, WatchStatus } from "../types";
@@ -64,6 +65,12 @@ function MainDashboard({
   }, [includePrivate]);
 
   const monthlyTotal = useMemo(() => stats?.monthly.slice(0, 3).reduce((sum, row) => sum + Number(row.count || 0), 0) || 0, [stats]);
+  const homeItems = useMemo(() => ({
+    watching: filterHomeItems(stats?.watching || []),
+    plan: filterHomeItems(stats?.plan || []),
+    recent: filterHomeItems(stats?.recent || []),
+    top: filterHomeItems(stats?.top || [])
+  }), [stats]);
 
   if (error) return <div className="notice danger">{error}</div>;
   if (!stats) return <div className="empty">首頁載入中...</div>;
@@ -92,16 +99,16 @@ function MainDashboard({
 
       <div className="home-dashboard-grid">
         <DashboardPanel title="觀看中" action="查看全部" onAction={() => onView?.("watching")}>
-          <ItemRows items={stats.watching} empty="目前沒有觀看中的項目。" onSelect={onSelect} />
+          <ItemRows items={homeItems.watching} empty="目前沒有觀看中的項目。" onSelect={onSelect} />
         </DashboardPanel>
         <DashboardPanel title="待觀看" action="查看全部" onAction={() => onView?.("plan_to_watch")}>
-          <ItemRows items={stats.plan} empty="待觀看清單是空的。" onSelect={onSelect} />
+          <ItemRows items={homeItems.plan} empty="待觀看清單是空的。" onSelect={onSelect} />
         </DashboardPanel>
         <DashboardPanel title="最近更新">
-          <ItemRows items={stats.recent} empty="尚無最近更新。" onSelect={onSelect} />
+          <ItemRows items={homeItems.recent} empty="尚無最近更新。" onSelect={onSelect} />
         </DashboardPanel>
         <DashboardPanel title="高分 Top">
-          <ItemRows items={stats.top.slice(0, 8)} empty="還沒有評分資料。" onSelect={onSelect} showRating />
+          <ItemRows items={homeItems.top.slice(0, 8)} empty="還沒有評分資料。" onSelect={onSelect} showRating />
         </DashboardPanel>
         <DashboardPanel title="狀態分布">
           <StatusBars rows={stats.watchStatuses} onView={onView} />
@@ -112,6 +119,10 @@ function MainDashboard({
       </div>
     </section>
   );
+}
+
+function filterHomeItems(items: MediaItem[]) {
+  return items.filter((item) => !hiddenHomeTypes.has(classifyItem(item).type));
 }
 
 function DashboardMetric({ label, value, onClick }: { label: string; value: string | number; onClick?: () => void }) {
