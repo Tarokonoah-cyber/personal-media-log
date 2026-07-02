@@ -371,6 +371,7 @@ export default function App() {
     setActiveCategory("");
     const base = { ...defaultFilters, query: filters.query };
     if (view === "favorites") setFilters({ ...base, favorite: true });
+    else if (view === "inbox") setFilters({ ...base, status: "inbox", watchStatus: "all" });
     else if (isWatchStatusView(view)) setFilters({ ...base, watchStatus: view as typeof defaultFilters.watchStatus });
     else if (view === "database") setFilters({ ...base, status: "all", watchStatus: "all" });
     else setFilters(base);
@@ -602,6 +603,7 @@ function isWatchStatusView(view: string) {
 function viewLabel(view: string) {
   const labels: Record<string, string> = {
     home: "首頁",
+    inbox: "待整理",
     database: "資料庫",
     table: "表格",
     list: "清單",

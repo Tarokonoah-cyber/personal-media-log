@@ -1,10 +1,11 @@
+import { ArrowRight, Bookmark, ClipboardList, PlayCircle } from "lucide-react";
 import { isThisWeek, isToday } from "../lib/date";
 import { getStats } from "../lib/api";
 import { getWatchStatus, progressLabel, watchStatusLabel } from "../lib/watch";
 import { classifyItem } from "../lib/taxonomy";
 import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
-import type { MediaItem, StatsResponse, WatchStatus } from "../types";
+import type { CSSProperties, ReactNode } from "react";
+import type { MediaItem, StatsResponse } from "../types";
 
 const hiddenHomeTypes = new Set(["沙雕动画"]);
 
@@ -64,12 +65,10 @@ function MainDashboard({
     };
   }, [includePrivate]);
 
-  const monthlyTotal = useMemo(() => stats?.monthly.slice(0, 3).reduce((sum, row) => sum + Number(row.count || 0), 0) || 0, [stats]);
   const homeItems = useMemo(() => ({
     watching: filterHomeItems(stats?.watching || []),
     plan: filterHomeItems(stats?.plan || []),
-    recent: filterHomeItems(stats?.recent || []),
-    top: filterHomeItems(stats?.top || [])
+    recent: filterHomeItems(stats?.recent || [])
   }), [stats]);
 
   if (error) return <div className="notice danger">{error}</div>;
@@ -79,43 +78,48 @@ function MainDashboard({
     <section className="home-dashboard-main" aria-label="首頁總覽">
       <header className="home-hero">
         <div>
-          <p className="eyebrow">Today / 日常總覽</p>
-          <h1>今天想整理哪一段觀看生活？</h1>
-        </div>
-        <div className="home-hero-actions">
-          <button className="primary" onClick={() => onView?.("watching")}>繼續觀看</button>
-          <button onClick={() => onView?.("plan_to_watch")}>待觀看</button>
-          <button onClick={() => onView?.("database")}>全部資料</button>
+          <p className="eyebrow">Workspace</p>
+          <h1>觀看工作台</h1>
         </div>
       </header>
 
-      <div className="home-metrics">
-        <DashboardMetric label="總紀錄" value={stats.total} onClick={() => onView?.("database")} />
-        <DashboardMetric label="待整理" value={stats.inbox} onClick={() => onView?.("database")} />
-        <DashboardMetric label="今年觀看" value={stats.currentYear} />
-        <DashboardMetric label="平均評分" value={stats.averageRating || "-"} />
-        <DashboardMetric label="近三月紀錄" value={monthlyTotal} />
-      </div>
-
-      <div className="home-dashboard-grid">
-        <DashboardPanel title="觀看中" action="查看全部" onAction={() => onView?.("watching")}>
-          <ItemRows items={homeItems.watching} empty="目前沒有觀看中的項目。" onSelect={onSelect} />
-        </DashboardPanel>
-        <DashboardPanel title="待觀看" action="查看全部" onAction={() => onView?.("plan_to_watch")}>
-          <ItemRows items={homeItems.plan} empty="待觀看清單是空的。" onSelect={onSelect} />
-        </DashboardPanel>
-        <DashboardPanel title="最近更新">
-          <ItemRows items={homeItems.recent} empty="尚無最近更新。" onSelect={onSelect} />
-        </DashboardPanel>
-        <DashboardPanel title="高分 Top">
-          <ItemRows items={homeItems.top.slice(0, 8)} empty="還沒有評分資料。" onSelect={onSelect} showRating />
-        </DashboardPanel>
-        <DashboardPanel title="狀態分布">
-          <StatusBars rows={stats.watchStatuses} onView={onView} />
-        </DashboardPanel>
-        <DashboardPanel title="類型分布">
-          <SimpleBars rows={stats.types.filter((row) => !hiddenHomeTypes.has(row.name)).slice(0, 8)} />
-        </DashboardPanel>
+      <div className="home-action-grid">
+        <ActionSection
+          title="繼續觀看"
+          count={homeItems.watching.length}
+          icon={<PlayCircle size={17} />}
+          action="開啟"
+          onAction={() => onView?.("watching")}
+          visualItem={homeItems.watching[0]}
+          tone="blue"
+          featured
+        >
+          <ItemRows items={homeItems.watching} empty="無項目" onSelect={onSelect} />
+        </ActionSection>
+        <ActionSection
+          title="待整理"
+          count={stats.inbox}
+          icon={<ClipboardList size={17} />}
+          action="開啟"
+          onAction={() => onView?.("inbox")}
+          visualLabel={stats.inbox > 0 ? "待補資料" : "已整理"}
+          tone="green"
+        >
+          <p className="home-action-note">
+            {stats.inbox > 0 ? `${stats.inbox} 筆資料待補完整` : "無待整理項目"}
+          </p>
+        </ActionSection>
+        <ActionSection
+          title="待觀看"
+          count={homeItems.plan.length}
+          icon={<Bookmark size={17} />}
+          action="開啟"
+          onAction={() => onView?.("plan_to_watch")}
+          visualItem={homeItems.plan[0]}
+          tone="amber"
+        >
+          <ItemRows items={homeItems.plan} empty="無項目" onSelect={onSelect} />
+        </ActionSection>
       </div>
     </section>
   );
@@ -125,72 +129,62 @@ function filterHomeItems(items: MediaItem[]) {
   return items.filter((item) => !hiddenHomeTypes.has(classifyItem(item).type));
 }
 
-function DashboardMetric({ label, value, onClick }: { label: string; value: string | number; onClick?: () => void }) {
-  const content = (
-    <>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </>
-  );
-  if (onClick) return <button className="home-metric" onClick={onClick}>{content}</button>;
-  return <div className="home-metric">{content}</div>;
-}
-
-function DashboardPanel({ title, action, onAction, children }: { title: string; action?: string; onAction?: () => void; children: ReactNode }) {
+function ActionSection({
+  title,
+  count,
+  icon,
+  action,
+  onAction,
+  visualItem,
+  visualLabel,
+  tone,
+  children,
+  featured = false
+}: {
+  title: string;
+  count: number;
+  icon: ReactNode;
+  action: string;
+  onAction: () => void;
+  visualItem?: MediaItem;
+  visualLabel?: string;
+  tone: "blue" | "green" | "amber";
+  children: ReactNode;
+  featured?: boolean;
+}) {
   return (
-    <section className="home-panel">
+    <section className={`home-action-section tone-${tone}${featured ? " featured" : ""}`}>
       <header>
-        <h2>{title}</h2>
-        {action && <button onClick={onAction}>{action}</button>}
+        <div className="home-action-title">
+          <span className="home-action-icon">{icon}</span>
+          <div>
+            <h2>{title}</h2>
+            <span>{count} 筆</span>
+          </div>
+        </div>
+        <button onClick={onAction}>{action}<ArrowRight size={14} /></button>
       </header>
+      <button className="home-action-visual" style={visualStyle(visualItem)} onClick={onAction} type="button">
+        <span className="home-visual-count">{count}</span>
+        <span className="home-visual-label">{visualItem ? titleFor(visualItem) : visualLabel || title}</span>
+      </button>
       {children}
     </section>
   );
 }
 
-function ItemRows({ items, empty, onSelect, showRating = false }: { items: MediaItem[]; empty: string; onSelect?: (item: MediaItem) => void; showRating?: boolean }) {
-  if (items.length === 0) return <p className="muted-cell">{empty}</p>;
+function ItemRows({ items, empty, onSelect }: { items: MediaItem[]; empty: string; onSelect?: (item: MediaItem) => void }) {
+  if (items.length === 0) return <p className="home-empty">{empty}</p>;
   return (
     <div className="home-item-rows">
-      {items.slice(0, 8).map((item) => (
+      {items.slice(0, 5).map((item) => (
         <button key={item.id} onClick={() => onSelect?.(item)}>
           <span>
             <strong>{item.official_title || item.raw_title}</strong>
             <em>{progressLabel(item) || watchStatusLabel(getWatchStatus(item))}</em>
           </span>
-          <b>{showRating ? item.rating?.toFixed(1) || "-" : displayDate(item)}</b>
+          <b>{displayDate(item)}</b>
         </button>
-      ))}
-    </div>
-  );
-}
-
-function StatusBars({ rows, onView }: { rows: Array<{ name: WatchStatus; label: string; count: number }>; onView?: (view: string) => void }) {
-  const max = Math.max(1, ...rows.map((row) => row.count));
-  return (
-    <div className="dashboard-bars">
-      {rows.map((row) => (
-        <button key={row.name} onClick={() => onView?.(row.name)}>
-          <span>{row.label}</span>
-          <i style={{ width: `${Math.max(4, (row.count / max) * 100)}%` }} />
-          <b>{row.count}</b>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function SimpleBars({ rows }: { rows: Array<{ name: string; count: number }> }) {
-  const max = Math.max(1, ...rows.map((row) => Number(row.count || 0)));
-  if (rows.length === 0) return <p className="muted-cell">尚無資料。</p>;
-  return (
-    <div className="dashboard-bars">
-      {rows.map((row) => (
-        <div key={row.name}>
-          <span>{row.name}</span>
-          <i style={{ width: `${Math.max(4, (Number(row.count || 0) / max) * 100)}%` }} />
-          <b>{row.count}</b>
-        </div>
       ))}
     </div>
   );
@@ -198,4 +192,14 @@ function SimpleBars({ rows }: { rows: Array<{ name: string; count: number }> }) 
 
 function displayDate(item: MediaItem) {
   return (item.watched_at || item.planned_at || item.updated_at || item.created_at).slice(0, 10);
+}
+
+function titleFor(item: MediaItem) {
+  return item.official_title || item.raw_title;
+}
+
+function visualStyle(item?: MediaItem): CSSProperties {
+  if (!item?.cover_url) return {};
+  const safeUrl = item.cover_url.replace(/"/g, "%22");
+  return { backgroundImage: `linear-gradient(90deg, rgba(0,0,0,.66), rgba(0,0,0,.18)), url("${safeUrl}")` };
 }

@@ -1445,25 +1445,206 @@ h2 {
 
 .home-dashboard-main {
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .home-hero {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--panel);
+  background:
+    radial-gradient(circle at 78% 18%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 34%),
+    linear-gradient(120deg, color-mix(in srgb, var(--panel) 90%, var(--accent-soft)), var(--panel));
 }
 
-.home-hero-actions {
+.home-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 0%, rgba(255, 255, 255, 0.08) 46%, transparent 68%);
+  transform: translateX(-62%);
+  animation: homeVisualSheen 7s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.home-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.home-hero h1 {
+  margin-bottom: 0;
+  font-size: 20px;
+}
+
+.home-action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.home-action-section {
+  min-height: 296px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 94%, var(--bg));
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.055);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.home-action-section:hover {
+  border-color: color-mix(in srgb, var(--home-tone) 32%, var(--line));
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.075);
+  transform: translateY(-1px);
+}
+
+.home-action-section.featured {
+  background: color-mix(in srgb, var(--panel) 88%, var(--accent-soft));
+}
+
+.home-action-section.tone-blue {
+  --home-tone: #60a5fa;
+  --home-tone-soft: rgba(96, 165, 250, 0.16);
+}
+
+.home-action-section.tone-green {
+  --home-tone: #4f7f58;
+  --home-tone-soft: rgba(79, 127, 88, 0.17);
+}
+
+.home-action-section.tone-amber {
+  --home-tone: #d6b46d;
+  --home-tone-soft: rgba(214, 180, 109, 0.18);
+}
+
+.home-action-section > header {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+
+.home-action-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.home-action-icon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--accent);
+  background: var(--panel-soft);
+}
+
+.home-action-section h2 {
+  font-size: 15px;
+  line-height: 1.15;
+}
+
+.home-action-section header span,
+.home-action-note {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.home-action-section > header button {
+  min-height: 28px;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 0 8px;
+}
+
+.home-action-visual {
+  position: relative;
+  min-height: 132px;
+  overflow: hidden;
+  display: grid;
+  align-content: end;
+  justify-items: start;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--home-tone) 24%, var(--line));
+  border-radius: 8px;
+  background:
+    linear-gradient(115deg, rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0.03)),
+    radial-gradient(circle at 18% 22%, var(--home-tone-soft), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--panel-soft) 78%, var(--home-tone-soft)), var(--panel));
+  background-size: 100% 100%, 180% 180%, 160% 160%;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  animation: homeVisualDrift 10s ease-in-out infinite alternate;
+  transition: border-color 160ms ease, transform 160ms ease, filter 160ms ease;
+}
+
+.home-action-visual:hover {
+  border-color: color-mix(in srgb, var(--home-tone) 46%, var(--line));
+  filter: saturate(1.08);
+  transform: translateY(-1px);
+}
+
+.home-action-visual::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.12) 42%, transparent 68%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 18px);
+  transform: translateX(-42%);
+  animation: homeVisualSheen 5.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.home-action-visual::after {
+  content: "";
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  width: 42px;
+  height: 42px;
+  border: 1px solid color-mix(in srgb, var(--home-tone) 42%, transparent);
+  border-radius: 50%;
+  box-shadow:
+    -22px 30px 0 -14px color-mix(in srgb, var(--home-tone) 34%, transparent),
+    -64px 18px 0 -18px color-mix(in srgb, var(--home-tone) 28%, transparent);
+  opacity: 0.7;
+  animation: homeVisualPulse 4.8s ease-in-out infinite;
+}
+
+.home-visual-count {
+  position: relative;
+  z-index: 1;
+  font-size: 34px;
+  font-weight: 760;
+  line-height: 0.95;
+}
+
+.home-visual-label {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .home-metrics {
@@ -1529,17 +1710,18 @@ h2 {
 .home-item-rows,
 .dashboard-bars {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
 .home-item-rows button {
-  min-height: 42px;
+  min-height: 40px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   justify-content: stretch;
   gap: 10px;
   padding: 7px 8px;
+  border-radius: 6px;
   text-align: left;
 }
 
@@ -1562,6 +1744,43 @@ h2 {
   font-size: 12px;
   font-style: normal;
   font-weight: 500;
+}
+
+.home-empty {
+  min-height: 40px;
+  display: grid;
+  align-items: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@keyframes homeVisualDrift {
+  from {
+    background-position: 50% 50%, 0% 30%, 0% 50%;
+  }
+  to {
+    background-position: 50% 50%, 100% 70%, 100% 50%;
+  }
+}
+
+@keyframes homeVisualSheen {
+  0%, 42% {
+    transform: translateX(-52%);
+  }
+  72%, 100% {
+    transform: translateX(52%);
+  }
+}
+
+@keyframes homeVisualPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.52;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.82;
+  }
 }
 
 .dashboard-bars button,
