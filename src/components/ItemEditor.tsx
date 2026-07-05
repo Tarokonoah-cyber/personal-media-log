@@ -245,6 +245,7 @@ function PrivateForm({
             </select>
           </label>
           <Field label="評分（0-10）" value={form.rating} onChange={(value) => setForm({ ...form, rating: value })} inputMode="decimal" />
+          <label className="check"><input type="checkbox" checked={form.used} onChange={(event) => setForm({ ...form, used: event.target.checked })} />已使用</label>
           <SelectField label="心情" value={form.mood} options={moodOptions} onChange={(value) => setForm({ ...form, mood: value })} />
           <SelectField label="重看" value={form.rewatch_intent} options={rewatchIntentOptions} onChange={(value) => setForm({ ...form, rewatch_intent: value })} />
           <SelectField label="收藏等級" value={form.collection_level} options={collectionLevelOptions} onChange={(value) => setForm({ ...form, collection_level: value })} />
@@ -345,6 +346,7 @@ function toForm(item: MediaItem) {
     mood: reflection.mood,
     rewatch_intent: reflection.rewatch_intent,
     collection_level: reflection.collection_level,
+    used: privateUsedValue(metadata),
     private_code: details.code !== "-" ? details.code : "",
     private_title: privateTitle,
     private_performers: details.performers !== "-" ? details.performers : metadataList(metadata, ["actresses", "performers", "cast", "actors"]),
@@ -404,6 +406,7 @@ function toPrivateInput(form: FormState): ItemInput {
     type: privateType
   });
   const metadataWithReflection = mergeReflectionMetadata(JSON.stringify(metadata), reflectionInput(form));
+  const metadataWithUsed = mergePrivateUsedMetadata(JSON.stringify(metadataWithReflection), form.used);
 
   return {
     raw_title: title || code || form.raw_title,
@@ -426,7 +429,7 @@ function toPrivateInput(form: FormState): ItemInput {
     long_note: emptyToNull(form.long_note),
     source_url: emptyToNull(form.source_url),
     cover_url: emptyToNull(form.cover_url),
-    metadata_json: metadataToString(metadataWithReflection),
+    metadata_json: metadataToString(metadataWithUsed),
     tags: splitList(form.tags),
     people: performers,
     collections: splitList(form.collections),
@@ -488,6 +491,21 @@ function mergePrivateMetadata(value: string, update: { code: string; title: stri
   setOrDelete(metadata, "maker", update.studio);
   setOrDelete(metadata, "year", update.releaseYear);
   setOrDelete(metadata, "type", update.type);
+  return metadata;
+}
+
+function privateUsedValue(metadata: Record<string, unknown>) {
+  const raw = metadata.used ?? metadata.is_used ?? metadata.viewed;
+  if (typeof raw === "boolean") return raw;
+  if (typeof raw === "number") return raw === 1;
+  if (typeof raw === "string") return ["true", "1", "yes", "y", "已使用", "使用過", "used"].includes(raw.trim().toLowerCase());
+  return false;
+}
+
+function mergePrivateUsedMetadata(value: string | null, used: boolean) {
+  const metadata = parseMetadata(value);
+  if (used) metadata.used = true;
+  else delete metadata.used;
   return metadata;
 }
 

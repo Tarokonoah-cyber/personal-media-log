@@ -76,7 +76,7 @@ export function ItemList({
   const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
   const allColumns = useMemo(
     () => [
-      ...(privateMode ? privateColumnDefs() : generalColumnDefs({ onToggleFavorite, onDelete, onMetadata, onQuickUpdate })),
+      ...(privateMode ? privateColumnDefs({ onQuickUpdate }) : generalColumnDefs({ onToggleFavorite, onDelete, onMetadata, onQuickUpdate })),
       ...customColumns.map(customColumnDef)
     ],
     [customColumns, privateMode, onDelete, onMetadata, onQuickUpdate, onToggleFavorite]
@@ -89,8 +89,11 @@ export function ItemList({
   useEffect(() => {
     const available = new Set(allColumns.map((column) => column.id));
     const stored = loadStoredColumns(storageKey, available);
-    setSelectedColumnIds(stored.length > 0 ? stored : defaultColumnIds.filter((id) => available.has(id)));
-  }, [allColumns, defaultColumnIds, storageKey]);
+    const selected = stored.length > 0 ? stored : defaultColumnIds.filter((id) => available.has(id));
+    const nextSelected = privateMode && available.has("used") ? ensureColumnAfter(selected, "used", "rating") : selected;
+    setSelectedColumnIds(nextSelected);
+    if (stored.length > 0 && nextSelected.length !== stored.length) localStorage.setItem(storageKey, JSON.stringify(nextSelected));
+  }, [allColumns, defaultColumnIds, privateMode, storageKey]);
 
   useEffect(() => {
     setCustomColumns(loadCustomColumns(customStorageKey));
@@ -709,7 +712,7 @@ function generalColumnDefs({
   ];
 }
 
-function privateColumnDefs(): ColumnDef[] {
+function privateColumnDefs({ onQuickUpdate }: { onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void> }): ColumnDef[] {
   return [
     { id: "code", label: "番號", colClassName: "private-code-col", cellClassName: "private-code-cell", render: (item) => privateItemDetails(item).code },
     {
@@ -744,6 +747,7 @@ function privateColumnDefs(): ColumnDef[] {
     },
     { id: "year", label: "年份", colClassName: "private-year-col", cellClassName: "muted-cell private-year-cell", render: (item) => privateItemDetails(item).releaseYear },
     { id: "rating", label: "評分", colClassName: "private-rating-col", render: (item) => <RatingValue item={item} /> },
+    { id: "used", label: "已使用", colClassName: "private-used-col", cellClassName: "private-used-cell", render: (item) => <PrivateUsedToggle item={item} onQuickUpdate={onQuickUpdate} /> },
     { id: "mood", label: "心情", colClassName: "reflection-col", render: (item) => <ReflectionBadge value={getItemReflection(item).mood} /> },
     { id: "rewatch_intent", label: "重看", colClassName: "reflection-col", render: (item) => <ReflectionBadge value={getItemReflection(item).rewatch_intent} /> },
     { id: "collection_level", label: "收藏等級", colClassName: "reflection-col", render: (item) => <ReflectionBadge value={getItemReflection(item).collection_level} /> },
@@ -762,8 +766,41 @@ function customColumnDef(column: CustomColumn): ColumnDef {
   };
 }
 
+function PrivateUsedToggle({ item, onQuickUpdate }: { item: MediaItem; onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void> }) {
+  const used = privateUsedValue(item.metadata_json);
+  return (
+    <label className="private-used-toggle" onClick={(event) => event.stopPropagation()} title={used ? "已使用" : "未使用"}>
+      <input
+        type="checkbox"
+        checked={used}
+        disabled={!onQuickUpdate}
+        onChange={(event) => {
+          void onQuickUpdate?.(item, { metadata_json: mergePrivateUsedMetadata(item.metadata_json, event.target.checked) });
+        }}
+      />
+      <span>{used ? "已使用" : "未使用"}</span>
+    </label>
+  );
+}
+
+function privateUsedValue(value: string | null) {
+  const metadata = parseMetadata(value);
+  const raw = metadata.used ?? metadata.is_used ?? metadata.viewed;
+  if (typeof raw === "boolean") return raw;
+  if (typeof raw === "number") return raw === 1;
+  if (typeof raw === "string") return ["true", "1", "yes", "y", "已使用", "使用過", "used"].includes(raw.trim().toLowerCase());
+  return false;
+}
+
+function mergePrivateUsedMetadata(value: string | null, used: boolean) {
+  const metadata = parseMetadata(value);
+  if (used) metadata.used = true;
+  else delete metadata.used;
+  return Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null;
+}
+
 function defaultColumnsForScope(scope: string, privateMode: boolean): ColumnId[] {
-  if (privateMode) return ["code", "title", "performers", "studio", "year", "rating", "mood", "rewatch_intent", "collection_level", "tags"];
+  if (privateMode) return ["code", "title", "performers", "studio", "year", "rating", "used", "mood", "rewatch_intent", "collection_level", "tags"];
   if (isShadiaoScope(scope)) return ["sheet_title", "shadiao_author", "shadiao_status", "shadiao_update_status", "shadiao_progress", "sheet_rating", "sheet_mood", "sheet_rewatch", "sheet_tags", "updated", "actions"];
   if (scope.includes("電影")) return ["title", "year", "status", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];
   if (scope.includes("影集") || scope.includes("動畫")) return ["title", "year", "status", "progress", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];
@@ -782,6 +819,14 @@ function loadStoredColumns(key: string, available: Set<ColumnId>) {
   } catch {
     return [];
   }
+}
+
+function ensureColumnAfter(columns: ColumnId[], column: ColumnId, after: ColumnId) {
+  if (columns.includes(column)) return columns;
+  const next = [...columns];
+  const index = next.indexOf(after);
+  next.splice(index >= 0 ? index + 1 : next.length, 0, column);
+  return next;
 }
 
 function loadCustomColumns(key: string): CustomColumn[] {

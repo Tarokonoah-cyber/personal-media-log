@@ -4721,7 +4721,7 @@ h2 {
   }
 
   .private-table {
-    min-width: 1260px;
+    min-width: 1340px;
     font-size: 13px;
   }
 
@@ -4736,11 +4736,11 @@ h2 {
   }
 
   .private-code-col {
-    width: 132px;
+    width: 168px;
   }
 
   .private-title-col {
-    width: 38%;
+    width: 28%;
   }
 
   .private-performer-col {
@@ -4757,6 +4757,10 @@ h2 {
 
   .private-rating-col {
     width: 78px;
+  }
+
+  .private-used-col {
+    width: 92px;
   }
 
   .private-tags-col {
@@ -4801,6 +4805,33 @@ h2 {
   .private-table .rating-value svg {
     width: 12px;
     height: 12px;
+  }
+
+  .private-used-cell {
+    text-align: center;
+  }
+
+  .private-used-toggle {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .private-used-toggle input {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--accent);
+  }
+
+  .private-used-toggle span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .private-table .mini-tags {
