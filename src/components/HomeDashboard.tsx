@@ -1,4 +1,4 @@
-import { ArrowRight, Bookmark, CheckCircle2, Clock3, Database, Film, PlayCircle, Sparkles, Star } from "lucide-react";
+import { ArrowRight, Database, PlayCircle, Sparkles, Star } from "lucide-react";
 import { isThisWeek, isToday } from "../lib/date";
 import { getStats, listItems } from "../lib/api";
 import { buildOrganizerIssues, type OrganizerIssueKind } from "../lib/organizationInsights";
@@ -71,9 +71,9 @@ export function HomeDashboard({
   const weekCount = items.filter((item) => isThisWeek(item.created_at)).length;
 
   return (
-    <section className="summary-line" aria-label="Home summary">
-      <span>Today <b>{todayCount}</b></span>
-      <span>Week <b>{weekCount}</b></span>
+    <section className="summary-line" aria-label="觀看摘要">
+      <span>今天 <b>{todayCount}</b></span>
+      <span>本週 <b>{weekCount}</b></span>
     </section>
   );
 }
@@ -106,7 +106,7 @@ function MainDashboard({
         setStats(nextStats);
         setOrganizerItems(nextOrganizerItems);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Home failed to load");
+        if (!cancelled) setError(err instanceof Error ? err.message : "首頁資料載入失敗");
       }
     }
     void loadHome();
@@ -128,11 +128,11 @@ function MainDashboard({
   const nextItems = useMemo(() => buildNextItems(homeItems, focusItem), [focusItem, homeItems]);
 
   if (error) return <div className="notice danger">{error}</div>;
-  if (!stats) return <div className="empty">Loading home...</div>;
+  if (!stats) return <div className="empty">首頁載入中...</div>;
 
   if (!focusItem) {
     return (
-      <section className="home-dashboard-main home-clean" aria-label="Home">
+      <section className="home-dashboard-main home-clean" aria-label="首頁">
         <HomeTop stats={stats} buckets={homeItems} includePrivate={includePrivate} />
         <EmptyHome onView={onView} />
       </section>
@@ -140,7 +140,7 @@ function MainDashboard({
   }
 
   return (
-    <section className="home-dashboard-main home-clean" aria-label="Home">
+    <section className="home-dashboard-main home-clean" aria-label="首頁">
       <HomeTop stats={stats} buckets={homeItems} includePrivate={includePrivate} />
 
       <div className="home-clean-hero">
@@ -155,7 +155,7 @@ function MainDashboard({
           <ArrowRight size={18} />
         </button>
 
-        <aside className="home-clean-side" aria-label="Shortcuts">
+        <aside className="home-clean-side" aria-label="快速入口">
           <NextPanel items={nextItems} onSelect={onSelect} />
           <button className="home-clean-status" onClick={() => onTool?.("organizer")}>
             <Sparkles size={15} />
@@ -179,10 +179,10 @@ function HomeTop({ stats, buckets, includePrivate }: { stats: StatsResponse; buc
   return (
     <header className="home-clean-top">
       <div>
-        <p>{includePrivate ? "PRIVATE" : "LIBRARY"}</p>
-        <h1>Home</h1>
+        <p>{includePrivate ? "私密片庫" : "觀看資料庫"}</p>
+        <h1>首頁</h1>
       </div>
-      <div className="home-clean-metrics" aria-label="Library summary">
+      <div className="home-clean-metrics" aria-label="資料摘要">
         {summaryFacts(stats, buckets).map((fact) => <span key={fact}>{fact}</span>)}
       </div>
     </header>
@@ -192,12 +192,11 @@ function HomeTop({ stats, buckets, includePrivate }: { stats: StatsResponse; buc
 function EmptyHome({ onView }: { onView?: (view: string) => void }) {
   return (
     <div className="home-clean-empty">
-      <Film size={24} />
-      <strong>No titles yet</strong>
-      <span>Add one item and this page will become your watching home.</span>
+      <strong>還沒有紀錄</strong>
+      <span>先新增一筆作品，首頁就會顯示你的續看、待看與最近動態。</span>
       <div>
-        <button className="primary" onClick={() => onView?.("database")}>Open library</button>
-        <button onClick={() => onView?.("plan_to_watch")}>Queue</button>
+        <button className="primary" onClick={() => onView?.("database")}>開啟資料庫</button>
+        <button onClick={() => onView?.("plan_to_watch")}>待觀看</button>
       </div>
     </div>
   );
@@ -207,7 +206,7 @@ function NextPanel({ items, onSelect }: { items: MediaItem[]; onSelect?: (item: 
   return (
     <div className="home-clean-next">
       <header>
-        <span>Next</span>
+        <span>接下來</span>
       </header>
       {items.length ? (
         <div className="home-clean-next-list">
@@ -222,7 +221,7 @@ function NextPanel({ items, onSelect }: { items: MediaItem[]; onSelect?: (item: 
           ))}
         </div>
       ) : (
-        <p>Clear</p>
+        <p>暫無項目</p>
       )}
     </div>
   );
@@ -230,11 +229,11 @@ function NextPanel({ items, onSelect }: { items: MediaItem[]; onSelect?: (item: 
 
 function QuickActions({ onView, onTool }: { onView?: (view: string) => void; onTool?: (tab: ToolTab) => void }) {
   return (
-    <nav className="home-clean-actions" aria-label="Quick actions">
-      <button onClick={() => onView?.("database")} title="Library"><Database size={14} />Library</button>
-      <button onClick={() => onView?.("favorites")} title="Favorites"><Star size={14} />Stars</button>
-      <button onClick={() => onView?.("watching")} title="Watching"><PlayCircle size={14} />Now</button>
-      <button onClick={() => onTool?.("organizer")} title="Organizer"><Sparkles size={14} />Clean</button>
+    <nav className="home-clean-actions" aria-label="快速操作">
+      <button onClick={() => onView?.("database")} title="資料庫"><Database size={14} />資料庫</button>
+      <button onClick={() => onView?.("favorites")} title="收藏"><Star size={14} />收藏</button>
+      <button onClick={() => onView?.("watching")} title="正在看"><PlayCircle size={14} />續看</button>
+      <button onClick={() => onTool?.("organizer")} title="整理中心"><Sparkles size={14} />整理</button>
     </nav>
   );
 }
@@ -244,7 +243,7 @@ function MediaRail({ rail, onView, onSelect }: { rail: MediaRailConfig; onView?:
     <section className="home-clean-rail" aria-label={rail.title}>
       <header>
         <span>{rail.title}</span>
-        <button onClick={() => onView?.(rail.view)} aria-label={`Open ${rail.title}`}>
+        <button onClick={() => onView?.(rail.view)} aria-label={`開啟${rail.title}`}>
           <ArrowRight size={15} />
         </button>
       </header>
@@ -305,32 +304,32 @@ function buildNextItems(buckets: HomeBuckets, focusItem: MediaItem | null) {
 
 function buildMediaRails(buckets: HomeBuckets): MediaRailConfig[] {
   return [
-    { id: "watching", title: "Watching", view: "watching", items: buckets.watching },
-    { id: "queue", title: "Queue", view: "plan_to_watch", items: buckets.plan },
-    { id: "done", title: "Done", view: "completed", items: buckets.completed },
-    { id: "recent", title: "Recent", view: "database", items: buckets.recent }
+    { id: "watching", title: "正在看", view: "watching", items: buckets.watching },
+    { id: "queue", title: "待觀看", view: "plan_to_watch", items: buckets.plan },
+    { id: "done", title: "已看完", view: "completed", items: buckets.completed },
+    { id: "recent", title: "最近更新", view: "database", items: buckets.recent }
   ].filter((rail) => rail.items.length > 0);
 }
 
 function summaryFacts(stats: StatsResponse, buckets: HomeBuckets) {
-  if (stats.total === 0) return ["Empty"];
-  const facts = [`${stats.total} titles`];
-  if (buckets.watching.length) facts.push(`${buckets.watching.length} watching`);
-  if (buckets.plan.length) facts.push(`${buckets.plan.length} queued`);
-  if (stats.averageRating) facts.push(`Avg ${stats.averageRating}`);
-  if (stats.currentYear) facts.push(`This year ${stats.currentYear}`);
+  if (stats.total === 0) return ["尚無紀錄"];
+  const facts = [`${stats.total} 筆`];
+  if (buckets.watching.length) facts.push(`${buckets.watching.length} 部續看`);
+  if (buckets.plan.length) facts.push(`${buckets.plan.length} 部待看`);
+  if (stats.averageRating) facts.push(`平均 ${stats.averageRating}`);
+  if (stats.currentYear) facts.push(`今年 ${stats.currentYear}`);
   return facts;
 }
 
 function organizerCompactText(issues: ReturnType<typeof buildOrganizerIssues>) {
-  if (!issues.length) return "Clean";
+  if (!issues.length) return "資料乾淨";
   const counts = issueCounts(issues);
-  if (counts.duplicate) return `Duplicates ${counts.duplicate}`;
-  if (counts.missing) return `Missing info ${counts.missing}`;
-  if (counts.progress) return `Progress ${counts.progress}`;
-  if (counts.naming) return `Naming ${counts.naming}`;
-  if (counts.rating) return `Ratings ${counts.rating}`;
-  return `Clean up ${issues.length}`;
+  if (counts.duplicate) return `疑似重複 ${counts.duplicate}`;
+  if (counts.missing) return `缺資料 ${counts.missing}`;
+  if (counts.progress) return `進度待補 ${counts.progress}`;
+  if (counts.naming) return `命名待整理 ${counts.naming}`;
+  if (counts.rating) return `評分待檢查 ${counts.rating}`;
+  return `待整理 ${issues.length}`;
 }
 
 function issueCounts(issues: ReturnType<typeof buildOrganizerIssues>) {
@@ -345,10 +344,10 @@ function filterHomeItems(items: MediaItem[]) {
 
 function focusLabel(item: MediaItem) {
   const status = getWatchStatus(item);
-  if (status === "watching" || status === "rewatching") return "NOW";
-  if (status === "plan_to_watch") return "QUEUE";
-  if (status === "completed") return "DONE";
-  return "RECENT";
+  if (status === "watching" || status === "rewatching") return "接著看";
+  if (status === "plan_to_watch") return "待觀看";
+  if (status === "completed") return "已看完";
+  return "最近更新";
 }
 
 function focusLine(item: MediaItem) {

@@ -5030,11 +5030,11 @@ h2 {
 
 .home-clean-focus {
   min-width: 0;
-  min-height: 214px;
+  min-height: 292px;
   display: grid;
-  grid-template-columns: 118px minmax(0, 1fr) 26px;
+  grid-template-columns: 184px minmax(0, 1fr) 26px;
   align-items: center;
-  gap: 18px;
+  gap: 24px;
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -5080,7 +5080,7 @@ h2 {
 .home-clean-focus-copy strong {
   overflow: hidden;
   color: var(--text);
-  font-size: 30px;
+  font-size: 34px;
   line-height: 1.08;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5300,8 +5300,8 @@ h2 {
 }
 
 .home-clean-thumb.feature {
-  width: 118px;
-  height: 164px;
+  width: 184px;
+  height: 256px;
   font-size: 32px;
 }
 
@@ -5319,28 +5319,25 @@ h2 {
 }
 
 .home-clean-empty {
-  min-height: 320px;
+  min-height: 0;
   display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
-  text-align: center;
-}
-
-.home-clean-empty svg {
-  color: var(--accent);
+  text-align: left;
 }
 
 .home-clean-empty strong {
   color: var(--text);
-  font-size: 22px;
+  font-size: 18px;
 }
 
 .home-clean-empty span {
-  max-width: 320px;
+  max-width: 520px;
   color: var(--muted);
   font-size: 14px;
   line-height: 1.45;
@@ -5350,7 +5347,7 @@ h2 {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 6px;
+  margin-top: 0;
 }
 
 .home-clean-empty > div button:not(.primary) {
@@ -5391,9 +5388,9 @@ h2 {
   }
 
   .home-clean-focus {
-    grid-template-columns: 82px minmax(0, 1fr);
-    min-height: 132px;
-    gap: 12px;
+    grid-template-columns: 108px minmax(0, 1fr);
+    min-height: 156px;
+    gap: 14px;
     padding: 12px;
   }
 
@@ -5402,9 +5399,9 @@ h2 {
   }
 
   .home-clean-thumb.feature {
-    width: 82px;
-    height: 112px;
-    font-size: 24px;
+    width: 108px;
+    height: 150px;
+    font-size: 26px;
   }
 
   .home-clean-focus-copy {
@@ -5412,7 +5409,7 @@ h2 {
   }
 
   .home-clean-focus-copy strong {
-    font-size: 20px;
+    font-size: 22px;
   }
 
   .home-clean-focus-copy b {
@@ -5442,12 +5439,12 @@ h2 {
 
 @media (max-width: 460px) {
   .home-clean-focus {
-    grid-template-columns: 66px minmax(0, 1fr);
+    grid-template-columns: 82px minmax(0, 1fr);
   }
 
   .home-clean-thumb.feature {
-    width: 66px;
-    height: 90px;
+    width: 82px;
+    height: 114px;
   }
 
   .home-clean-tiles {
@@ -5455,8 +5452,8 @@ h2 {
   }
 
   .home-clean-empty {
-    min-height: 260px;
-    padding: 20px;
+    grid-template-columns: 1fr;
+    padding: 16px;
   }
 
   .home-clean-empty > div {
