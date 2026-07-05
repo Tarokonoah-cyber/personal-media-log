@@ -217,9 +217,10 @@ function QuickActions({ onView, onTool }: { onView?: (view: string) => void; onT
 }
 
 function PosterCarousel({ items, onSelect }: { items: MediaItem[]; onSelect?: (item: MediaItem) => void }) {
-  const loopItems = items.length > 1 ? [...items, ...items] : items;
+  const loopSet = buildLoopSet(items);
+  const loopItems = [...loopSet, ...loopSet];
   return (
-    <section className={`home-poster-carousel ${items.length <= 1 ? "is-static" : ""}`} aria-label="接著看海報輪播">
+    <section className="home-poster-carousel" aria-label="接著看海報輪播">
       <header>
         <div>
           <span>接著看</span>
@@ -281,6 +282,13 @@ function buildCarouselItems(buckets: HomeBuckets) {
     seen.add(item.id);
   }
   return items;
+}
+
+function buildLoopSet(items: MediaItem[]) {
+  if (items.length === 0) return [];
+  const minimumCards = 14;
+  const repeatCount = Math.max(1, Math.ceil(minimumCards / items.length));
+  return Array.from({ length: repeatCount }).flatMap(() => items);
 }
 
 function buildNextItems(buckets: HomeBuckets, focusItem: MediaItem | null) {

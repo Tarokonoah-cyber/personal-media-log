@@ -5023,19 +5023,19 @@ h2 {
 .home-clean-hero {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 330px);
   align-items: stretch;
-  gap: 18px;
+  gap: 20px;
 }
 
 .home-poster-carousel {
   min-width: 0;
-  min-height: 348px;
+  min-height: clamp(430px, 48vh, 560px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: 18px;
+  gap: 22px;
   overflow: hidden;
-  padding: 18px;
+  padding: 22px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
@@ -5071,6 +5071,8 @@ h2 {
 
 .home-poster-window {
   min-width: 0;
+  display: grid;
+  align-items: center;
   overflow: hidden;
   mask-image: linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 42px), transparent);
 }
@@ -5079,18 +5081,17 @@ h2 {
   width: max-content;
   display: flex;
   align-items: start;
-  gap: 16px;
-  animation: homePosterLoop 34s linear infinite;
+  gap: 18px;
+  animation: homePosterLoop 62s linear infinite;
 }
 
-.home-poster-carousel.is-static .home-poster-track,
 .home-poster-carousel:hover .home-poster-track {
   animation-play-state: paused;
 }
 
 .home-poster-card {
-  width: 164px;
-  min-width: 164px;
+  width: 220px;
+  min-width: 220px;
   display: grid;
   align-content: start;
   justify-items: start;
@@ -5132,7 +5133,7 @@ h2 {
   }
 
   to {
-    transform: translateX(calc(-50% - 8px));
+    transform: translateX(calc(-50% - 9px));
   }
 }
 
@@ -5420,9 +5421,9 @@ h2 {
 }
 
 .home-clean-thumb.poster {
-  width: 164px;
-  height: 238px;
-  font-size: 30px;
+  width: 220px;
+  height: 320px;
+  font-size: 34px;
 }
 
 .home-clean-thumb.mini {
@@ -5551,7 +5552,7 @@ h2 {
   }
 
   .home-poster-carousel {
-    min-height: 292px;
+    min-height: 380px;
     padding: 14px;
   }
 
@@ -5561,12 +5562,12 @@ h2 {
 
   .home-poster-card,
   .home-clean-thumb.poster {
-    width: 124px;
-    min-width: 124px;
+    width: 156px;
+    min-width: 156px;
   }
 
   .home-clean-thumb.poster {
-    height: 180px;
+    height: 226px;
   }
 }
 
@@ -5585,17 +5586,17 @@ h2 {
   }
 
   .home-poster-carousel {
-    min-height: 262px;
+    min-height: 330px;
   }
 
   .home-poster-card,
   .home-clean-thumb.poster {
-    width: 108px;
-    min-width: 108px;
+    width: 132px;
+    min-width: 132px;
   }
 
   .home-clean-thumb.poster {
-    height: 158px;
+    height: 192px;
   }
 
   .home-clean-empty {
