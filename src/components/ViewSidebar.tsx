@@ -1,4 +1,4 @@
-import { BarChart3, Clapperboard, ChevronLeft, ChevronRight, Database, Film, Folder, Hash, Heart, Home, Layers, Settings, Tags, Tv, X } from "lucide-react";
+import { BarChart3, Clapperboard, ChevronLeft, ChevronRight, Database, Film, Folder, Hash, Heart, Home, Layers, Settings, Sparkles, Tags, Tv, X } from "lucide-react";
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { isPrivateLibraryLabel } from "../lib/privacy";
@@ -7,7 +7,7 @@ import type { ListFilters, MediaItem } from "../types";
 import { HomeDashboard } from "./HomeDashboard";
 
 type DisplayView = "table" | "list" | "poster" | "calendar";
-type ToolTab = "stats" | "data" | "settings";
+type ToolTab = "organizer" | "stats" | "data" | "settings";
 
 const mainItems = [
   { id: "home", label: "首頁", icon: Home },
@@ -16,6 +16,7 @@ const mainItems = [
 ] as const;
 
 const toolItems = [
+  { id: "organizer", label: "整理中心", icon: Sparkles },
   { id: "stats", label: "統計", icon: BarChart3 },
   { id: "data", label: "資料備份", icon: Database },
   { id: "settings", label: "設定", icon: Settings }

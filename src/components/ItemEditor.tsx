@@ -86,7 +86,8 @@ export function ItemEditor({
             <p className="eyebrow">{privateEditor ? "私密內容編輯" : "編輯紀錄"}</p>
             <h2>{privateEditor ? privateHeader(form) : item.official_title || item.raw_title}</h2>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="關閉"><X size={18} /></button>
+          {hasUnsavedChanges && <span className="unsaved-badge">未儲存</span>}
+          <button className="icon-button" onClick={requestCloseWithConfirmation} aria-label="關閉"><X size={18} /></button>
         </header>
         {error && <div className="notice danger">{error}</div>}
 
@@ -119,45 +120,54 @@ function GeneralForm({
   setMetadataOpen: (open: boolean | ((open: boolean) => boolean)) => void;
 }) {
   return (
-    <div className="form-grid">
-      <label className="wide">
-        觀看狀態
-        <select value={form.watch_status} onChange={(event) => setForm({ ...form, watch_status: event.target.value as WatchStatus })}>
-          {watchStatuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
-        </select>
-      </label>
+    <div className="form-stack">
+      <section className="editor-section wide">
+        <h3>核心資料</h3>
+        <div className="form-grid nested">
+          <Field label="原始標題" value={form.raw_title} onChange={(value) => setForm({ ...form, raw_title: value })} required />
+          <Field label="正式標題" value={form.official_title} onChange={(value) => setForm({ ...form, official_title: value })} />
+          <Field label="原文標題" value={form.original_title} onChange={(value) => setForm({ ...form, original_title: value })} />
+          <label>
+            類型
+            <select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}>
+              {typeOptions(form.type).map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
+          </label>
+          <Field label="分類 / 地區" value={form.category} onChange={(value) => setForm({ ...form, category: value })} />
+          <PlatformField value={form.platform} onChange={(value) => setForm({ ...form, platform: value })} />
+          <Field label="年份" value={form.release_year} onChange={(value) => setForm({ ...form, release_year: value })} inputMode="numeric" />
+          <Field label="人物" value={form.people} onChange={(value) => setForm({ ...form, people: value })} />
+          <Field label="清單" value={form.collections} onChange={(value) => setForm({ ...form, collections: value })} />
+        </div>
+      </section>
 
-      <Field label="原始標題" value={form.raw_title} onChange={(value) => setForm({ ...form, raw_title: value })} required />
-      <Field label="正式標題" value={form.official_title} onChange={(value) => setForm({ ...form, official_title: value })} />
-      <Field label="原文標題" value={form.original_title} onChange={(value) => setForm({ ...form, original_title: value })} />
-
-      <label>
-        類型
-        <select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}>
-          {typeOptions(form.type).map((type) => <option key={type} value={type}>{type}</option>)}
-        </select>
-      </label>
-      <Field label="分類 / 地區" value={form.category} onChange={(value) => setForm({ ...form, category: value })} />
-      <PlatformField value={form.platform} onChange={(value) => setForm({ ...form, platform: value })} />
-      <Field label="年份" value={form.release_year} onChange={(value) => setForm({ ...form, release_year: value })} inputMode="numeric" />
-
-      <Field label="想看日期" value={form.planned_at} onChange={(value) => setForm({ ...form, planned_at: value })} type="date" />
-      <Field label="觀看日期" value={form.watched_at} onChange={(value) => setForm({ ...form, watched_at: value })} type="date" />
-
-      {!seriesLike && (
-        <label className="check wide completion-check">
-          <input
-            type="checkbox"
-            checked={form.watch_status === "completed"}
-            onChange={(event) => setForm({
-              ...form,
-              watch_status: event.target.checked ? "completed" : "watching",
-              watched_at: event.target.checked && !form.watched_at ? todayDate() : form.watched_at
-            })}
-          />
-          看完（1/1）
-        </label>
-      )}
+      <section className="editor-section wide">
+        <h3>觀看狀態與日期</h3>
+        <div className="form-grid nested">
+          <label className="wide">
+            觀看狀態
+            <select value={form.watch_status} onChange={(event) => setForm({ ...form, watch_status: event.target.value as WatchStatus })}>
+              {watchStatuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
+            </select>
+          </label>
+          <Field label="想看日期" value={form.planned_at} onChange={(value) => setForm({ ...form, planned_at: value })} type="date" />
+          <Field label="觀看日期" value={form.watched_at} onChange={(value) => setForm({ ...form, watched_at: value })} type="date" />
+          {!seriesLike && (
+            <label className="check wide completion-check">
+              <input
+                type="checkbox"
+                checked={form.watch_status === "completed"}
+                onChange={(event) => setForm({
+                  ...form,
+                  watch_status: event.target.checked ? "completed" : "watching",
+                  watched_at: event.target.checked && !form.watched_at ? todayDate() : form.watched_at
+                })}
+              />
+              看完（1/1）
+            </label>
+          )}
+        </div>
+      </section>
 
       {seriesLike && (
         <section className="editor-section wide">
@@ -186,14 +196,13 @@ function GeneralForm({
         </div>
       </section>
 
-      <Field label="來源網址" value={form.source_url} onChange={(value) => setForm({ ...form, source_url: value })} />
-      <Field label="封面網址" value={form.cover_url} onChange={(value) => setForm({ ...form, cover_url: value })} />
-      <Field label="人物" value={form.people} onChange={(value) => setForm({ ...form, people: value })} />
-      <Field label="清單" value={form.collections} onChange={(value) => setForm({ ...form, collections: value })} />
-
       <section className="editor-section wide">
         <h3>進階</h3>
-        <label className="check"><input type="checkbox" checked={form.is_private} onChange={(event) => setForm({ ...form, is_private: event.target.checked })} />私密紀錄</label>
+        <div className="form-grid nested">
+          <Field label="來源網址" value={form.source_url} onChange={(value) => setForm({ ...form, source_url: value })} />
+          <Field label="封面網址" value={form.cover_url} onChange={(value) => setForm({ ...form, cover_url: value })} />
+          <label className="check"><input type="checkbox" checked={form.is_private} onChange={(event) => setForm({ ...form, is_private: event.target.checked })} />私密紀錄</label>
+        </div>
         <button type="button" onClick={() => setMetadataOpen((open) => !open)}>{metadataOpen ? "收合" : "展開"} 原始補充資料</button>
         {metadataOpen && <textarea value={form.metadata_json} onChange={(event) => setForm({ ...form, metadata_json: event.target.value })} rows={8} />}
       </section>
@@ -213,13 +222,18 @@ function PrivateForm({
   setMetadataOpen: (open: boolean | ((open: boolean) => boolean)) => void;
 }) {
   return (
-    <div className="form-grid private-form-grid">
-      <Field label="番號" value={form.private_code} onChange={(value) => setForm({ ...form, private_code: value, code: value })} />
-      <Field label="片名" value={form.private_title} onChange={(value) => setForm({ ...form, private_title: value })} />
-      <Field label="女優 / 演員" value={form.private_performers} onChange={(value) => setForm({ ...form, private_performers: value, people: value })} />
-      <Field label="片商" value={form.private_studio} onChange={(value) => setForm({ ...form, private_studio: value, platform: value })} />
-      <Field label="發售年份" value={form.release_year} onChange={(value) => setForm({ ...form, release_year: value })} inputMode="numeric" />
-      <Field label="類型" value={form.private_type} onChange={(value) => setForm({ ...form, private_type: value, category: value })} />
+    <div className="form-stack private-form-grid">
+      <section className="editor-section wide">
+        <h3>核心資料</h3>
+        <div className="form-grid nested">
+          <Field label="番號" value={form.private_code} onChange={(value) => setForm({ ...form, private_code: value, code: value })} />
+          <Field label="片名" value={form.private_title} onChange={(value) => setForm({ ...form, private_title: value })} />
+          <Field label="女優 / 演員" value={form.private_performers} onChange={(value) => setForm({ ...form, private_performers: value, people: value })} />
+          <Field label="片商" value={form.private_studio} onChange={(value) => setForm({ ...form, private_studio: value, platform: value })} />
+          <Field label="發售年份" value={form.release_year} onChange={(value) => setForm({ ...form, release_year: value })} inputMode="numeric" />
+          <Field label="類型" value={form.private_type} onChange={(value) => setForm({ ...form, private_type: value, category: value })} />
+        </div>
+      </section>
 
       <section className="editor-section wide">
         <h3>私密紀錄</h3>
@@ -243,7 +257,9 @@ function PrivateForm({
 
       <section className="editor-section wide subtle-section">
         <h3>進階設定</h3>
-        <label className="check"><input type="checkbox" checked={form.is_private} onChange={(event) => setForm({ ...form, is_private: event.target.checked })} />私密紀錄</label>
+        <div className="form-grid nested">
+          <label className="check"><input type="checkbox" checked={form.is_private} onChange={(event) => setForm({ ...form, is_private: event.target.checked })} />私密紀錄</label>
+        </div>
         <button type="button" onClick={() => setMetadataOpen((open) => !open)}>{metadataOpen ? "收合" : "展開"} 原始補充資料</button>
         {metadataOpen && <textarea value={form.metadata_json} onChange={(event) => setForm({ ...form, metadata_json: event.target.value })} rows={8} />}
       </section>

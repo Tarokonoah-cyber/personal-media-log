@@ -182,6 +182,9 @@ export function ItemList({
       <div className={view === "list" ? "compact-list force-list" : "compact-list"}>
         {items.map((item) => (
           <article className="compact-row" key={item.id} onClick={() => onSelect(item)}>
+            <span className="compact-cover" aria-hidden="true">
+              {item.cover_url ? <img src={item.cover_url} alt="" /> : coverInitial(item)}
+            </span>
             <div className="compact-main">
               <div className="compact-title">
                 <strong>{item.official_title || item.raw_title}</strong>
@@ -247,6 +250,8 @@ function BatchToolbar({
   const [platform, setPlatform] = useState("");
   const [tags, setTags] = useState("");
   const disabled = selectedItems.length === 0;
+
+  if (disabled) return null;
 
   async function applyWatchStatus() {
     if (!watchStatus || disabled) return;
