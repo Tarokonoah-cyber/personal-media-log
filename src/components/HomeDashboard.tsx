@@ -41,13 +41,6 @@ interface HomeBuckets {
   completed: MediaItem[];
 }
 
-interface MediaRailConfig {
-  id: string;
-  title: string;
-  view: string;
-  items: MediaItem[];
-}
-
 export function HomeDashboard({
   items = [],
   variant = "sidebar",
@@ -123,8 +116,8 @@ function MainDashboard({
   }), [stats]);
 
   const organizerIssues = useMemo(() => buildOrganizerIssues(organizerItems, new Set(), includePrivate), [includePrivate, organizerItems]);
-  const focusItem = useMemo(() => pickFocusItem(homeItems, stats), [homeItems, stats]);
-  const rails = useMemo(() => buildMediaRails(homeItems), [homeItems]);
+  const carouselItems = useMemo(() => buildCarouselItems(homeItems), [homeItems]);
+  const focusItem = useMemo(() => pickFocusItem(carouselItems), [carouselItems]);
   const nextItems = useMemo(() => buildNextItems(homeItems, focusItem), [focusItem, homeItems]);
 
   if (error) return <div className="notice danger">{error}</div>;
@@ -144,16 +137,7 @@ function MainDashboard({
       <HomeTop stats={stats} buckets={homeItems} includePrivate={includePrivate} />
 
       <div className="home-clean-hero">
-        <button className="home-clean-focus" onClick={() => onSelect?.(focusItem)}>
-          <Thumb item={focusItem} size="feature" />
-          <span className="home-clean-focus-copy">
-            <em>{focusLabel(focusItem)}</em>
-            <strong>{titleFor(focusItem)}</strong>
-            <small>{focusLine(focusItem)}</small>
-            {noteExcerpt(focusItem) ? <b>{noteExcerpt(focusItem)}</b> : null}
-          </span>
-          <ArrowRight size={18} />
-        </button>
+        <PosterCarousel items={carouselItems} onSelect={onSelect} />
 
         <aside className="home-clean-side" aria-label="快速入口">
           <NextPanel items={nextItems} onSelect={onSelect} />
@@ -164,12 +148,6 @@ function MainDashboard({
           </button>
           <QuickActions onView={onView} onTool={onTool} />
         </aside>
-      </div>
-
-      <div className="home-clean-rails">
-        {rails.map((rail) => (
-          <MediaRail key={rail.id} rail={rail} onView={onView} onSelect={onSelect} />
-        ))}
       </div>
     </section>
   );
@@ -192,8 +170,8 @@ function HomeTop({ stats, buckets, includePrivate }: { stats: StatsResponse; buc
 function EmptyHome({ onView }: { onView?: (view: string) => void }) {
   return (
     <div className="home-clean-empty">
-      <strong>還沒有紀錄</strong>
-      <span>先新增一筆作品，首頁就會顯示你的續看、待看與最近動態。</span>
+      <strong>目前沒有續看項目</strong>
+      <span>把作品標成正在看或待觀看，首頁就會出現海報輪播。</span>
       <div>
         <button className="primary" onClick={() => onView?.("database")}>開啟資料庫</button>
         <button onClick={() => onView?.("plan_to_watch")}>待觀看</button>
@@ -238,29 +216,33 @@ function QuickActions({ onView, onTool }: { onView?: (view: string) => void; onT
   );
 }
 
-function MediaRail({ rail, onView, onSelect }: { rail: MediaRailConfig; onView?: (view: string) => void; onSelect?: (item: MediaItem) => void }) {
+function PosterCarousel({ items, onSelect }: { items: MediaItem[]; onSelect?: (item: MediaItem) => void }) {
+  const loopItems = items.length > 1 ? [...items, ...items] : items;
   return (
-    <section className="home-clean-rail" aria-label={rail.title}>
+    <section className={`home-poster-carousel ${items.length <= 1 ? "is-static" : ""}`} aria-label="接著看海報輪播">
       <header>
-        <span>{rail.title}</span>
-        <button onClick={() => onView?.(rail.view)} aria-label={`開啟${rail.title}`}>
-          <ArrowRight size={15} />
-        </button>
+        <div>
+          <span>接著看</span>
+          <small>正在看與待觀看</small>
+        </div>
+        <b>{items.length} 部</b>
       </header>
-      <div className="home-clean-tiles">
-        {rail.items.slice(0, 6).map((item) => (
-          <button key={item.id} className="home-clean-tile" onClick={() => onSelect?.(item)}>
-            <Thumb item={item} size="tile" />
+      <div className="home-poster-window">
+        <div className="home-poster-track">
+          {loopItems.map((item, index) => (
+          <button key={`${item.id}-${index}`} className="home-poster-card" onClick={() => onSelect?.(item)}>
+            <Thumb item={item} size="poster" />
             <strong>{titleFor(item)}</strong>
             <small>{compactMeta(item)}</small>
           </button>
-        ))}
+          ))}
+        </div>
       </div>
     </section>
   );
 }
 
-function Thumb({ item, size = "tile" }: { item: MediaItem; size?: "mini" | "tile" | "feature" }) {
+function Thumb({ item, size = "tile" }: { item: MediaItem; size?: "mini" | "tile" | "feature" | "poster" }) {
   return (
     <span className={`home-clean-thumb ${size}`} aria-hidden="true">
       {item.cover_url ? <img src={item.cover_url} alt="" /> : coverInitial(item)}
@@ -286,8 +268,19 @@ async function loadOrganizerItems(includePrivate: boolean) {
   return allItems;
 }
 
-function pickFocusItem(buckets: HomeBuckets, stats: StatsResponse | null) {
-  return buckets.watching[0] || buckets.plan[0] || buckets.completed[0] || buckets.recent[0] || stats?.top[0] || null;
+function pickFocusItem(carouselItems: MediaItem[]) {
+  return carouselItems[0] || null;
+}
+
+function buildCarouselItems(buckets: HomeBuckets) {
+  const seen = new Set<string>();
+  const items: MediaItem[] = [];
+  for (const item of [...buckets.watching, ...buckets.plan]) {
+    if (seen.has(item.id)) continue;
+    items.push(item);
+    seen.add(item.id);
+  }
+  return items;
 }
 
 function buildNextItems(buckets: HomeBuckets, focusItem: MediaItem | null) {
@@ -300,15 +293,6 @@ function buildNextItems(buckets: HomeBuckets, focusItem: MediaItem | null) {
     if (items.length >= 3) break;
   }
   return items;
-}
-
-function buildMediaRails(buckets: HomeBuckets): MediaRailConfig[] {
-  return [
-    { id: "watching", title: "正在看", view: "watching", items: buckets.watching },
-    { id: "queue", title: "待觀看", view: "plan_to_watch", items: buckets.plan },
-    { id: "done", title: "已看完", view: "completed", items: buckets.completed },
-    { id: "recent", title: "最近更新", view: "database", items: buckets.recent }
-  ].filter((rail) => rail.items.length > 0);
 }
 
 function summaryFacts(stats: StatsResponse, buckets: HomeBuckets) {
@@ -342,18 +326,6 @@ function filterHomeItems(items: MediaItem[]) {
   return items.filter((item) => !hiddenHomeTypes.has(classifyItem(item).type));
 }
 
-function focusLabel(item: MediaItem) {
-  const status = getWatchStatus(item);
-  if (status === "watching" || status === "rewatching") return "接著看";
-  if (status === "plan_to_watch") return "待觀看";
-  if (status === "completed") return "已看完";
-  return "最近更新";
-}
-
-function focusLine(item: MediaItem) {
-  return compactMeta(item) || displayDate(item) || watchStatusLabel(getWatchStatus(item));
-}
-
 function compactMeta(item: MediaItem) {
   const parts = [
     progressLabel(item) || watchStatusLabel(getWatchStatus(item)),
@@ -362,17 +334,6 @@ function compactMeta(item: MediaItem) {
     typeof item.rating === "number" ? `★ ${item.rating}` : ""
   ].filter(Boolean);
   return parts.join(" · ");
-}
-
-function noteExcerpt(item: MediaItem) {
-  const note = (item.quick_note || item.long_note || "").replace(/\s+/g, " ").trim();
-  if (!note) return "";
-  return note.length > 64 ? `${note.slice(0, 64)}...` : note;
-}
-
-function displayDate(item: MediaItem) {
-  const date = item.watched_at || item.completed_at || item.planned_at || item.updated_at || item.created_at;
-  return date ? date.slice(0, 10) : "";
 }
 
 function titleFor(item: MediaItem) {
