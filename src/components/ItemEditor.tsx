@@ -92,7 +92,7 @@ export function ItemEditor({
         {error && <div className="notice danger">{error}</div>}
 
         {privateEditor ? (
-          <PrivateForm form={form} setForm={setForm} metadataOpen={metadataOpen} setMetadataOpen={setMetadataOpen} />
+          <PrivateForm form={form} setForm={setForm} />
         ) : (
           <GeneralForm form={form} setForm={setForm} seriesLike={seriesLike} metadataOpen={metadataOpen} setMetadataOpen={setMetadataOpen} />
         )}
@@ -212,14 +212,10 @@ function GeneralForm({
 
 function PrivateForm({
   form,
-  setForm,
-  metadataOpen,
-  setMetadataOpen
+  setForm
 }: {
   form: FormState;
   setForm: (form: FormState) => void;
-  metadataOpen: boolean;
-  setMetadataOpen: (open: boolean | ((open: boolean) => boolean)) => void;
 }) {
   return (
     <div className="form-stack private-form-grid">
@@ -238,31 +234,12 @@ function PrivateForm({
       <section className="editor-section wide">
         <h3>私密紀錄</h3>
         <div className="form-grid nested">
-          <label>
-            狀態
-            <select value={form.watch_status} onChange={(event) => setForm({ ...form, watch_status: event.target.value as WatchStatus })}>
-              {watchStatuses.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
-            </select>
-          </label>
           <Field label="評分（0-10）" value={form.rating} onChange={(value) => setForm({ ...form, rating: value })} inputMode="decimal" />
           <label className="check"><input type="checkbox" checked={form.used} onChange={(event) => setForm({ ...form, used: event.target.checked })} />已使用</label>
-          <SelectField label="心情" value={form.mood} options={moodOptions} onChange={(value) => setForm({ ...form, mood: value })} />
-          <SelectField label="重看" value={form.rewatch_intent} options={rewatchIntentOptions} onChange={(value) => setForm({ ...form, rewatch_intent: value })} />
           <SelectField label="收藏等級" value={form.collection_level} options={collectionLevelOptions} onChange={(value) => setForm({ ...form, collection_level: value })} />
-          <label className="check"><input type="checkbox" checked={form.favorite} onChange={(event) => setForm({ ...form, favorite: event.target.checked })} />星標收藏</label>
           <Field label="標籤" value={form.tags} onChange={(value) => setForm({ ...form, tags: value })} />
           <label className="wide">快速筆記<textarea value={form.quick_note} onChange={(event) => setForm({ ...form, quick_note: event.target.value })} rows={3} /></label>
-          <label className="wide">長筆記<textarea value={form.long_note} onChange={(event) => setForm({ ...form, long_note: event.target.value })} rows={6} /></label>
         </div>
-      </section>
-
-      <section className="editor-section wide subtle-section">
-        <h3>進階設定</h3>
-        <div className="form-grid nested">
-          <label className="check"><input type="checkbox" checked={form.is_private} onChange={(event) => setForm({ ...form, is_private: event.target.checked })} />私密紀錄</label>
-        </div>
-        <button type="button" onClick={() => setMetadataOpen((open) => !open)}>{metadataOpen ? "收合" : "展開"} 原始補充資料</button>
-        {metadataOpen && <textarea value={form.metadata_json} onChange={(event) => setForm({ ...form, metadata_json: event.target.value })} rows={8} />}
       </section>
     </div>
   );
@@ -405,7 +382,7 @@ function toPrivateInput(form: FormState): ItemInput {
     releaseYear: form.release_year.trim(),
     type: privateType
   });
-  const metadataWithReflection = mergeReflectionMetadata(JSON.stringify(metadata), reflectionInput(form));
+  const metadataWithReflection = mergeReflectionMetadata(JSON.stringify(metadata), privateReflectionInput(form));
   const metadataWithUsed = mergePrivateUsedMetadata(JSON.stringify(metadataWithReflection), form.used);
 
   return {
@@ -423,17 +400,17 @@ function toPrivateInput(form: FormState): ItemInput {
     planned_at: null,
     rating: numberOrNull(form.rating),
     rewatch_score: null,
-    favorite: form.favorite,
+    favorite: false,
     is_private: true,
     quick_note: emptyToNull(form.quick_note),
-    long_note: emptyToNull(form.long_note),
+    long_note: null,
     source_url: emptyToNull(form.source_url),
     cover_url: emptyToNull(form.cover_url),
     metadata_json: metadataToString(metadataWithUsed),
     tags: splitList(form.tags),
     people: performers,
     collections: splitList(form.collections),
-    ...progressInput(form, false)
+    ...privateProgressInput()
   };
 }
 
@@ -454,10 +431,25 @@ function progressInput(form: FormState, includeSeriesProgress: boolean) {
   });
 }
 
+function privateProgressInput() {
+  return {
+    status: "raw" as const,
+    progress_json: null
+  };
+}
+
 function reflectionInput(form: FormState) {
   return {
     mood: form.mood,
     rewatch_intent: form.rewatch_intent,
+    collection_level: form.collection_level
+  };
+}
+
+function privateReflectionInput(form: FormState) {
+  return {
+    mood: "",
+    rewatch_intent: "",
     collection_level: form.collection_level
   };
 }
