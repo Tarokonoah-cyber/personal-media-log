@@ -727,7 +727,7 @@ function privateColumnDefs({ onQuickUpdate }: { onQuickUpdate?: (item: MediaItem
     },
     {
       id: "performers",
-      label: "女優・演員",
+      label: "女優",
       colClassName: "private-performer-col",
       cellClassName: "private-text-cell",
       render: (item) => {
@@ -745,12 +745,10 @@ function privateColumnDefs({ onQuickUpdate }: { onQuickUpdate?: (item: MediaItem
         return <span title={studio}>{studio}</span>;
       }
     },
-    { id: "year", label: "年份", colClassName: "private-year-col", cellClassName: "muted-cell private-year-cell", render: (item) => privateItemDetails(item).releaseYear },
+    { id: "year", label: "年分", colClassName: "private-year-col", cellClassName: "muted-cell private-year-cell", render: (item) => privateItemDetails(item).releaseYear },
     { id: "rating", label: "評分", colClassName: "private-rating-col", render: (item) => <RatingValue item={item} /> },
     { id: "used", label: "已使用", colClassName: "private-used-col", cellClassName: "private-used-cell", render: (item) => <PrivateUsedToggle item={item} onQuickUpdate={onQuickUpdate} /> },
-    { id: "mood", label: "心情", colClassName: "reflection-col", render: (item) => <ReflectionBadge value={getItemReflection(item).mood} /> },
-    { id: "rewatch_intent", label: "重看", colClassName: "reflection-col", render: (item) => <ReflectionBadge value={getItemReflection(item).rewatch_intent} /> },
-    { id: "collection_level", label: "收藏等級", colClassName: "reflection-col", render: (item) => <ReflectionBadge value={getItemReflection(item).collection_level} /> },
+    { id: "collection_level", label: "收藏", colClassName: "private-collection-col", render: (item) => <ReflectionBadge value={getItemReflection(item).collection_level} /> },
     { id: "tags", label: "標籤", colClassName: "private-tags-col", render: (item) => <Tags tags={item.tags} limit={4} /> }
   ];
 }
