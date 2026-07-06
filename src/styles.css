@@ -507,6 +507,17 @@ h2 {
 
 .private-shell-topbar {
   grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 40px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.private-shell-topbar .private-shell-title {
+  display: none;
+}
+
+.private-shell-topbar > .icon-button:last-child {
+  grid-column: 3;
 }
 
 .private-shell-title {
@@ -701,6 +712,189 @@ h2 {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+
+.private-workbench-compact {
+  gap: 6px;
+}
+
+.private-control-row {
+  min-width: 0;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 84%, transparent);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  white-space: nowrap;
+}
+
+.private-current-count {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 0 4px;
+}
+
+.private-current-count strong {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.private-current-count span {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.private-summary-details {
+  flex: 0 0 auto;
+  min-height: 32px;
+}
+
+.private-summary-details summary {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  cursor: pointer;
+  user-select: none;
+}
+
+.private-summary-details[open] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.private-summary-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.private-summary-value {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--field) 72%, transparent);
+}
+
+.private-summary-value small {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.private-summary-value b {
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.private-collection-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.private-collection-inline button {
+  min-height: 30px;
+  gap: 5px;
+  padding: 0 8px;
+  border-color: var(--line);
+  color: var(--muted);
+  background: color-mix(in srgb, var(--field) 72%, transparent);
+}
+
+.private-collection-inline button.active {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--line));
+  background: var(--accent-soft);
+}
+
+.private-collection-inline b {
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.private-search-compact {
+  flex: 0 0 245px;
+  min-width: 245px;
+}
+
+.private-control-row > label:not(.private-search-field),
+.private-compact-field {
+  flex: 0 0 auto;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--field) 72%, transparent);
+  font-size: 12px;
+}
+
+.private-control-row > label input,
+.private-control-row > label select {
+  min-height: 26px;
+  width: 88px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+}
+
+.private-control-row > .private-search-field input {
+  width: 100%;
+}
+
+.private-score-field .range-fields,
+.private-control-row .range-fields {
+  width: 104px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.private-score-field .range-fields input,
+.private-control-row .range-fields input {
+  width: 100%;
+}
+
+.private-control-row .private-filter-actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  justify-content: flex-start;
+}
+
+.private-control-row .private-filter-actions button,
+.private-control-row .private-pagination button {
+  min-height: 32px;
+}
+
+.private-pagination {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: 6px;
 }
 
 .search-field {
