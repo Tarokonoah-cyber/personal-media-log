@@ -1,9 +1,10 @@
 import { BarChart3, Clapperboard, ChevronLeft, ChevronRight, Database, Film, Folder, Hash, Heart, Home, Layers, Settings, Sparkles, Tags, Tv, X } from "lucide-react";
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { isPrivateLibraryLabel } from "../lib/privacy";
+import { isPrivateLibraryLabel, PRIVATE_LIBRARY_LABEL } from "../lib/privacy";
+import { collectionLevelOptions } from "../lib/reflection";
 import { libraryTree } from "../lib/taxonomy";
-import type { ListFilters, MediaItem } from "../types";
+import type { ListFilters, MediaItem, PrivateSummary } from "../types";
 import { HomeDashboard } from "./HomeDashboard";
 
 type DisplayView = "table" | "list" | "poster" | "calendar";
@@ -29,6 +30,8 @@ export function ViewSidebar({
   inboxTotal,
   tags,
   filters,
+  privateMode = false,
+  privateSummary,
   safeMode,
   collapsed,
   mobileOpen,
@@ -37,7 +40,8 @@ export function ViewSidebar({
   onView,
   onLibrary,
   onTag,
-  onTool
+  onTool,
+  onPrivateFilter
 }: {
   activeView: string;
   displayView: DisplayView;
@@ -46,6 +50,8 @@ export function ViewSidebar({
   inboxTotal: number;
   tags: string[];
   filters: ListFilters;
+  privateMode?: boolean;
+  privateSummary?: PrivateSummary | null;
   safeMode: boolean;
   collapsed: boolean;
   mobileOpen: boolean;
@@ -56,6 +62,7 @@ export function ViewSidebar({
   onLibrary: (type: string, category?: string) => void;
   onTag: (tag: string) => void;
   onTool: (tab: ToolTab) => void;
+  onPrivateFilter?: (patch: Partial<ListFilters>) => void;
 }) {
   const [showAllTags, setShowAllTags] = useState(false);
   const showText = !collapsed || mobileOpen;
@@ -64,6 +71,79 @@ export function ViewSidebar({
     if (activeView === "home" && entry.label === "沙雕动画") return false;
     return !safeMode || !isPrivateLibraryLabel(entry.label);
   });
+
+  if (privateMode) {
+    const collectionLevels = Array.from(new Set([
+      ...collectionLevelOptions,
+      ...(privateSummary?.collectionCounts.map((entry) => entry.level) || [])
+    ]));
+    const countForLevel = (level: string) => privateSummary?.collectionCounts.find((entry) => entry.level === level)?.count;
+    return (
+      <>
+        <div className={mobileOpen ? "sidebar-scrim open" : "sidebar-scrim"} onClick={onCloseMobile} />
+        <aside className={`${collapsed ? "database-sidebar collapsed private-sidebar" : "database-sidebar private-sidebar"} ${mobileOpen ? "mobile-open" : ""}`} aria-label="私密資料導覽">
+          <div className="sidebar-top">
+            {showText && (
+              <div className="sidebar-brand">
+                <p>Personal Media Log</p>
+                <strong>私密工作台</strong>
+                <span>{privateSummary?.total || 0} 筆資料</span>
+              </div>
+            )}
+            <button className="row-icon desktop-collapse" onClick={onToggleCollapsed} title={collapsed ? "展開側欄" : "收合側欄"}>
+              {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
+            <button className="row-icon mobile-close" onClick={onCloseMobile} title="關閉側欄"><X size={16} /></button>
+          </div>
+
+          <NavSection title="私密" showText={showText} tone="primary">
+            <button className={!hasPrivateSidebarFilter(filters) ? "active" : ""} onClick={() => onPrivateFilter?.({})} title="全部私密">
+              <Database size={16} />
+              {showText && <span>全部</span>}
+            </button>
+            <button className={filters.usedFilter === "used" ? "active" : ""} onClick={() => onPrivateFilter?.({ usedFilter: "used" })} title="已使用">
+              <Heart size={16} />
+              {showText && <span>已使用</span>}
+            </button>
+            <button className={filters.usedFilter === "unused" ? "active" : ""} onClick={() => onPrivateFilter?.({ usedFilter: "unused" })} title="未使用">
+              <Folder size={16} />
+              {showText && <span>未使用</span>}
+            </button>
+          </NavSection>
+
+          <NavSection title="收藏" showText={showText} tone="secondary">
+            {collectionLevels.map((level) => (
+              <button key={level} className={filters.collectionLevel === level ? "active" : ""} onClick={() => onPrivateFilter?.({ collectionLevel: level })} title={level}>
+                <Heart size={15} />
+                {showText && <span>{level}{countForLevel(level) !== undefined ? ` ${countForLevel(level)}` : ""}</span>}
+              </button>
+            ))}
+          </NavSection>
+
+          <NavSection title="標籤" showText={showText} tone="tags">
+            {tags.length === 0 ? (
+              showText && <em>尚無標籤</em>
+            ) : (
+              <>
+                {visibleTags.map((tag) => (
+                  <button key={tag} className={filters.tag === tag ? "active" : ""} onClick={() => onPrivateFilter?.({ tag })} title={tag}>
+                    {!showText ? <Hash size={14} /> : <span className="tag-prefix">#</span>}
+                    {showText && <span>{tag}</span>}
+                  </button>
+                ))}
+                {showText && tags.length > 3 && (
+                  <button className="sidebar-more" onClick={() => setShowAllTags((value) => !value)}>
+                    <Tags size={13} />
+                    {showAllTags ? "收合標籤" : "更多標籤..."}
+                  </button>
+                )}
+              </>
+            )}
+          </NavSection>
+        </aside>
+      </>
+    );
+  }
 
   return (
     <>
@@ -155,6 +235,10 @@ function isMainActive(id: string, activeView: string, filters: ListFilters) {
   if (id === "database") return activeView === "database" && !filters.favorite;
   if (id === "favorites") return activeView === "favorites" || filters.favorite;
   return activeView === id;
+}
+
+function hasPrivateSidebarFilter(filters: ListFilters) {
+  return Boolean(filters.usedFilter !== "all" || filters.collectionLevel || filters.tag);
 }
 
 function iconFor(label: string) {

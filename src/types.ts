@@ -43,6 +43,15 @@ export interface ItemListResponse {
   page: number;
   pageSize: number;
   total: number;
+  privateSummary?: PrivateSummary;
+}
+
+export interface PrivateSummary {
+  total: number;
+  used: number;
+  unused: number;
+  averageRating: number | null;
+  collectionCounts: Array<{ level: string; count: number }>;
 }
 
 export interface ListFilters {

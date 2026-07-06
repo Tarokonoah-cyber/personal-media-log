@@ -87,3 +87,11 @@ export interface ItemListParams {
   page: number;
   pageSize: number;
 }
+
+export interface PrivateSummary {
+  total: number;
+  used: number;
+  unused: number;
+  averageRating: number | null;
+  collectionCounts: Array<{ level: string; count: number }>;
+}

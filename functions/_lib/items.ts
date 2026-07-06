@@ -2,7 +2,7 @@ import { HttpError } from "./http";
 import { inboxWhereSql } from "./organization";
 import { hasPrivateSignalValues, isPrivateMarker as isPrivateMarkerValue, privateItemWhereSql, publicItemWhereSql } from "./privacy";
 import { newId, nowIso } from "./ids";
-import type { Actor, Env, ItemInput, ItemListParams, ItemRecord, ItemStatus, WatchStatus } from "./types";
+import type { Actor, Env, ItemInput, ItemListParams, ItemRecord, ItemStatus, WatchStatus, PrivateSummary } from "./types";
 
 type Row = Record<string, unknown>;
 
@@ -37,6 +37,32 @@ const itemColumns = [
 ].join(", ");
 
 export async function listItems(env: Env, params: ItemListParams) {
+  const { whereSql, bind } = buildItemWhere(params);
+  const page = Math.max(1, params.page);
+  const pageSize = Math.min(100, Math.max(1, params.pageSize));
+  const offset = (page - 1) * pageSize;
+
+  const countStmt = env.MEDIA_LOG_DB.prepare(`SELECT COUNT(*) AS count FROM items ${whereSql}`).bind(...bind);
+  const listStmt = env.MEDIA_LOG_DB
+    .prepare(`SELECT ${itemColumns} FROM items ${whereSql} ORDER BY datetime(updated_at) DESC LIMIT ? OFFSET ?`)
+    .bind(...bind, pageSize, offset);
+  const summaryPromise = params.privateOnly ? getPrivateSummary(env, whereSql, bind) : Promise.resolve(undefined);
+  const [countResult, listResult, privateSummary] = await Promise.all([
+    countStmt.first<{ count: number }>(),
+    listStmt.all<Row>(),
+    summaryPromise
+  ]);
+  const items = await hydrateItems(env, listResult.results || []);
+  return {
+    items,
+    page,
+    pageSize,
+    total: countResult?.count || 0,
+    ...(privateSummary ? { privateSummary } : {})
+  };
+}
+
+function buildItemWhere(params: ItemListParams) {
   const where: string[] = [];
   const bind: unknown[] = [];
 
@@ -192,22 +218,47 @@ export async function listItems(env: Env, params: ItemListParams) {
     bind.push(like, like, like, like, like, like, like, like, like);
   }
 
-  const page = Math.max(1, params.page);
-  const pageSize = Math.min(100, Math.max(1, params.pageSize));
-  const offset = (page - 1) * pageSize;
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  return { whereSql, bind };
+}
 
-  const countStmt = env.MEDIA_LOG_DB.prepare(`SELECT COUNT(*) AS count FROM items ${whereSql}`).bind(...bind);
-  const listStmt = env.MEDIA_LOG_DB
-    .prepare(`SELECT ${itemColumns} FROM items ${whereSql} ORDER BY datetime(updated_at) DESC LIMIT ? OFFSET ?`)
-    .bind(...bind, pageSize, offset);
-  const [countResult, listResult] = await Promise.all([countStmt.first<{ count: number }>(), listStmt.all<Row>()]);
-  const items = await hydrateItems(env, listResult.results || []);
+async function getPrivateSummary(env: Env, whereSql: string, bind: unknown[]): Promise<PrivateSummary> {
+  const usedSql = "json_valid(items.metadata_json) AND json_extract(items.metadata_json, '$.used') = 1";
+  const totalsStmt = env.MEDIA_LOG_DB.prepare(`
+    SELECT
+      COUNT(*) AS total,
+      SUM(CASE WHEN ${usedSql} THEN 1 ELSE 0 END) AS used,
+      AVG(items.rating) AS averageRating
+    FROM items ${whereSql}
+  `).bind(...bind);
+  const collectionStmt = env.MEDIA_LOG_DB.prepare(`
+    SELECT collection_level AS level, COUNT(*) AS count
+    FROM (
+      SELECT CASE WHEN json_valid(items.metadata_json) THEN coalesce(
+          json_extract(items.metadata_json, '$.reflection.collection_level'),
+          json_extract(items.metadata_json, '$.collection_level')
+        ) ELSE NULL END AS collection_level
+      FROM items ${whereSql}
+    )
+    WHERE collection_level IS NOT NULL AND collection_level != ''
+    GROUP BY collection_level
+    ORDER BY count DESC, collection_level ASC
+  `).bind(...bind);
+  const [totals, collections] = await Promise.all([
+    totalsStmt.first<{ total: number; used: number | null; averageRating: number | null }>(),
+    collectionStmt.all<{ level: string; count: number }>()
+  ]);
+  const total = Number(totals?.total || 0);
+  const used = Number(totals?.used || 0);
   return {
-    items,
-    page,
-    pageSize,
-    total: countResult?.count || 0
+    total,
+    used,
+    unused: Math.max(0, total - used),
+    averageRating: totals?.averageRating === null || totals?.averageRating === undefined ? null : Number(totals.averageRating),
+    collectionCounts: (collections.results || []).map((row) => ({
+      level: String(row.level),
+      count: Number(row.count)
+    }))
   };
 }
 

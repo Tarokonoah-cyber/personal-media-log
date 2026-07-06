@@ -1,5 +1,4 @@
 import { SlidersHorizontal, X } from "lucide-react";
-import { collectionLevelOptions } from "../lib/reflection";
 import type { ListFilters } from "../types";
 
 export function FilterSheet({
@@ -102,45 +101,6 @@ function PrivateFilters({ filters, onChange }: { filters: ListFilters; onChange:
       <label>
         片名關鍵字
         <input value={filters.titleQuery} onChange={(event) => onChange({ titleQuery: event.target.value })} placeholder="輸入片名..." />
-      </label>
-      <label>
-        女優
-        <input value={filters.person} onChange={(event) => onChange({ person: event.target.value })} placeholder="輸入名稱..." />
-      </label>
-      <label>
-        片商
-        <input value={filters.studio} onChange={(event) => onChange({ studio: event.target.value, platform: event.target.value })} placeholder="輸入片商..." />
-      </label>
-      <label>
-        年分
-        <input value={filters.year} onChange={(event) => onChange({ year: event.target.value })} inputMode="numeric" placeholder="2026" />
-      </label>
-      <label>
-        最低分
-        <input value={filters.ratingMin} onChange={(event) => onChange({ ratingMin: event.target.value })} inputMode="decimal" placeholder="0" />
-      </label>
-      <label>
-        最高分
-        <input value={filters.ratingMax} onChange={(event) => onChange({ ratingMax: event.target.value })} inputMode="decimal" placeholder="10" />
-      </label>
-      <label>
-        已使用
-        <select value={filters.usedFilter} onChange={(event) => onChange({ usedFilter: event.target.value as ListFilters["usedFilter"] })}>
-          <option value="all">全部</option>
-          <option value="used">已使用</option>
-          <option value="unused">未使用</option>
-        </select>
-      </label>
-      <label>
-        收藏
-        <select value={filters.collectionLevel} onChange={(event) => onChange({ collectionLevel: event.target.value })}>
-          <option value="">全部</option>
-          {collectionLevelOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-        </select>
-      </label>
-      <label>
-        標籤
-        <input value={filters.tag} onChange={(event) => onChange({ tag: event.target.value })} placeholder="輸入私密標籤..." />
       </label>
     </div>
   );

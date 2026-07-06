@@ -1,4 +1,4 @@
-import { Columns3, Menu, Moon, Search, SlidersHorizontal, Sun } from "lucide-react";
+import { Columns3, Menu, Moon, Plus, Search, SlidersHorizontal, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { FilterSheet } from "./components/FilterSheet";
 import { HomeDashboard } from "./components/HomeDashboard";
@@ -16,9 +16,10 @@ import { applyMetadata, createItem, deleteItem, listItems, parseSmartAdd, search
 import { toItemInput } from "./lib/itemTransforms";
 import { isPrivateItem, isPrivateLibraryLabel, isPrivateMarker, PRIVATE_LIBRARY_LABEL } from "./lib/privacy";
 import { parseQuickEntry } from "./lib/quickParse";
+import { collectionLevelOptions } from "./lib/reflection";
 import { classifyItem, libraryTree } from "./lib/taxonomy";
 import { getWatchStatus, updateWatchProgress } from "./lib/watch";
-import type { ItemInput, ListFilters, MediaItem, SmartAddResponse, TmdbCandidate } from "./types";
+import type { ItemInput, ListFilters, MediaItem, PrivateSummary, SmartAddResponse, TmdbCandidate } from "./types";
 
 const defaultFilters: ListFilters = {
   query: "",
@@ -65,6 +66,7 @@ export default function App() {
   const [activeCategory, setActiveCategory] = useState("");
   const [items, setItems] = useState<MediaItem[]>([]);
   const [summaryItems, setSummaryItems] = useState<MediaItem[]>([]);
+  const [privateSummary, setPrivateSummary] = useState<PrivateSummary | null>(null);
   const [total, setTotal] = useState(0);
   const [inboxTotal, setInboxTotal] = useState(0);
   const [selected, setSelected] = useState<MediaItem | null>(null);
@@ -148,6 +150,7 @@ export default function App() {
       const result = await listItems({ ...filters, includePrivate, privateOnly: includePrivate });
       setItems(result.items);
       setTotal(result.total);
+      setPrivateSummary(result.privateSummary || null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "讀取紀錄失敗");
     } finally {
@@ -362,6 +365,14 @@ export default function App() {
     setFilters((current) => ({ ...current, ...patch, page: patch.page ?? 1 }));
   }
 
+  function selectPrivateFilter(patch: Partial<ListFilters>) {
+    setTab("log");
+    setActiveView(PRIVATE_LIBRARY_LABEL);
+    setActiveCategory("");
+    setFilters({ ...defaultFilters, ...patch, page: 1 });
+    setSidebarOpen(false);
+  }
+
   function toggleSafeMode() {
     setSafeMode((current) => {
       const next = !current;
@@ -428,27 +439,34 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <header className="topbar">
+      <header className={privateActive ? "topbar private-shell-topbar" : "topbar"}>
         <button className="icon-button mobile-sidebar-button" onClick={() => setSidebarOpen(true)} title="開啟導覽"><Menu size={18} /></button>
-        <div className="header-tools">
-          <QuickCapture
-            value={quickText}
-            loading={loading}
-            smartLoading={smartLoading}
-            onChange={(value) => {
-              setQuickText(value);
-              setSmartPreview(null);
-              setSmartDraft(null);
-            }}
-            onSubmit={submitQuick}
-            onSimpleAdd={() => setSimpleAddOpen(true)}
-            onSmartAdd={requestSmartAdd}
-          />
-          <div className="search-field header-search">
-            <Search size={15} />
-            <input value={filters.query} onChange={(event) => patchFilters({ query: event.target.value })} placeholder="搜尋標題、標籤、平台" />
+        {privateActive ? (
+          <div className="private-shell-title">
+            <strong>私密工作台</strong>
+            <span>高密度資料管理</span>
           </div>
-        </div>
+        ) : (
+          <div className="header-tools">
+            <QuickCapture
+              value={quickText}
+              loading={loading}
+              smartLoading={smartLoading}
+              onChange={(value) => {
+                setQuickText(value);
+                setSmartPreview(null);
+                setSmartDraft(null);
+              }}
+              onSubmit={submitQuick}
+              onSimpleAdd={() => setSimpleAddOpen(true)}
+              onSmartAdd={requestSmartAdd}
+            />
+            <div className="search-field header-search">
+              <Search size={15} />
+              <input value={filters.query} onChange={(event) => patchFilters({ query: event.target.value })} placeholder="搜尋標題、標籤、平台" />
+            </div>
+          </div>
+        )}
         <button className="icon-button" onClick={() => setDark((value) => !value)} title={dark ? "切換淺色模式" : "切換深色模式"}>
           {dark ? <Sun size={18} /> : <Moon size={18} />}
         </button>
@@ -478,6 +496,8 @@ export default function App() {
           inboxTotal={inboxTotal}
           tags={sidebarTags}
           filters={filters}
+          privateMode={privateActive}
+          privateSummary={privateSummary}
           safeMode={safeMode}
           collapsed={sidebarCollapsed}
           mobileOpen={sidebarOpen}
@@ -488,12 +508,31 @@ export default function App() {
           onLibrary={selectLibrary}
           onTag={selectTag}
           onTool={selectTool}
+          onPrivateFilter={selectPrivateFilter}
         />
 
         <section className="database-main">
           {tab === "log" && (
             <>
-              {activeView === "home" && !filters.query && !filters.favorite ? (
+              {privateActive ? (
+                <PrivateWorkbench
+                  filters={filters}
+                  items={visibleItems}
+                  loading={loading}
+                  pageCount={pageCount}
+                  total={total}
+                  summary={privateSummary}
+                  onPatchFilters={patchFilters}
+                  onClearFilters={resetFilters}
+                  onOpenAdvanced={() => setFiltersOpen(true)}
+                  onAdd={() => setSimpleAddOpen(true)}
+                  onSelect={setSelected}
+                  onQuickUpdate={quickUpdate}
+                  onQuickCreate={quickCreateFromTable}
+                  onBatchUpdate={batchUpdate}
+                  onBatchDelete={batchDelete}
+                />
+              ) : activeView === "home" && !filters.query && !filters.favorite ? (
                 <HomeDashboard
                   variant="main"
                   includePrivate={includePrivate}
@@ -681,6 +720,175 @@ function quickFilterLabel(view: string) {
     favorites: "收藏"
   };
   return labels[view] || view;
+}
+
+function PrivateWorkbench({
+  filters,
+  items,
+  loading,
+  pageCount,
+  total,
+  summary,
+  onPatchFilters,
+  onClearFilters,
+  onOpenAdvanced,
+  onAdd,
+  onSelect,
+  onQuickUpdate,
+  onQuickCreate,
+  onBatchUpdate,
+  onBatchDelete
+}: {
+  filters: ListFilters;
+  items: MediaItem[];
+  loading: boolean;
+  pageCount: number;
+  total: number;
+  summary: PrivateSummary | null;
+  onPatchFilters: (patch: Partial<ListFilters>) => void;
+  onClearFilters: () => void;
+  onOpenAdvanced: () => void;
+  onAdd: () => void;
+  onSelect: (item: MediaItem) => void;
+  onQuickUpdate: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
+  onQuickCreate: (input: ItemInput) => Promise<void>;
+  onBatchUpdate: (items: MediaItem[], patch: Partial<ItemInput> | ((item: MediaItem) => Partial<ItemInput>)) => Promise<void>;
+  onBatchDelete: (items: MediaItem[]) => Promise<void>;
+}) {
+  const summaryTotal = summary?.total ?? total;
+  const used = summary?.used ?? 0;
+  const unused = summary?.unused ?? Math.max(0, summaryTotal - used);
+  return (
+    <section className="private-workbench">
+      <header className="private-workbench-head">
+        <div className="database-title-block">
+          <span>私密</span>
+          <b>{total} 筆符合目前條件</b>
+        </div>
+        <div className="private-summary-grid" aria-label="私密摘要">
+          <Metric label="總筆數" value={summaryTotal.toString()} />
+          <Metric label="已使用" value={used.toString()} />
+          <Metric label="未使用" value={unused.toString()} />
+          <Metric label="平均分" value={summary?.averageRating === null || summary?.averageRating === undefined ? "-" : summary.averageRating.toFixed(1)} />
+        </div>
+      </header>
+
+      <div className="private-collection-strip" aria-label="收藏分布">
+        {summary?.collectionCounts.length ? (
+          summary.collectionCounts.map((entry) => (
+            <button
+              key={entry.level}
+              className={filters.collectionLevel === entry.level ? "active" : ""}
+              onClick={() => onPatchFilters({ collectionLevel: filters.collectionLevel === entry.level ? "" : entry.level })}
+            >
+              <span>{entry.level}</span>
+              <b>{entry.count}</b>
+            </button>
+          ))
+        ) : (
+          <span>尚無收藏分布</span>
+        )}
+      </div>
+
+      <div className="private-filter-bar" aria-label="私密篩選">
+        <label className="private-search-field">
+          <Search size={15} />
+          <input value={filters.query} onChange={(event) => onPatchFilters({ query: event.target.value })} placeholder="搜尋番號、片名、女優、標籤" />
+        </label>
+        <label>
+          分數
+          <span className="range-fields">
+            <input value={filters.ratingMin} onChange={(event) => onPatchFilters({ ratingMin: event.target.value })} inputMode="decimal" placeholder="0" />
+            <input value={filters.ratingMax} onChange={(event) => onPatchFilters({ ratingMax: event.target.value })} inputMode="decimal" placeholder="10" />
+          </span>
+        </label>
+        <label>
+          已使用
+          <select value={filters.usedFilter} onChange={(event) => onPatchFilters({ usedFilter: event.target.value as ListFilters["usedFilter"] })}>
+            <option value="all">全部</option>
+            <option value="used">已使用</option>
+            <option value="unused">未使用</option>
+          </select>
+        </label>
+        <label>
+          收藏
+          <select value={filters.collectionLevel} onChange={(event) => onPatchFilters({ collectionLevel: event.target.value })}>
+            <option value="">全部</option>
+            {collectionLevelOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
+        </label>
+        <FieldFilter label="標籤" value={filters.tag} onChange={(value) => onPatchFilters({ tag: value })} />
+        <FieldFilter label="女優" value={filters.person} onChange={(value) => onPatchFilters({ person: value })} />
+        <FieldFilter label="片商" value={filters.studio} onChange={(value) => onPatchFilters({ studio: value })} />
+        <FieldFilter label="年分" value={filters.year} inputMode="numeric" onChange={(value) => onPatchFilters({ year: value })} />
+        <div className="private-filter-actions">
+          <button className="filter-toggle advanced-filter" onClick={onOpenAdvanced}><SlidersHorizontal size={16} />進階</button>
+          <button className="filter-chip-clear" onClick={onClearFilters} disabled={!hasPrivateFilters(filters)}>清除</button>
+          <button className="primary" onClick={onAdd}><Plus size={16} />新增</button>
+        </div>
+      </div>
+
+      <FilterChips filters={filters} activeView={PRIVATE_LIBRARY_LABEL} onClear={onClearFilters} />
+
+      <div className="private-table-head">
+        <span>{total} 筆結果</span>
+        <div className="pagination-controls" aria-label="分頁">
+          <button disabled={filters.page <= 1} onClick={() => onPatchFilters({ page: filters.page - 1 })}>上一頁</button>
+          <span>{filters.page} / {pageCount}</span>
+          <button disabled={filters.page >= pageCount} onClick={() => onPatchFilters({ page: filters.page + 1 })}>下一頁</button>
+        </div>
+      </div>
+
+      <ItemList
+        items={items}
+        view="table"
+        columnScope={PRIVATE_LIBRARY_LABEL}
+        privateMode
+        density="compact"
+        loading={loading}
+        emptyMessage="沒有符合條件的私密資料。"
+        onSelect={onSelect}
+        onQuickUpdate={onQuickUpdate}
+        onQuickCreate={onQuickCreate}
+        onBatchUpdate={onBatchUpdate}
+        onBatchDelete={onBatchDelete}
+      />
+    </section>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="private-metric">
+      <b>{value}</b>
+      <small>{label}</small>
+    </span>
+  );
+}
+
+function FieldFilter({ label, value, inputMode, onChange }: { label: string; value: string; inputMode?: "numeric" | "decimal"; onChange: (value: string) => void }) {
+  return (
+    <label>
+      {label}
+      <input value={value} onChange={(event) => onChange(event.target.value)} inputMode={inputMode} />
+    </label>
+  );
+}
+
+function hasPrivateFilters(filters: ListFilters) {
+  return Boolean(
+    filters.query.trim() ||
+    filters.ratingMin.trim() ||
+    filters.ratingMax.trim() ||
+    filters.usedFilter !== "all" ||
+    filters.collectionLevel.trim() ||
+    filters.tag.trim() ||
+    filters.person.trim() ||
+    filters.studio.trim() ||
+    filters.year.trim() ||
+    filters.codeQuery.trim() ||
+    filters.titleQuery.trim()
+  );
 }
 
 function FilterChips({ filters, activeView, onClear }: { filters: ListFilters; activeView: string; onClear: () => void }) {

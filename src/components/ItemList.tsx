@@ -77,7 +77,7 @@ export function ItemList({
   const allColumns = useMemo(
     () => [
       ...(privateMode ? privateColumnDefs({ onQuickUpdate }) : generalColumnDefs({ onToggleFavorite, onDelete, onMetadata, onQuickUpdate })),
-      ...customColumns.map(customColumnDef)
+      ...(!privateMode ? customColumns.map(customColumnDef) : [])
     ],
     [customColumns, privateMode, onDelete, onMetadata, onQuickUpdate, onToggleFavorite]
   );
@@ -104,10 +104,11 @@ export function ItemList({
   }, [items]);
 
   const visibleColumns = useMemo(() => {
+    if (privateMode) return allColumns;
     const selected = new Set(selectedColumnIds);
     const columns = allColumns.filter((column) => selected.has(column.id));
     return columns.length > 0 ? columns : allColumns.filter((column) => defaultColumnIds.includes(column.id));
-  }, [allColumns, defaultColumnIds, selectedColumnIds]);
+  }, [allColumns, defaultColumnIds, privateMode, selectedColumnIds]);
 
   function updateColumns(next: ColumnId[]) {
     const available = new Set(allColumns.map((column) => column.id));
@@ -798,7 +799,7 @@ function mergePrivateUsedMetadata(value: string | null, used: boolean) {
 }
 
 function defaultColumnsForScope(scope: string, privateMode: boolean): ColumnId[] {
-  if (privateMode) return ["code", "title", "performers", "studio", "year", "rating", "used", "mood", "rewatch_intent", "collection_level", "tags"];
+  if (privateMode) return ["code", "title", "performers", "studio", "year", "rating", "used", "collection_level", "tags"];
   if (isShadiaoScope(scope)) return ["sheet_title", "shadiao_author", "shadiao_status", "shadiao_update_status", "shadiao_progress", "sheet_rating", "sheet_mood", "sheet_rewatch", "sheet_tags", "updated", "actions"];
   if (scope.includes("電影")) return ["title", "year", "status", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];
   if (scope.includes("影集") || scope.includes("動畫")) return ["title", "year", "status", "progress", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];
