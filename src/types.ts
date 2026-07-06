@@ -50,6 +50,10 @@ export interface ListFilters {
   status: "all" | "inbox" | "organized" | ItemStatus;
   favorite: boolean;
   highRated: boolean;
+  ratingMin: string;
+  ratingMax: string;
+  usedFilter: "all" | "used" | "unused";
+  collectionLevel: string;
   includePrivate?: boolean;
   privateOnly?: boolean;
   watchStatus?: WatchStatus | "all";

@@ -62,6 +62,10 @@ export interface ItemListParams {
   status?: ItemStatus | "all" | "inbox" | "organized";
   favorite?: boolean;
   highRated?: boolean;
+  ratingMin?: number;
+  ratingMax?: number;
+  usedFilter?: "all" | "used" | "unused";
+  collectionLevel?: string;
   includePrivate?: boolean;
   privateOnly?: boolean;
   watchStatus?: WatchStatus | "all";

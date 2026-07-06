@@ -60,6 +60,26 @@ export async function listItems(env: Env, params: ItemListParams) {
     where.push(watchStatusWhereSql(params.watchStatus));
   }
   if (params.highRated) where.push("items.rating >= 4");
+  if (params.ratingMin !== undefined) {
+    where.push("items.rating >= ?");
+    bind.push(params.ratingMin);
+  }
+  if (params.ratingMax !== undefined) {
+    where.push("items.rating <= ?");
+    bind.push(params.ratingMax);
+  }
+  if (params.usedFilter === "used") {
+    where.push("json_valid(items.metadata_json) AND json_extract(items.metadata_json, '$.used') = 1");
+  } else if (params.usedFilter === "unused") {
+    where.push("(items.metadata_json IS NULL OR NOT (json_valid(items.metadata_json) AND json_extract(items.metadata_json, '$.used') = 1))");
+  }
+  if (params.collectionLevel) {
+    where.push(`json_valid(items.metadata_json) AND coalesce(
+      json_extract(items.metadata_json, '$.reflection.collection_level'),
+      json_extract(items.metadata_json, '$.collection_level')
+    ) = ?`);
+    bind.push(params.collectionLevel);
+  }
   if (params.type) {
     where.push(typeWhereSql(params.type));
     bind.push(params.type, params.type, ...typeAliases(params.type).map((alias) => `%${alias.toLowerCase()}%`), ...typeAliases(params.type).map((alias) => `%${alias.toLowerCase()}%`));

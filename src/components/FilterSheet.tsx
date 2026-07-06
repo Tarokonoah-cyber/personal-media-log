@@ -1,4 +1,5 @@
 import { SlidersHorizontal, X } from "lucide-react";
+import { collectionLevelOptions } from "../lib/reflection";
 import type { ListFilters } from "../types";
 
 export function FilterSheet({
@@ -103,7 +104,7 @@ function PrivateFilters({ filters, onChange }: { filters: ListFilters; onChange:
         <input value={filters.titleQuery} onChange={(event) => onChange({ titleQuery: event.target.value })} placeholder="輸入片名..." />
       </label>
       <label>
-        女優 / 演員
+        女優
         <input value={filters.person} onChange={(event) => onChange({ person: event.target.value })} placeholder="輸入名稱..." />
       </label>
       <label>
@@ -111,31 +112,36 @@ function PrivateFilters({ filters, onChange }: { filters: ListFilters; onChange:
         <input value={filters.studio} onChange={(event) => onChange({ studio: event.target.value, platform: event.target.value })} placeholder="輸入片商..." />
       </label>
       <label>
-        發售年份
+        年分
         <input value={filters.year} onChange={(event) => onChange({ year: event.target.value })} inputMode="numeric" placeholder="2026" />
       </label>
       <label>
-        類型
-        <input value={filters.type} onChange={(event) => onChange({ type: event.target.value })} placeholder="企劃、劇情、素人..." />
+        最低分
+        <input value={filters.ratingMin} onChange={(event) => onChange({ ratingMin: event.target.value })} inputMode="decimal" placeholder="0" />
       </label>
       <label>
-        分類
-        <input value={filters.category || ""} onChange={(event) => onChange({ category: event.target.value })} placeholder="輸入分類..." />
+        最高分
+        <input value={filters.ratingMax} onChange={(event) => onChange({ ratingMax: event.target.value })} inputMode="decimal" placeholder="10" />
+      </label>
+      <label>
+        已使用
+        <select value={filters.usedFilter} onChange={(event) => onChange({ usedFilter: event.target.value as ListFilters["usedFilter"] })}>
+          <option value="all">全部</option>
+          <option value="used">已使用</option>
+          <option value="unused">未使用</option>
+        </select>
+      </label>
+      <label>
+        收藏
+        <select value={filters.collectionLevel} onChange={(event) => onChange({ collectionLevel: event.target.value })}>
+          <option value="">全部</option>
+          {collectionLevelOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
       </label>
       <label>
         標籤
         <input value={filters.tag} onChange={(event) => onChange({ tag: event.target.value })} placeholder="輸入私密標籤..." />
       </label>
-      <label>
-        更新日期起
-        <input value={filters.updatedFrom} onChange={(event) => onChange({ updatedFrom: event.target.value })} type="date" />
-      </label>
-      <label>
-        更新日期迄
-        <input value={filters.updatedTo} onChange={(event) => onChange({ updatedTo: event.target.value })} type="date" />
-      </label>
-      <label className="check"><input type="checkbox" checked={filters.favorite} onChange={(event) => onChange({ favorite: event.target.checked })} />只看收藏</label>
-      <label className="check"><input type="checkbox" checked={filters.highRated} onChange={(event) => onChange({ highRated: event.target.checked })} />高分</label>
     </div>
   );
 }

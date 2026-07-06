@@ -25,6 +25,10 @@ const defaultFilters: ListFilters = {
   status: "all",
   favorite: false,
   highRated: false,
+  ratingMin: "",
+  ratingMax: "",
+  usedFilter: "all",
+  collectionLevel: "",
   watchStatus: "all",
   type: "",
   category: "",
@@ -84,6 +88,8 @@ export default function App() {
   const [dark, setDark] = useState(() => localStorage.getItem("theme") !== "light");
   const privateView = isPrivateLibraryLabel(activeView);
   const includePrivate = privateView && !safeMode;
+  const privateActive = privateView && includePrivate;
+  const currentDisplayView = privateActive ? "table" : displayView;
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -415,7 +421,7 @@ export default function App() {
   }
 
   function resetFilters() {
-    setActiveView("database");
+    setActiveView(privateActive ? PRIVATE_LIBRARY_LABEL : "database");
     setActiveCategory("");
     setFilters(defaultFilters);
   }
@@ -500,10 +506,10 @@ export default function App() {
               <div className="database-header">
                 <div className="database-meta">
                   <div className="database-title-block">
-                    <span>{displayView === "calendar" ? "月曆視圖" : viewLabel(activeView)}</span>
-                    <b>{displayView === "calendar" ? "依觀看日期瀏覽" : `${total} 筆紀錄`}</b>
+                    <span>{currentDisplayView === "calendar" ? "月曆視圖" : viewLabel(activeView)}</span>
+                    <b>{currentDisplayView === "calendar" ? "依觀看日期瀏覽" : `${total} 筆紀錄`}</b>
                   </div>
-                  {displayView !== "calendar" && (
+                  {currentDisplayView !== "calendar" && (
                     <div className="pagination-controls" aria-label="分頁">
                       <button disabled={filters.page <= 1} onClick={() => patchFilters({ page: filters.page - 1 })}>上一頁</button>
                       <span>{filters.page} / {pageCount}</span>
@@ -513,38 +519,42 @@ export default function App() {
                 </div>
                 <div className="database-toolbar">
                   <div className="toolbar-control-row">
-                    <div className="toolbar-cluster">
-                      <span className="toolbar-label">視圖</span>
-                      <div className="segmented-control view-segment" aria-label="視圖切換">
-                        {displayViews.map((view) => (
-                          <button key={view} className={displayView === view ? "active" : ""} onClick={() => selectDisplayView(view)}>
-                            {viewLabel(view)}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="toolbar-cluster">
-                      <span className="toolbar-label">狀態</span>
-                      <div className="segmented-control status-segment" aria-label="快速狀態篩選">
-                        {quickStatusViews.map((view) => (
-                          <button key={view} className={isQuickStatusActive(view, activeView) ? "active" : ""} onClick={() => selectView(view)}>
-                            {quickFilterLabel(view)}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                    {!privateActive && (
+                      <>
+                        <div className="toolbar-cluster">
+                          <span className="toolbar-label">視圖</span>
+                          <div className="segmented-control view-segment" aria-label="視圖切換">
+                            {displayViews.map((view) => (
+                              <button key={view} className={displayView === view ? "active" : ""} onClick={() => selectDisplayView(view)}>
+                                {viewLabel(view)}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="toolbar-cluster">
+                          <span className="toolbar-label">狀態</span>
+                          <div className="segmented-control status-segment" aria-label="快速狀態篩選">
+                            {quickStatusViews.map((view) => (
+                              <button key={view} className={isQuickStatusActive(view, activeView) ? "active" : ""} onClick={() => selectView(view)}>
+                                {quickFilterLabel(view)}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
                     <div className="toolbar-spacer" />
                     <div className="toolbar-actions">
-                      {displayView !== "calendar" && (
+                      {currentDisplayView !== "calendar" && (
                         <button className="filter-toggle column-toggle" onClick={() => setColumnManagerOpen(true)}><Columns3 size={16} />欄位</button>
                       )}
-                      <button className="filter-toggle advanced-filter" onClick={() => setFiltersOpen(true)}><SlidersHorizontal size={16} />進階篩選</button>
+                      <button className="filter-toggle advanced-filter" onClick={() => setFiltersOpen(true)}><SlidersHorizontal size={16} />{privateActive ? "篩選" : "進階篩選"}</button>
                     </div>
                   </div>
                   <FilterChips filters={filters} activeView={activeView} onClear={resetFilters} />
                 </div>
               </div>
-              {displayView === "calendar" ? (
+              {currentDisplayView === "calendar" ? (
                 <CalendarView
                   filters={filters}
                   includePrivate={includePrivate}
@@ -555,11 +565,11 @@ export default function App() {
               ) : (
                 <ItemList
                   items={visibleItems}
-                  view={displayView}
+                  view={currentDisplayView}
                   columnScope={privateView && includePrivate ? PRIVATE_LIBRARY_LABEL : activeView}
                   columnManagerOpen={columnManagerOpen}
                   onColumnManagerClose={() => setColumnManagerOpen(false)}
-                  privateMode={privateView && includePrivate}
+                  privateMode={privateActive}
                   density={displayDensity}
                   loading={loading}
                   emptyMessage="還沒有紀錄，先從上方快速新增一筆就好。"
@@ -601,7 +611,7 @@ export default function App() {
         </section>
       </main>
 
-      <FilterSheet open={filtersOpen} filters={filters} privateMode={privateView && includePrivate} onChange={patchFilters} onClose={() => setFiltersOpen(false)} />
+      <FilterSheet open={filtersOpen} filters={filters} privateMode={privateActive} onChange={patchFilters} onClose={() => setFiltersOpen(false)} />
 
       {simpleAddOpen && (
         <SimpleAddModal
@@ -611,7 +621,7 @@ export default function App() {
           onSubmit={submitSimpleAdd}
         />
       )}
-      {selected && <ItemEditor item={selected} privateMode={privateView && includePrivate} onClose={() => setSelected(null)} onSave={saveItem} onDelete={removeItem} />}
+      {selected && <ItemEditor item={selected} privateMode={privateActive} onClose={() => setSelected(null)} onSave={saveItem} onDelete={removeItem} />}
       {metadataTarget && (
         <MetadataLookupModal
           item={metadataTarget}
@@ -687,11 +697,15 @@ function FilterChips({ filters, activeView, onClear }: { filters: ListFilters; a
 function activeFilterChips(filters: ListFilters, activeView: string) {
   const chips: string[] = [];
   if (filters.query.trim()) chips.push(`搜尋：${filters.query.trim()}`);
-  if (activeView !== "database" && activeView !== "home") chips.push(`檢視：${viewLabel(activeView)}`);
+  if (activeView !== "database" && activeView !== "home" && activeView !== PRIVATE_LIBRARY_LABEL) chips.push(`檢視：${viewLabel(activeView)}`);
   if (filters.status !== "all") chips.push(`整理：${viewLabel(filters.status)}`);
   if (filters.watchStatus && filters.watchStatus !== "all") chips.push(`觀看：${viewLabel(filters.watchStatus)}`);
   if (filters.favorite) chips.push("收藏");
   if (filters.highRated) chips.push("高分");
+  if (filters.ratingMin || filters.ratingMax) chips.push(`評分：${filters.ratingMin || "不限"} ~ ${filters.ratingMax || "不限"}`);
+  if (filters.usedFilter === "used") chips.push("已使用");
+  if (filters.usedFilter === "unused") chips.push("未使用");
+  if (filters.collectionLevel.trim()) chips.push(`收藏：${filters.collectionLevel.trim()}`);
   if (filters.type.trim()) chips.push(`類型：${filters.type.trim()}`);
   if ((filters.category || "").trim()) chips.push(`分類：${(filters.category || "").trim()}`);
   if (filters.tag.trim()) chips.push(`#${filters.tag.trim()}`);

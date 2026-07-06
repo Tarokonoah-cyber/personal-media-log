@@ -181,6 +181,10 @@ function getListParams(url: URL): ItemListParams {
     status: isStatusFilter(status) ? status : "all",
     favorite: url.searchParams.get("favorite") === "true",
     highRated: url.searchParams.get("highRated") === "true",
+    ratingMin: optionalNumber(url.searchParams.get("ratingMin")),
+    ratingMax: optionalNumber(url.searchParams.get("ratingMax")),
+    usedFilter: isUsedFilter(url.searchParams.get("usedFilter")) ? url.searchParams.get("usedFilter") as "all" | "used" | "unused" : "all",
+    collectionLevel: optional(url.searchParams.get("collectionLevel")),
     includePrivate: url.searchParams.get("includePrivate") === "true",
     privateOnly: url.searchParams.get("privateOnly") === "true",
     watchStatus: isWatchStatusFilter(url.searchParams.get("watchStatus")) ? url.searchParams.get("watchStatus") as WatchStatus | "all" : "all",
@@ -220,4 +224,8 @@ function isStatusFilter(value: string | null): value is ItemStatus | "all" | "in
 
 function isWatchStatusFilter(value: string | null): value is WatchStatus | "all" {
   return value === "all" || value === "plan_to_watch" || value === "watching" || value === "completed" || value === "paused" || value === "dropped" || value === "rewatching";
+}
+
+function isUsedFilter(value: string | null): value is "all" | "used" | "unused" {
+  return value === "all" || value === "used" || value === "unused";
 }
