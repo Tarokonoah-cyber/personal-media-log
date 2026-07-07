@@ -1,6 +1,6 @@
 import { Ban, CheckCircle2, Pause, Plus, Repeat2, RotateCcw, SkipForward, Sparkles, Star, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { MouseEvent, ReactNode } from "react";
+import type { MouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { displayDate } from "../lib/date";
 import { privateItemDetails } from "../lib/privacy";
 import { getItemReflection, moodOptions, rewatchIntentOptions } from "../lib/reflection";
@@ -32,6 +32,8 @@ const shadiaoType = "沙雕动画";
 const shadiaoUpdateStatuses = ["連載中", "已完結", "已斷更", "休更中", "不確定"];
 const columnStoragePrefix = "itemTableColumns";
 const customColumnStoragePrefix = "itemTableCustomColumns";
+const columnWidthStoragePrefix = "itemTableColumnWidths";
+type ColumnWidths = Record<string, number>;
 
 export function ItemList({
   items,
@@ -72,8 +74,10 @@ export function ItemList({
 }) {
   const storageKey = `${columnStoragePrefix}:${privateMode ? "private" : "public"}:${columnScope}`;
   const customStorageKey = `${customColumnStoragePrefix}:${privateMode ? "private" : "public"}:${columnScope}`;
+  const columnWidthStorageKey = `${columnWidthStoragePrefix}:${privateMode ? "private" : "public"}:${columnScope}`;
   const sheetMode = !privateMode && isShadiaoScope(columnScope);
   const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
+  const [columnWidths, setColumnWidths] = useState<ColumnWidths>({});
   const allColumns = useMemo(
     () => [
       ...(privateMode ? privateColumnDefs({ onQuickUpdate }) : generalColumnDefs({ onToggleFavorite, onDelete, onMetadata, onQuickUpdate })),
@@ -88,9 +92,9 @@ export function ItemList({
 
   useEffect(() => {
     const available = new Set(allColumns.map((column) => column.id));
-    const stored = privateMode ? [] : loadStoredColumns(storageKey, available);
+    const stored = loadStoredColumns(storageKey, available);
     const selected = stored.length > 0 ? stored : defaultColumnIds.filter((id) => available.has(id));
-    const nextSelected = selected;
+    const nextSelected = privateMode && available.has("used") ? ensureColumnAfter(selected, "used", "rating") : selected;
     setSelectedColumnIds(nextSelected);
     if (stored.length > 0 && nextSelected.length !== stored.length) localStorage.setItem(storageKey, JSON.stringify(nextSelected));
   }, [allColumns, defaultColumnIds, privateMode, storageKey]);
@@ -100,14 +104,19 @@ export function ItemList({
   }, [customStorageKey]);
 
   useEffect(() => {
+    setColumnWidths(loadColumnWidths(columnWidthStorageKey));
+  }, [columnWidthStorageKey]);
+
+  useEffect(() => {
     setSelectedIds((current) => current.filter((id) => items.some((item) => item.id === id)));
   }, [items]);
 
   const visibleColumns = useMemo(() => {
+    if (privateMode) return allColumns;
     const selected = new Set(selectedColumnIds);
     const columns = allColumns.filter((column) => selected.has(column.id));
     return columns.length > 0 ? columns : allColumns.filter((column) => defaultColumnIds.includes(column.id));
-  }, [allColumns, defaultColumnIds, selectedColumnIds]);
+  }, [allColumns, defaultColumnIds, privateMode, selectedColumnIds]);
 
   function updateColumns(next: ColumnId[]) {
     const available = new Set(allColumns.map((column) => column.id));
@@ -130,6 +139,14 @@ export function ItemList({
   function resetColumns() {
     localStorage.removeItem(storageKey);
     setSelectedColumnIds(defaultColumnIds);
+  }
+
+  function resizeColumn(id: ColumnId, width: number) {
+    setColumnWidths((current) => {
+      const next = { ...current, [id]: Math.round(width) };
+      localStorage.setItem(columnWidthStorageKey, JSON.stringify(next));
+      return next;
+    });
   }
 
   function addCustomColumn(label: string, source: string) {
@@ -173,7 +190,9 @@ export function ItemList({
             privateMode={privateMode}
             sheetMode={sheetMode}
             columns={visibleColumns}
+            columnWidths={columnWidths}
             selectedIds={selectedIds}
+            onResizeColumn={resizeColumn}
             onToggleSelected={(id) => setSelectedIds((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id])}
             onToggleAll={() => setSelectedIds(selectedIds.length === items.length ? [] : items.map((item) => item.id))}
             onSelect={onSelect}
@@ -306,7 +325,9 @@ function DataTable({
   privateMode,
   sheetMode,
   columns,
+  columnWidths,
   selectedIds,
+  onResizeColumn,
   onToggleSelected,
   onToggleAll,
   onSelect,
@@ -317,19 +338,46 @@ function DataTable({
   privateMode: boolean;
   sheetMode: boolean;
   columns: ColumnDef[];
+  columnWidths: ColumnWidths;
   selectedIds: string[];
+  onResizeColumn: (id: ColumnId, width: number) => void;
   onToggleSelected: (id: string) => void;
   onToggleAll: () => void;
   onSelect: (item: MediaItem) => void;
   onQuickCreate?: (input: ItemInput) => Promise<void>;
 }) {
   const allSelected = items.length > 0 && selectedIds.length === items.length;
+  function beginResize(event: ReactPointerEvent<HTMLSpanElement>, column: ColumnDef) {
+    event.preventDefault();
+    event.stopPropagation();
+    const header = event.currentTarget.closest("th") as HTMLTableCellElement | null;
+    const startX = event.clientX;
+    const startWidth = columnWidths[column.id] || header?.offsetWidth || 120;
+    const minWidth = column.id === "code" ? 108 : 64;
+
+    function move(pointerEvent: PointerEvent) {
+      onResizeColumn(column.id, Math.max(minWidth, startWidth + pointerEvent.clientX - startX));
+    }
+
+    function up() {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
   return (
     <div className={`database-table-wrap ${privateMode ? "private-table-wrap" : ""} ${sheetMode ? "shadiao-sheet-wrap" : ""} density-${density}`}>
       <table className={privateMode ? "database-table private-table" : sheetMode ? "database-table shadiao-sheet-table" : "database-table"}>
         <colgroup>
           <col className="select-col" />
-          {columns.map((column) => <col key={column.id} className={column.colClassName} />)}
+          {columns.map((column) => <col key={column.id} className={column.colClassName} style={columnWidths[column.id] ? { width: `${columnWidths[column.id]}px` } : undefined} />)}
         </colgroup>
         <thead>
           <tr>
@@ -337,7 +385,10 @@ function DataTable({
               <input type="checkbox" checked={allSelected} onChange={onToggleAll} onClick={stop} aria-label="選取全部" />
             </th>
             {columns.map((column) => (
-              <th key={column.id} className={column.headerClassName}>{column.label}</th>
+              <th key={column.id} className={["resizable-header", column.headerClassName].filter(Boolean).join(" ")}>
+                {column.label}
+                <span className="column-resize-handle" onPointerDown={(event) => beginResize(event, column)} aria-hidden="true" />
+              </th>
             ))}
           </tr>
         </thead>
@@ -798,7 +849,7 @@ function mergePrivateUsedMetadata(value: string | null, used: boolean) {
 }
 
 function defaultColumnsForScope(scope: string, privateMode: boolean): ColumnId[] {
-  if (privateMode) return ["code", "title", "used", "tags"];
+  if (privateMode) return ["code", "title", "performers", "studio", "year", "rating", "used", "collection_level", "tags"];
   if (isShadiaoScope(scope)) return ["sheet_title", "shadiao_author", "shadiao_status", "shadiao_update_status", "shadiao_progress", "sheet_rating", "sheet_mood", "sheet_rewatch", "sheet_tags", "updated", "actions"];
   if (scope.includes("電影")) return ["title", "year", "status", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];
   if (scope.includes("影集") || scope.includes("動畫")) return ["title", "year", "status", "progress", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];
@@ -816,6 +867,29 @@ function loadStoredColumns(key: string, available: Set<ColumnId>) {
     return parsed.filter((id): id is ColumnId => typeof id === "string" && available.has(id as ColumnId));
   } catch {
     return [];
+  }
+}
+
+function ensureColumnAfter(columns: ColumnId[], column: ColumnId, after: ColumnId) {
+  if (columns.includes(column)) return columns;
+  const next = [...columns];
+  const index = next.indexOf(after);
+  next.splice(index >= 0 ? index + 1 : next.length, 0, column);
+  return next;
+}
+
+function loadColumnWidths(key: string): ColumnWidths {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>)
+        .filter(([, value]) => typeof value === "number" && Number.isFinite(value) && value > 0)
+    ) as ColumnWidths;
+  } catch {
+    return {};
   }
 }
 

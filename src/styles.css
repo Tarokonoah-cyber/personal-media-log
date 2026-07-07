@@ -4909,6 +4909,24 @@ h2 {
     background: color-mix(in srgb, var(--panel) 74%, #05070b);
   }
 
+  .database-table th.resizable-header {
+    padding-right: 16px;
+  }
+
+  .column-resize-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 8px;
+    height: 100%;
+    cursor: col-resize;
+    touch-action: none;
+  }
+
+  .column-resize-handle:hover {
+    background: color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+
   .database-table tbody tr {
     cursor: pointer;
   }
@@ -5128,7 +5146,7 @@ h2 {
   }
 
   .private-code-col {
-    width: 168px;
+    width: 126px;
   }
 
   .private-title-col {
