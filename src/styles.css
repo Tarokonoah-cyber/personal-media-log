@@ -512,12 +512,22 @@ h2 {
   padding-bottom: 4px;
 }
 
-.private-shell-topbar .private-shell-title {
-  display: none;
+.private-shell-main {
+  min-width: 0;
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .private-shell-topbar > .icon-button:last-child {
   grid-column: 3;
+}
+
+.private-return-home {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 10px;
 }
 
 .private-shell-title {

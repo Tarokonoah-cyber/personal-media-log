@@ -1,4 +1,4 @@
-import { Columns3, Menu, Moon, Plus, Search, SlidersHorizontal, Sun } from "lucide-react";
+import { Columns3, Home, Menu, Moon, Plus, Search, SlidersHorizontal, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { FilterSheet } from "./components/FilterSheet";
 import { HomeDashboard } from "./components/HomeDashboard";
@@ -447,14 +447,29 @@ export default function App() {
     setFilters(keepRecommendedPage ? { ...defaultFilters, tag: PRIVATE_RECOMMENDED_TAG } : defaultFilters);
   }
 
+  function returnHome() {
+    setTab("log");
+    setActiveView("home");
+    setActiveCategory("");
+    setFilters(defaultFilters);
+    setPrivateSidebarExpanded(false);
+    setSidebarOpen(false);
+  }
+
   return (
     <div className="app-shell">
       <header className={privateActive ? "topbar private-shell-topbar" : "topbar"}>
         <button className="icon-button mobile-sidebar-button" onClick={() => setSidebarOpen(true)} title="開啟導覽"><Menu size={18} /></button>
         {privateActive ? (
-          <div className="private-shell-title">
-            <strong>{privatePageTitle}</strong>
-            <span>{privateRecommendedActive ? "網友推薦好片片" : "高密度資料管理"}</span>
+          <div className="private-shell-main">
+            <button className="filter-toggle private-return-home" onClick={returnHome}>
+              <Home size={16} />
+              返回首頁
+            </button>
+            <div className="private-shell-title">
+              <strong>{privatePageTitle}</strong>
+              <span>{privateRecommendedActive ? "網友推薦好片片" : "高密度資料管理"}</span>
+            </div>
           </div>
         ) : (
           <div className="header-tools">
