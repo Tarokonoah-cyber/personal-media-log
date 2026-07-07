@@ -94,6 +94,7 @@ function buildItemWhere(params: ItemListParams) {
     where.push("items.rating <= ?");
     bind.push(params.ratingMax);
   }
+  if (params.unrated) where.push("items.rating IS NULL");
   if (params.usedFilter === "used") {
     where.push("json_valid(items.metadata_json) AND json_extract(items.metadata_json, '$.used') = 1");
   } else if (params.usedFilter === "unused") {
@@ -193,6 +194,14 @@ function buildItemWhere(params: ItemListParams) {
       WHERE it.item_id = items.id AND t.name = ? COLLATE NOCASE
     )`);
     bind.push(params.tag);
+  }
+  if (params.excludeTag) {
+    where.push(`NOT EXISTS (
+      SELECT 1 FROM item_tags excluded_it
+      JOIN tags excluded_t ON excluded_t.id = excluded_it.tag_id
+      WHERE excluded_it.item_id = items.id AND excluded_t.name = ? COLLATE NOCASE
+    )`);
+    bind.push(params.excludeTag);
   }
   if (params.query) {
     const like = `%${params.query.trim().toLowerCase()}%`;

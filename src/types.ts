@@ -61,6 +61,7 @@ export interface ListFilters {
   highRated: boolean;
   ratingMin: string;
   ratingMax: string;
+  unrated?: boolean;
   usedFilter: "all" | "used" | "unused";
   collectionLevel: string;
   includePrivate?: boolean;
@@ -69,6 +70,7 @@ export interface ListFilters {
   type: string;
   category?: string;
   tag: string;
+  excludeTag?: string;
   year: string;
   platform: string;
   codeQuery: string;

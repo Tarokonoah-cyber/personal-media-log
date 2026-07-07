@@ -99,17 +99,17 @@ export function ViewSidebar({
           </div>
 
           <NavSection title="私密" showText={showText} tone="primary">
-            <button className={!hasPrivateSidebarFilter(filters) ? "active" : ""} onClick={() => onPrivateFilter?.({})} title="全部私密">
+            <button className={!hasPrivateSidebarFilter(filters) ? "active" : ""} onClick={() => onPrivateFilter?.({})} title="全部">
               <Database size={16} />
               {showText && <span>全部</span>}
             </button>
-            <button className={filters.usedFilter === "used" ? "active" : ""} onClick={() => onPrivateFilter?.({ usedFilter: "used" })} title="已使用">
+            <button className={filters.usedFilter === "used" ? "active" : ""} onClick={() => onPrivateFilter?.({ usedFilter: "used" })} title="精選收藏">
               <Heart size={16} />
-              {showText && <span>已使用</span>}
+              {showText && <span>精選收藏</span>}
             </button>
-            <button className={filters.usedFilter === "unused" ? "active" : ""} onClick={() => onPrivateFilter?.({ usedFilter: "unused" })} title="未使用">
+            <button className={filters.unrated ? "active" : ""} onClick={() => onPrivateFilter?.({ unrated: true })} title="尚未評分">
               <Folder size={16} />
-              {showText && <span>未使用</span>}
+              {showText && <span>尚未評分</span>}
             </button>
             <button className={filters.tag === PRIVATE_RECOMMENDED_TAG ? "active" : ""} onClick={() => onPrivateFilter?.({ tag: PRIVATE_RECOMMENDED_TAG })} title="網友推薦">
               <Clapperboard size={16} />
@@ -244,7 +244,7 @@ function isMainActive(id: string, activeView: string, filters: ListFilters) {
 }
 
 function hasPrivateSidebarFilter(filters: ListFilters) {
-  return Boolean(filters.usedFilter !== "all" || filters.collectionLevel || filters.tag);
+  return Boolean(filters.usedFilter !== "all" || filters.unrated || filters.collectionLevel || filters.tag);
 }
 
 function iconFor(label: string) {

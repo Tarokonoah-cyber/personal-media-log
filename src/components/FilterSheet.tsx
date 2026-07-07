@@ -116,13 +116,14 @@ function PrivateFilters({ filters, onChange }: { filters: ListFilters; onChange:
         <input value={filters.ratingMax} onChange={(event) => onChange({ ratingMax: event.target.value })} inputMode="decimal" placeholder="10" />
       </label>
       <label>
-        使用狀態
+        精選狀態
         <select value={filters.usedFilter} onChange={(event) => onChange({ usedFilter: event.target.value as ListFilters["usedFilter"] })}>
           <option value="all">全部</option>
-          <option value="used">已使用</option>
-          <option value="unused">未使用</option>
+          <option value="used">精選收藏</option>
+          <option value="unused">非精選</option>
         </select>
       </label>
+      <label className="check"><input type="checkbox" checked={Boolean(filters.unrated)} onChange={(event) => onChange({ unrated: event.target.checked })} />尚未評分</label>
       <label>
         收藏
         <select value={filters.collectionLevel} onChange={(event) => onChange({ collectionLevel: event.target.value })}>

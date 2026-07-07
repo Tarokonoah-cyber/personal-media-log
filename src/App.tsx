@@ -28,12 +28,14 @@ const defaultFilters: ListFilters = {
   highRated: false,
   ratingMin: "",
   ratingMax: "",
+  unrated: false,
   usedFilter: "all",
   collectionLevel: "",
   watchStatus: "all",
   type: "",
   category: "",
   tag: "",
+  excludeTag: "",
   year: "",
   platform: "",
   codeQuery: "",
@@ -375,10 +377,16 @@ export default function App() {
   }
 
   function selectPrivateFilter(patch: Partial<ListFilters>) {
+    const recommendedPage = patch.tag === PRIVATE_RECOMMENDED_TAG;
     setTab("log");
-    setActiveView(patch.tag === PRIVATE_RECOMMENDED_TAG ? PRIVATE_RECOMMENDED_LABEL : PRIVATE_LIBRARY_LABEL);
+    setActiveView(recommendedPage ? PRIVATE_RECOMMENDED_LABEL : PRIVATE_LIBRARY_LABEL);
     setActiveCategory("");
-    setFilters({ ...defaultFilters, ...patch, page: 1 });
+    setFilters({
+      ...defaultFilters,
+      excludeTag: recommendedPage ? "" : PRIVATE_RECOMMENDED_TAG,
+      ...patch,
+      page: 1
+    });
     setSidebarOpen(false);
   }
 
@@ -420,7 +428,16 @@ export default function App() {
     setTab("log");
     setActiveView(category ? `${type}/${category}` : type);
     setActiveCategory(category || "");
-    setFilters({ ...defaultFilters, status: "all", watchStatus: "all", type, category: category || "", query: filters.query, pageSize: 100 });
+    setFilters({
+      ...defaultFilters,
+      status: "all",
+      watchStatus: "all",
+      type,
+      category: category || "",
+      query: filters.query,
+      excludeTag: isPrivateLibraryLabel(type) ? PRIVATE_RECOMMENDED_TAG : "",
+      pageSize: 100
+    });
     setSidebarOpen(false);
   }
 
@@ -444,7 +461,7 @@ export default function App() {
     const keepRecommendedPage = privateRecommendedActive;
     setActiveView(privateActive ? (keepRecommendedPage ? PRIVATE_RECOMMENDED_LABEL : PRIVATE_LIBRARY_LABEL) : "database");
     setActiveCategory("");
-    setFilters(keepRecommendedPage ? { ...defaultFilters, tag: PRIVATE_RECOMMENDED_TAG } : defaultFilters);
+    setFilters(keepRecommendedPage ? { ...defaultFilters, tag: PRIVATE_RECOMMENDED_TAG } : { ...defaultFilters, excludeTag: PRIVATE_RECOMMENDED_TAG });
   }
 
   function returnHome() {
@@ -799,8 +816,8 @@ function PrivateWorkbench({
         </div>
         <div className="private-summary-grid" aria-label="私密摘要">
           <Metric label="總筆數" value={summaryTotal.toString()} />
-          <Metric label="已使用" value={used.toString()} />
-          <Metric label="未使用" value={unused.toString()} />
+          <Metric label="精選" value={used.toString()} />
+          <Metric label="非精選" value={unused.toString()} />
           <Metric label="平均分" value={summary?.averageRating === null || summary?.averageRating === undefined ? "-" : summary.averageRating.toFixed(1)} />
         </div>
       </header>
@@ -835,11 +852,11 @@ function PrivateWorkbench({
           </span>
         </label>
         <label>
-          已使用
+          精選狀態
           <select value={filters.usedFilter} onChange={(event) => onPatchFilters({ usedFilter: event.target.value as ListFilters["usedFilter"] })}>
             <option value="all">全部</option>
-            <option value="used">已使用</option>
-            <option value="unused">未使用</option>
+            <option value="used">精選收藏</option>
+            <option value="unused">非精選</option>
           </select>
         </label>
         <label>
@@ -950,8 +967,8 @@ function PrivateWorkbenchV2({
           <summary>摘要</summary>
           <div className="private-summary-inline" aria-label="私密摘要">
             <SummaryValue label="總數" value={summaryTotal.toString()} />
-            <SummaryValue label="已使用" value={used.toString()} />
-            <SummaryValue label="未使用" value={unused.toString()} />
+            <SummaryValue label="精選" value={used.toString()} />
+            <SummaryValue label="非精選" value={unused.toString()} />
             <SummaryValue label="平均分" value={averageRating} />
             <div className="private-collection-inline" aria-label="收藏分布">
               {summary?.collectionCounts.length ? (
@@ -1031,6 +1048,7 @@ function hasPrivateFilters(filters: ListFilters) {
     filters.query.trim() ||
     filters.ratingMin.trim() ||
     filters.ratingMax.trim() ||
+    filters.unrated ||
     filters.usedFilter !== "all" ||
     filters.collectionLevel.trim() ||
     filters.tag.trim() ||
@@ -1074,8 +1092,9 @@ function activeFilterChips(filters: ListFilters, activeView: string) {
   if (filters.favorite) chips.push("收藏");
   if (filters.highRated) chips.push("高分");
   if (filters.ratingMin || filters.ratingMax) chips.push(`評分：${filters.ratingMin || "不限"} ~ ${filters.ratingMax || "不限"}`);
-  if (filters.usedFilter === "used") chips.push("已使用");
-  if (filters.usedFilter === "unused") chips.push("未使用");
+  if (filters.unrated) chips.push("尚未評分");
+  if (filters.usedFilter === "used") chips.push("精選收藏");
+  if (filters.usedFilter === "unused") chips.push("非精選");
   if (filters.collectionLevel.trim()) chips.push(`收藏：${filters.collectionLevel.trim()}`);
   if (filters.type.trim()) chips.push(`類型：${filters.type.trim()}`);
   if ((filters.category || "").trim()) chips.push(`分類：${(filters.category || "").trim()}`);

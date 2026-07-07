@@ -64,6 +64,7 @@ export interface ItemListParams {
   highRated?: boolean;
   ratingMin?: number;
   ratingMax?: number;
+  unrated?: boolean;
   usedFilter?: "all" | "used" | "unused";
   collectionLevel?: string;
   includePrivate?: boolean;
@@ -72,6 +73,7 @@ export interface ItemListParams {
   type?: string;
   category?: string;
   tag?: string;
+  excludeTag?: string;
   year?: number;
   platform?: string;
   codeQuery?: string;
