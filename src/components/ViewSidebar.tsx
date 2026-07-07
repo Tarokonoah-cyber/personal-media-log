@@ -1,7 +1,7 @@
 import { BarChart3, Clapperboard, ChevronLeft, ChevronRight, Database, Film, Folder, Hash, Heart, Home, Layers, Settings, Sparkles, Tags, Tv, X } from "lucide-react";
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { isPrivateLibraryLabel, PRIVATE_LIBRARY_LABEL } from "../lib/privacy";
+import { isPrivateLibraryLabel, PRIVATE_LIBRARY_LABEL, PRIVATE_RECOMMENDED_TAG } from "../lib/privacy";
 import { collectionLevelOptions } from "../lib/reflection";
 import { libraryTree } from "../lib/taxonomy";
 import type { ListFilters, MediaItem, PrivateSummary } from "../types";
@@ -66,7 +66,9 @@ export function ViewSidebar({
 }) {
   const [showAllTags, setShowAllTags] = useState(false);
   const showText = !collapsed || mobileOpen;
+  const privateTags = tags.filter((tag) => tag !== PRIVATE_RECOMMENDED_TAG);
   const visibleTags = showAllTags ? tags : tags.slice(0, 3);
+  const visiblePrivateTags = showAllTags ? privateTags : privateTags.slice(0, 3);
   const libraryItems = libraryTree.filter((entry) => {
     if (activeView === "home" && entry.label === "沙雕动画") return false;
     return !safeMode || !isPrivateLibraryLabel(entry.label);
@@ -109,6 +111,10 @@ export function ViewSidebar({
               <Folder size={16} />
               {showText && <span>未使用</span>}
             </button>
+            <button className={filters.tag === PRIVATE_RECOMMENDED_TAG ? "active" : ""} onClick={() => onPrivateFilter?.({ tag: PRIVATE_RECOMMENDED_TAG })} title="網友推薦">
+              <Clapperboard size={16} />
+              {showText && <span>網友推薦</span>}
+            </button>
           </NavSection>
 
           <NavSection title="收藏" showText={showText} tone="secondary">
@@ -121,17 +127,17 @@ export function ViewSidebar({
           </NavSection>
 
           <NavSection title="標籤" showText={showText} tone="tags">
-            {tags.length === 0 ? (
+            {privateTags.length === 0 ? (
               showText && <em>尚無標籤</em>
             ) : (
               <>
-                {visibleTags.map((tag) => (
+                {visiblePrivateTags.map((tag) => (
                   <button key={tag} className={filters.tag === tag ? "active" : ""} onClick={() => onPrivateFilter?.({ tag })} title={tag}>
                     {!showText ? <Hash size={14} /> : <span className="tag-prefix">#</span>}
                     {showText && <span>{tag}</span>}
                   </button>
                 ))}
-                {showText && tags.length > 3 && (
+                {showText && privateTags.length > 3 && (
                   <button className="sidebar-more" onClick={() => setShowAllTags((value) => !value)}>
                     <Tags size={13} />
                     {showAllTags ? "收合標籤" : "更多標籤..."}

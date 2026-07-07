@@ -1,6 +1,8 @@
 import type { MediaItem } from "../types";
 
 export const PRIVATE_LIBRARY_LABEL = "\u79c1\u5bc6";
+export const PRIVATE_RECOMMENDED_LABEL = "\u7db2\u53cb\u63a8\u85a6";
+export const PRIVATE_RECOMMENDED_TAG = PRIVATE_RECOMMENDED_LABEL;
 
 const PRIVATE_CONTAINS_TERMS = [
   "adult",

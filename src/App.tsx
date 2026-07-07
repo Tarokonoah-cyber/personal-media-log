@@ -14,7 +14,7 @@ import { Toast } from "./components/Toast";
 import { ViewSidebar } from "./components/ViewSidebar";
 import { applyMetadata, createItem, deleteItem, listItems, parseSmartAdd, searchMetadata, updateItem } from "./lib/api";
 import { toItemInput } from "./lib/itemTransforms";
-import { isPrivateItem, isPrivateLibraryLabel, isPrivateMarker, PRIVATE_LIBRARY_LABEL } from "./lib/privacy";
+import { isPrivateItem, isPrivateLibraryLabel, isPrivateMarker, PRIVATE_LIBRARY_LABEL, PRIVATE_RECOMMENDED_LABEL, PRIVATE_RECOMMENDED_TAG } from "./lib/privacy";
 import { parseQuickEntry } from "./lib/quickParse";
 import { collectionLevelOptions } from "./lib/reflection";
 import { classifyItem, libraryTree } from "./lib/taxonomy";
@@ -89,9 +89,11 @@ export default function App() {
   const [privateSidebarExpanded, setPrivateSidebarExpanded] = useState(false);
   const [organizerPrivateMode, setOrganizerPrivateMode] = useState(false);
   const [dark, setDark] = useState(() => localStorage.getItem("theme") !== "light");
-  const privateView = isPrivateLibraryLabel(activeView);
+  const privateView = isPrivateWorkspaceView(activeView);
   const includePrivate = privateView && !safeMode;
   const privateActive = privateView && includePrivate;
+  const privateRecommendedActive = activeView === PRIVATE_RECOMMENDED_LABEL && includePrivate;
+  const privatePageTitle = privateRecommendedActive ? PRIVATE_RECOMMENDED_LABEL : PRIVATE_LIBRARY_LABEL;
   const currentDisplayView = privateActive ? "table" : displayView;
   const effectiveSidebarCollapsed = privateActive ? !privateSidebarExpanded : sidebarCollapsed;
 
@@ -186,7 +188,7 @@ export default function App() {
     if (!parsed.raw_title.trim()) return;
     setLoading(true);
     try {
-      await createItem(includePrivate ? parsed : {
+      await createItem(includePrivate ? withPrivatePageDefaults(parsed, privateRecommendedActive) : {
         ...parsed,
         ...updateWatchProgress({ ...emptyItem(), raw_title: parsed.raw_title } as MediaItem, { watch_status: "plan_to_watch" })
       });
@@ -207,11 +209,12 @@ export default function App() {
   async function submitSimpleAdd(input: ItemInput) {
     setLoading(true);
     try {
-      await createItem(input);
+      const nextInput = withPrivatePageDefaults(input, privateRecommendedActive);
+      await createItem(nextInput);
       setSimpleAddOpen(false);
-      setToast(input.is_private ? "已新增私密紀錄" : "已新增紀錄");
+      setToast(nextInput.is_private ? "已新增私密紀錄" : "已新增紀錄");
       setTab("log");
-      if (input.is_private) setActiveView(PRIVATE_LIBRARY_LABEL);
+      if (nextInput.is_private && !privateRecommendedActive) setActiveView(PRIVATE_LIBRARY_LABEL);
       setActiveCategory("");
       setFilters((current) => ({ ...current, status: "all", page: 1 }));
       await refreshVisibleData();
@@ -292,7 +295,7 @@ export default function App() {
   }
 
   async function quickCreateFromTable(input: ItemInput) {
-    await createItem(input);
+    await createItem(withPrivatePageDefaults(input, privateRecommendedActive));
     setToast("已新增");
     setFilters((current) => ({ ...current, status: "all", page: 1 }));
     await refreshVisibleData();
@@ -373,7 +376,7 @@ export default function App() {
 
   function selectPrivateFilter(patch: Partial<ListFilters>) {
     setTab("log");
-    setActiveView(PRIVATE_LIBRARY_LABEL);
+    setActiveView(patch.tag === PRIVATE_RECOMMENDED_TAG ? PRIVATE_RECOMMENDED_LABEL : PRIVATE_LIBRARY_LABEL);
     setActiveCategory("");
     setFilters({ ...defaultFilters, ...patch, page: 1 });
     setSidebarOpen(false);
@@ -382,7 +385,7 @@ export default function App() {
   function toggleSafeMode() {
     setSafeMode((current) => {
       const next = !current;
-      if (next && isPrivateLibraryLabel(activeView)) {
+      if (next && isPrivateWorkspaceView(activeView)) {
         setActiveView("home");
         setActiveCategory("");
         setOrganizerPrivateMode(false);
@@ -438,9 +441,10 @@ export default function App() {
   }
 
   function resetFilters() {
-    setActiveView(privateActive ? PRIVATE_LIBRARY_LABEL : "database");
+    const keepRecommendedPage = privateRecommendedActive;
+    setActiveView(privateActive ? (keepRecommendedPage ? PRIVATE_RECOMMENDED_LABEL : PRIVATE_LIBRARY_LABEL) : "database");
     setActiveCategory("");
-    setFilters(defaultFilters);
+    setFilters(keepRecommendedPage ? { ...defaultFilters, tag: PRIVATE_RECOMMENDED_TAG } : defaultFilters);
   }
 
   return (
@@ -449,8 +453,8 @@ export default function App() {
         <button className="icon-button mobile-sidebar-button" onClick={() => setSidebarOpen(true)} title="開啟導覽"><Menu size={18} /></button>
         {privateActive ? (
           <div className="private-shell-title">
-            <strong>私密工作台</strong>
-            <span>高密度資料管理</span>
+            <strong>{privatePageTitle}</strong>
+            <span>{privateRecommendedActive ? "網友推薦好片片" : "高密度資料管理"}</span>
           </div>
         ) : (
           <div className="header-tools">
@@ -533,6 +537,7 @@ export default function App() {
                   loading={loading}
                   pageCount={pageCount}
                   total={total}
+                  title={privatePageTitle}
                   summary={privateSummary}
                   onPatchFilters={patchFilters}
                   onClearFilters={resetFilters}
@@ -884,6 +889,7 @@ function PrivateWorkbenchV2({
   loading,
   pageCount,
   total,
+  title,
   summary,
   onPatchFilters,
   onClearFilters,
@@ -900,6 +906,7 @@ function PrivateWorkbenchV2({
   loading: boolean;
   pageCount: number;
   total: number;
+  title: string;
   summary: PrivateSummary | null;
   onPatchFilters: (patch: Partial<ListFilters>) => void;
   onClearFilters: () => void;
@@ -920,7 +927,7 @@ function PrivateWorkbenchV2({
     <section className="private-workbench private-workbench-compact">
       <div className="private-control-row" aria-label="私密資料控制列">
         <div className="private-current-count">
-          <strong>私密</strong>
+          <strong>{title}</strong>
           <span>目前 {total} 筆</span>
         </div>
 
@@ -955,36 +962,6 @@ function PrivateWorkbenchV2({
           <input value={filters.query} onChange={(event) => onPatchFilters({ query: event.target.value })} placeholder="搜尋標題、標籤、平台" />
         </label>
 
-        <label className="private-compact-field private-score-field">
-          分數
-          <span className="range-fields">
-            <input value={filters.ratingMin} onChange={(event) => onPatchFilters({ ratingMin: event.target.value })} inputMode="decimal" placeholder="0" />
-            <input value={filters.ratingMax} onChange={(event) => onPatchFilters({ ratingMax: event.target.value })} inputMode="decimal" placeholder="10" />
-          </span>
-        </label>
-
-        <label className="private-compact-field">
-          已使用
-          <select value={filters.usedFilter} onChange={(event) => onPatchFilters({ usedFilter: event.target.value as ListFilters["usedFilter"] })}>
-            <option value="all">全部</option>
-            <option value="used">已使用</option>
-            <option value="unused">未使用</option>
-          </select>
-        </label>
-
-        <label className="private-compact-field">
-          收藏
-          <select value={filters.collectionLevel} onChange={(event) => onPatchFilters({ collectionLevel: event.target.value })}>
-            <option value="">全部</option>
-            {collectionLevelOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-          </select>
-        </label>
-
-        <FieldFilter label="標籤" value={filters.tag} onChange={(value) => onPatchFilters({ tag: value })} />
-        <FieldFilter label="女優" value={filters.person} onChange={(value) => onPatchFilters({ person: value })} />
-        <FieldFilter label="片商" value={filters.studio} onChange={(value) => onPatchFilters({ studio: value })} />
-        <FieldFilter label="年分" value={filters.year} inputMode="numeric" onChange={(value) => onPatchFilters({ year: value })} />
-
         <div className="private-filter-actions">
           <button className="filter-toggle advanced-filter" onClick={onOpenAdvanced}><SlidersHorizontal size={16} />進階</button>
           <button className="filter-chip-clear" onClick={onClearFilters} disabled={!hasPrivateFilters(filters)}>清除</button>
@@ -997,8 +974,6 @@ function PrivateWorkbenchV2({
           <button disabled={filters.page >= pageCount} onClick={() => onPatchFilters({ page: filters.page + 1 })}>下一頁</button>
         </div>
       </div>
-
-      <FilterChips filters={filters} activeView={PRIVATE_LIBRARY_LABEL} onClear={onClearFilters} />
 
       <ItemList
         items={items}
@@ -1050,6 +1025,18 @@ function hasPrivateFilters(filters: ListFilters) {
     filters.codeQuery.trim() ||
     filters.titleQuery.trim()
   );
+}
+
+function isPrivateWorkspaceView(view: string) {
+  return isPrivateLibraryLabel(view) || view === PRIVATE_RECOMMENDED_LABEL;
+}
+
+function withPrivatePageDefaults(input: ItemInput, recommendedActive: boolean): ItemInput {
+  if (!recommendedActive || !input.is_private) return input;
+  return {
+    ...input,
+    tags: Array.from(new Set([...(input.tags || []), PRIVATE_RECOMMENDED_TAG]))
+  };
 }
 
 function FilterChips({ filters, activeView, onClear }: { filters: ListFilters; activeView: string; onClear: () => void }) {
