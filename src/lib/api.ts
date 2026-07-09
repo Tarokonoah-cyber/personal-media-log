@@ -1,4 +1,4 @@
-import type { BackupJob, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, SmartAddResponse, StatsResponse, TmdbSearchResponse } from "../types";
+import type { BackupJob, ImportPreview, ItemInput, ItemListResponse, LibraryDashboardSummary, ListFilters, MediaItem, SmartAddResponse, StatsResponse, TmdbSearchResponse } from "../types";
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -38,6 +38,10 @@ export function deleteItem(id: string) {
 
 export function getStats(includePrivate = false) {
   return request<StatsResponse>(`/api/stats?includePrivate=${includePrivate}`);
+}
+
+export function getDashboard(includePrivate = true) {
+  return request<LibraryDashboardSummary>(`/api/dashboard?includePrivate=${includePrivate}`);
 }
 
 export function previewImport(content: string, sourceType: "csv" | "json", sourceName: string) {

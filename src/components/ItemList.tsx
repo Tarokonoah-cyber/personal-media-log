@@ -55,7 +55,7 @@ export function ItemList({
   onBatchDelete
 }: {
   items: MediaItem[];
-  view: "table" | "list" | "poster";
+  view: "cards" | "table" | "list" | "poster";
   columnScope?: string;
   columnManagerOpen?: boolean;
   onColumnManagerClose?: () => void;
@@ -172,6 +172,20 @@ export function ItemList({
   if (loading) return <div className="empty">讀取中...</div>;
   if (items.length === 0 && !(sheetMode && view === "table")) return <div className="empty">{emptyMessage}</div>;
   if (view === "poster") return <PosterWall items={items} onSelect={onSelect} />;
+  if (privateMode && view !== "table") {
+    return (
+      <>
+        <BatchToolbar
+          selectedItems={selectedItems}
+          privateMode={privateMode}
+          onUpdate={onBatchUpdate}
+          onDelete={onBatchDelete}
+          onClear={() => setSelectedIds([])}
+        />
+        <PrivateMediaCards items={items} compact={view === "list"} onSelect={onSelect} onQuickUpdate={onQuickUpdate} />
+      </>
+    );
+  }
 
   return (
     <>
@@ -315,6 +329,58 @@ function BatchToolbar({
       <button onClick={() => onUpdate?.(selectedItems, { favorite: true })} disabled={disabled}>收藏</button>
       <button className="danger-button" onClick={() => onDelete?.(selectedItems)} disabled={disabled}>刪除</button>
       <button onClick={onClear} disabled={disabled}>清除選取</button>
+    </div>
+  );
+}
+
+function PrivateMediaCards({
+  items,
+  compact,
+  onSelect,
+  onQuickUpdate
+}: {
+  items: MediaItem[];
+  compact: boolean;
+  onSelect: (item: MediaItem) => void;
+  onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
+}) {
+  return (
+    <div className={compact ? "media-card-list compact" : "media-card-list"}>
+      {items.map((item) => {
+        const details = privateItemDetails(item);
+        const used = item.used || privateUsedValue(item.metadata_json);
+        return (
+          <article className="media-log-card" key={item.id} onClick={() => onSelect(item)}>
+            <div className="media-card-main">
+              <header>
+                <strong>{details.code}</strong>
+                <span>{displayDate(item.watched_at || item.created_at)}</span>
+              </header>
+              <div className="media-card-scoreline">
+                <b>{item.rating ? `★ ${Number(item.rating).toFixed(1)}` : "★ -"}</b>
+                <em>{item.favorite_level || getItemReflection(item).collection_level || "一般"}</em>
+                <button
+                  className={used ? "used-pill active" : "used-pill"}
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void onQuickUpdate?.(item, { used: !used, metadata_json: mergePrivateUsedMetadata(item.metadata_json, !used) });
+                  }}
+                >
+                  {used ? "已使用" : "未使用"}
+                </button>
+              </div>
+              <div className="media-card-meta">
+                <span>{item.platform || "-"}</span>
+                <span>{item.maker || details.studio}</span>
+                <span>{details.performers}</span>
+              </div>
+              <p>{item.quick_note || "尚未寫一句話心得"}</p>
+              <Tags tags={item.tags} limit={compact ? 3 : 6} />
+            </div>
+          </article>
+        );
+      })}
     </div>
   );
 }
