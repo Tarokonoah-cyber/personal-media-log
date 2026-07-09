@@ -765,6 +765,20 @@ function generalColumnDefs({
 
 function privateColumnDefs({ onQuickUpdate }: { onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void> }): ColumnDef[] {
   return [
+    { id: "code", label: "作品代號", colClassName: "private-code-col", cellClassName: "private-code-cell", render: (item) => privateItemDetails(item).code },
+    { id: "platform", label: "平台", colClassName: "private-platform-col", render: (item) => <PlatformBadge platform={item.platform} /> },
+    { id: "maker", label: "片商", colClassName: "private-maker-col", cellClassName: "private-text-cell", render: (item) => <span title={item.maker || privateItemDetails(item).studio}>{item.maker || privateItemDetails(item).studio}</span> },
+    { id: "actress", label: "女優", colClassName: "private-performer-col", cellClassName: "private-text-cell", render: (item) => <span title={privateItemDetails(item).performers}>{privateItemDetails(item).performers}</span> },
+    { id: "rating", label: "評分", colClassName: "private-rating-col", render: (item) => <RatingValue item={item} /> },
+    { id: "favorite_level", label: "收藏", colClassName: "private-collection-col", render: (item) => <ReflectionBadge value={item.favorite_level || getItemReflection(item).collection_level} /> },
+    { id: "used", label: "已使用", colClassName: "private-used-col", cellClassName: "private-used-cell", render: (item) => <PrivateUsedToggle item={item} onQuickUpdate={onQuickUpdate} /> },
+    { id: "media_status", label: "狀態", colClassName: "private-status-col", render: (item) => <span className="status-pill">{item.media_status}</span> },
+    { id: "tags", label: "標籤", colClassName: "private-tags-col", render: (item) => <Tags tags={item.tags} limit={4} /> },
+    { id: "summary", label: "一句話心得", colClassName: "private-summary-col", cellClassName: "private-text-cell", render: (item) => <span title={item.quick_note || ""}>{item.quick_note || "-"}</span> },
+    { id: "date", label: "日期", colClassName: "private-date-col", cellClassName: "muted-cell", render: (item) => displayDate(item.watched_at || item.created_at) }
+  ];
+  /*
+  return [
     { id: "code", label: "番號", colClassName: "private-code-col", cellClassName: "private-code-cell", render: (item) => privateItemDetails(item).code },
     {
       id: "title",
@@ -802,6 +816,7 @@ function privateColumnDefs({ onQuickUpdate }: { onQuickUpdate?: (item: MediaItem
     { id: "collection_level", label: "收藏", colClassName: "private-collection-col", render: (item) => <ReflectionBadge value={getItemReflection(item).collection_level} /> },
     { id: "tags", label: "標籤", colClassName: "private-tags-col", render: (item) => <Tags tags={item.tags} limit={4} /> }
   ];
+  */
 }
 
 function customColumnDef(column: CustomColumn): ColumnDef {
@@ -816,7 +831,7 @@ function customColumnDef(column: CustomColumn): ColumnDef {
 }
 
 function PrivateUsedToggle({ item, onQuickUpdate }: { item: MediaItem; onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void> }) {
-  const used = privateUsedValue(item.metadata_json);
+  const used = item.used || privateUsedValue(item.metadata_json);
   return (
     <label className="private-used-toggle" onClick={(event) => event.stopPropagation()} title={used ? "精選收藏" : "非精選"}>
       <input
@@ -824,7 +839,7 @@ function PrivateUsedToggle({ item, onQuickUpdate }: { item: MediaItem; onQuickUp
         checked={used}
         disabled={!onQuickUpdate}
         onChange={(event) => {
-          void onQuickUpdate?.(item, { metadata_json: mergePrivateUsedMetadata(item.metadata_json, event.target.checked) });
+          void onQuickUpdate?.(item, { used: event.target.checked, metadata_json: mergePrivateUsedMetadata(item.metadata_json, event.target.checked) });
         }}
       />
       <span>{used ? "精選" : "非精選"}</span>
@@ -849,7 +864,7 @@ function mergePrivateUsedMetadata(value: string | null, used: boolean) {
 }
 
 function defaultColumnsForScope(scope: string, privateMode: boolean): ColumnId[] {
-  if (privateMode) return ["code", "title", "performers", "studio", "year", "rating", "used", "collection_level", "tags"];
+  if (privateMode) return ["code", "platform", "maker", "actress", "rating", "favorite_level", "used", "media_status", "tags", "summary", "date"];
   if (isShadiaoScope(scope)) return ["sheet_title", "shadiao_author", "shadiao_status", "shadiao_update_status", "shadiao_progress", "sheet_rating", "sheet_mood", "sheet_rewatch", "sheet_tags", "updated", "actions"];
   if (scope.includes("電影")) return ["title", "year", "status", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];
   if (scope.includes("影集") || scope.includes("動畫")) return ["title", "year", "status", "progress", "platform", "rating", "mood", "rewatch_intent", "tags", "updated", "actions"];

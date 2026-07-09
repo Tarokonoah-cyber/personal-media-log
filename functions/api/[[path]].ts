@@ -4,7 +4,7 @@ import { parseCsv, parseJsonItems, toCsv } from "../_lib/importExport";
 import { createItem, exportItems, getItem, getStats, importItems, isLikelyDuplicate, listItems, softDeleteItem, updateItem } from "../_lib/items";
 import { parseSmartAdd } from "../_lib/smartAdd";
 import { applyTmdbMetadata, searchTmdb } from "../_lib/tmdb";
-import type { Env, ItemInput, ItemListParams, ItemStatus, WatchStatus } from "../_lib/types";
+import type { Env, FavoriteLevel, ItemInput, ItemListParams, ItemStatus, MediaStatus, WatchStatus } from "../_lib/types";
 
 export const onRequest: PagesFunction<Env, "path"> = async (context) => {
   try {
@@ -137,7 +137,10 @@ function defaultMapping(columns: string[]) {
     "type",
     "category",
     "platform",
+    "maker",
+    "series",
     "release_year",
+    "year",
     "watched_at",
     "started_at",
     "completed_at",
@@ -145,8 +148,11 @@ function defaultMapping(columns: string[]) {
     "rating",
     "rewatch_score",
     "favorite",
+    "favorite_level",
+    "used",
     "is_private",
     "status",
+    "media_status",
     "quick_note",
     "long_note",
     "source_url",
@@ -186,6 +192,8 @@ function getListParams(url: URL): ItemListParams {
     unrated: url.searchParams.get("unrated") === "true",
     usedFilter: isUsedFilter(url.searchParams.get("usedFilter")) ? url.searchParams.get("usedFilter") as "all" | "used" | "unused" : "all",
     collectionLevel: optional(url.searchParams.get("collectionLevel")),
+    favoriteLevel: isFavoriteLevelFilter(url.searchParams.get("favoriteLevel")) ? url.searchParams.get("favoriteLevel") as FavoriteLevel | "all" : "all",
+    mediaStatus: isMediaStatusFilter(url.searchParams.get("mediaStatus")) ? url.searchParams.get("mediaStatus") as MediaStatus | "all" : "all",
     includePrivate: url.searchParams.get("includePrivate") === "true",
     privateOnly: url.searchParams.get("privateOnly") === "true",
     watchStatus: isWatchStatusFilter(url.searchParams.get("watchStatus")) ? url.searchParams.get("watchStatus") as WatchStatus | "all" : "all",
@@ -195,6 +203,8 @@ function getListParams(url: URL): ItemListParams {
     excludeTag: optional(url.searchParams.get("excludeTag")),
     year: optionalNumber(url.searchParams.get("year")),
     platform: optional(url.searchParams.get("platform")),
+    maker: optional(url.searchParams.get("maker")),
+    series: optional(url.searchParams.get("series")),
     codeQuery: optional(url.searchParams.get("codeQuery")),
     titleQuery: optional(url.searchParams.get("titleQuery")),
     person: optional(url.searchParams.get("person")),
@@ -206,7 +216,7 @@ function getListParams(url: URL): ItemListParams {
     updatedFrom: optional(url.searchParams.get("updatedFrom")),
     updatedTo: optional(url.searchParams.get("updatedTo")),
     page: optionalNumber(url.searchParams.get("page")) || 1,
-    pageSize: optionalNumber(url.searchParams.get("pageSize")) || 25
+    pageSize: optionalNumber(url.searchParams.get("pageSize")) || 50
   };
 }
 
@@ -230,4 +240,12 @@ function isWatchStatusFilter(value: string | null): value is WatchStatus | "all"
 
 function isUsedFilter(value: string | null): value is "all" | "used" | "unused" {
   return value === "all" || value === "used" || value === "unused";
+}
+
+function isFavoriteLevelFilter(value: string | null): value is FavoriteLevel | "all" {
+  return value === "all" || value === "神作" || value === "收藏" || value === "一般" || value === "雷片" || value === "已刪";
+}
+
+function isMediaStatusFilter(value: string | null): value is MediaStatus | "all" {
+  return value === "all" || value === "待觀看" || value === "已觀看" || value === "想重看" || value === "已刪除";
 }

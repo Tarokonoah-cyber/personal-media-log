@@ -31,6 +31,8 @@ const defaultFilters: ListFilters = {
   unrated: false,
   usedFilter: "all",
   collectionLevel: "",
+  favoriteLevel: "all",
+  mediaStatus: "all",
   watchStatus: "all",
   type: "",
   category: "",
@@ -38,6 +40,8 @@ const defaultFilters: ListFilters = {
   excludeTag: "",
   year: "",
   platform: "",
+  maker: "",
+  series: "",
   codeQuery: "",
   titleQuery: "",
   person: "",
@@ -954,6 +958,15 @@ function PrivateWorkbenchV2({
   const used = summary?.used ?? 0;
   const unused = summary?.unused ?? Math.max(0, summaryTotal - used);
   const averageRating = summary?.averageRating === null || summary?.averageRating === undefined ? "-" : summary.averageRating.toFixed(1);
+  const quickFilters: Array<{ label: string; patch: Partial<ListFilters> }> = [
+    { label: "神作 9+", patch: { ratingMin: "9", favoriteLevel: "神作" } },
+    { label: "已使用", patch: { usedFilter: "used" } },
+    { label: "收藏", patch: { favoriteLevel: "收藏" } },
+    { label: "雷片", patch: { favoriteLevel: "雷片" } },
+    { label: "已刪除", patch: { mediaStatus: "已刪除" } },
+    { label: "FC2", patch: { platform: "FC2" } },
+    { label: "JAV", patch: { platform: "JAV" } }
+  ];
 
   return (
     <section className="private-workbench private-workbench-compact">
@@ -1004,7 +1017,18 @@ function PrivateWorkbenchV2({
           <button disabled={filters.page <= 1} onClick={() => onPatchFilters({ page: filters.page - 1 })}>上一頁</button>
           <span>{filters.page} / {pageCount}</span>
           <button disabled={filters.page >= pageCount} onClick={() => onPatchFilters({ page: filters.page + 1 })}>下一頁</button>
+          <select value={filters.pageSize} onChange={(event) => onPatchFilters({ pageSize: Number(event.target.value), page: 1 })} aria-label="每頁筆數">
+            {[50, 100, 200].map((size) => <option key={size} value={size}>{size} / 頁</option>)}
+          </select>
         </div>
+      </div>
+
+      <div className="quick-filter-row private-quick-filters" aria-label="快捷篩選">
+        {quickFilters.map((entry) => (
+          <button key={entry.label} type="button" onClick={() => onPatchFilters(entry.patch)}>
+            {entry.label}
+          </button>
+        ))}
       </div>
 
       <ItemList
@@ -1051,7 +1075,12 @@ function hasPrivateFilters(filters: ListFilters) {
     filters.unrated ||
     filters.usedFilter !== "all" ||
     filters.collectionLevel.trim() ||
+    filters.favoriteLevel !== "all" ||
+    filters.mediaStatus !== "all" ||
     filters.tag.trim() ||
+    filters.platform.trim() ||
+    filters.maker.trim() ||
+    filters.series.trim() ||
     filters.person.trim() ||
     filters.studio.trim() ||
     filters.year.trim() ||
@@ -1095,11 +1124,15 @@ function activeFilterChips(filters: ListFilters, activeView: string) {
   if (filters.unrated) chips.push("尚未評分");
   if (filters.usedFilter === "used") chips.push("精選收藏");
   if (filters.usedFilter === "unused") chips.push("非精選");
+  if (filters.favoriteLevel && filters.favoriteLevel !== "all") chips.push(`收藏等級：${filters.favoriteLevel}`);
+  if (filters.mediaStatus && filters.mediaStatus !== "all") chips.push(`狀態：${filters.mediaStatus}`);
   if (filters.collectionLevel.trim()) chips.push(`收藏：${filters.collectionLevel.trim()}`);
   if (filters.type.trim()) chips.push(`類型：${filters.type.trim()}`);
   if ((filters.category || "").trim()) chips.push(`分類：${(filters.category || "").trim()}`);
   if (filters.tag.trim()) chips.push(`#${filters.tag.trim()}`);
   if (filters.platform.trim()) chips.push(`平台：${filters.platform.trim()}`);
+  if (filters.maker.trim()) chips.push(`片商：${filters.maker.trim()}`);
+  if (filters.series.trim()) chips.push(`系列：${filters.series.trim()}`);
   if (filters.year.trim()) chips.push(`年份：${filters.year.trim()}`);
   if (filters.codeQuery.trim()) chips.push(`番號：${filters.codeQuery.trim()}`);
   if (filters.titleQuery.trim()) chips.push(`片名：${filters.titleQuery.trim()}`);
@@ -1215,6 +1248,8 @@ function simpleDraftToInput(draft: { code: string; title: string; rating: string
       is_private: true,
       watched_at: draft.watched_at || null,
       rating,
+      favorite_level: rating !== null && rating >= 9 ? "神作" : "一般",
+      media_status: "已觀看",
       tags,
       metadata_json: JSON.stringify({
         ...(code ? { code } : {}),
@@ -1360,7 +1395,10 @@ function emptyItem(): Partial<MediaItem> {
     type: null,
     category: null,
     platform: null,
+    maker: null,
+    series: null,
     release_year: null,
+    year: null,
     watched_at: null,
     started_at: null,
     completed_at: null,
@@ -1368,8 +1406,11 @@ function emptyItem(): Partial<MediaItem> {
     rating: null,
     rewatch_score: null,
     favorite: false,
+    favorite_level: "一般",
+    used: false,
     is_private: false,
     status: "raw",
+    media_status: "待觀看",
     quick_note: null,
     long_note: null,
     source_url: null,

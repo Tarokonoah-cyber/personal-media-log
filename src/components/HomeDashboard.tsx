@@ -18,12 +18,16 @@ const organizerFilters: ListFilters = {
   ratingMax: "",
   usedFilter: "all",
   collectionLevel: "",
+  favoriteLevel: "all",
+  mediaStatus: "all",
   watchStatus: "all",
   type: "",
   category: "",
   tag: "",
   year: "",
   platform: "",
+  maker: "",
+  series: "",
   codeQuery: "",
   titleQuery: "",
   person: "",
@@ -269,7 +273,7 @@ async function loadOrganizerItems(includePrivate: boolean) {
     allItems.push(...result.items);
     total = result.total;
     page += 1;
-  } while (allItems.length < total);
+  } while (allItems.length < total && page <= 5);
   return allItems;
 }
 

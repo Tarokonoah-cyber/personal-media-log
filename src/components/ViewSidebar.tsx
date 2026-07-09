@@ -1,8 +1,6 @@
-import { BarChart3, Clapperboard, ChevronLeft, ChevronRight, Database, Film, Folder, Hash, Heart, Home, Layers, Settings, Sparkles, Tags, Tv, X } from "lucide-react";
-import { useState } from "react";
+import { BarChart3, ChevronLeft, ChevronRight, Clapperboard, Database, Film, Folder, Hash, Heart, Layers, Settings, Sparkles, Tags, Tv, X } from "lucide-react";
 import type { ReactNode } from "react";
-import { isPrivateLibraryLabel, PRIVATE_LIBRARY_LABEL, PRIVATE_RECOMMENDED_TAG } from "../lib/privacy";
-import { collectionLevelOptions } from "../lib/reflection";
+import { isPrivateLibraryLabel } from "../lib/privacy";
 import { libraryTree } from "../lib/taxonomy";
 import type { ListFilters, MediaItem, PrivateSummary } from "../types";
 import { HomeDashboard } from "./HomeDashboard";
@@ -11,17 +9,27 @@ type DisplayView = "table" | "list" | "poster" | "calendar";
 type ToolTab = "organizer" | "stats" | "data" | "settings";
 
 const mainItems = [
-  { id: "home", label: "首頁", icon: Home },
-  { id: "database", label: "資料庫", icon: Folder },
+  { id: "home", label: "首頁", icon: HomeIcon },
+  { id: "database", label: "資料庫", icon: Database },
   { id: "favorites", label: "收藏", icon: Heart }
 ] as const;
 
 const toolItems = [
-  { id: "organizer", label: "整理中心", icon: Sparkles },
+  { id: "organizer", label: "整理", icon: Sparkles },
   { id: "stats", label: "統計", icon: BarChart3 },
-  { id: "data", label: "資料備份", icon: Database },
+  { id: "data", label: "匯入匯出", icon: Database },
   { id: "settings", label: "設定", icon: Settings }
 ] as const;
+
+const privateStatuses = ["待觀看", "已觀看", "想重看", "已刪除"] as const;
+const favoriteLevels = ["神作", "收藏", "一般", "雷片", "已刪"] as const;
+const usageFilters = [
+  { label: "已使用", usedFilter: "used" },
+  { label: "未使用", usedFilter: "unused" }
+] as const;
+const platformItems = ["FC2", "JAV", "SWAG", "麻豆", "糖心", "自拍", "歐美", "其他"] as const;
+const makerItems = ["S1", "SOD", "Prestige", "Moodyz", "FALENO", "其他片商"] as const;
+const tagItems = ["高顏值", "素人感", "劇情好", "畫質差", "有碼", "無碼", "雷"] as const;
 
 export function ViewSidebar({
   activeView,
@@ -64,150 +72,122 @@ export function ViewSidebar({
   onTool: (tab: ToolTab) => void;
   onPrivateFilter?: (patch: Partial<ListFilters>) => void;
 }) {
-  const [showAllTags, setShowAllTags] = useState(false);
   const showText = !collapsed || mobileOpen;
-  const privateTags = tags.filter((tag) => tag !== PRIVATE_RECOMMENDED_TAG);
-  const visibleTags = showAllTags ? tags : tags.slice(0, 3);
-  const visiblePrivateTags = showAllTags ? privateTags : privateTags.slice(0, 3);
-  const libraryItems = libraryTree.filter((entry) => {
-    if (activeView === "home" && entry.label === "沙雕动画") return false;
-    return !safeMode || !isPrivateLibraryLabel(entry.label);
-  });
+  const libraryItems = libraryTree.filter((entry) => !safeMode || !isPrivateLibraryLabel(entry.label));
 
   if (privateMode) {
-    const collectionLevels = Array.from(new Set([
-      ...collectionLevelOptions,
-      ...(privateSummary?.collectionCounts.map((entry) => entry.level) || [])
-    ]));
     const countForLevel = (level: string) => privateSummary?.collectionCounts.find((entry) => entry.level === level)?.count;
     return (
       <>
-        <div className={mobileOpen ? "sidebar-scrim open" : "sidebar-scrim"} onClick={onCloseMobile} />
-        <aside className={`${collapsed ? "database-sidebar collapsed private-sidebar" : "database-sidebar private-sidebar"} ${mobileOpen ? "mobile-open" : ""}`} aria-label="私密資料導覽">
-          <div className="sidebar-top">
-            {showText && (
-              <div className="sidebar-brand">
-                <p>Personal Media Log</p>
-                <strong>私密工作台</strong>
-                <span>{privateSummary?.total || 0} 筆資料</span>
-              </div>
-            )}
-            <button className="row-icon desktop-collapse" onClick={onToggleCollapsed} title={collapsed ? "展開側欄" : "收合側欄"}>
-              {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-            </button>
-            <button className="row-icon mobile-close" onClick={onCloseMobile} title="關閉側欄"><X size={16} /></button>
-          </div>
+        <SidebarScrim open={mobileOpen} onClose={onCloseMobile} />
+        <aside className={`${collapsed ? "database-sidebar collapsed private-sidebar" : "database-sidebar private-sidebar"} ${mobileOpen ? "mobile-open" : ""}`} aria-label="私密工作台分類">
+          <SidebarTop
+            showText={showText}
+            collapsed={collapsed}
+            title="私密工作台"
+            subtitle={`${privateSummary?.total || 0} 筆`}
+            onToggleCollapsed={onToggleCollapsed}
+            onCloseMobile={onCloseMobile}
+          />
 
-          <NavSection title="私密" showText={showText} tone="primary">
-            <button className={!hasPrivateSidebarFilter(filters) ? "active" : ""} onClick={() => onPrivateFilter?.({})} title="全部">
-              <Database size={16} />
-              {showText && <span>全部</span>}
-            </button>
-            <button className={filters.usedFilter === "used" ? "active" : ""} onClick={() => onPrivateFilter?.({ usedFilter: "used" })} title="精選收藏">
-              <Heart size={16} />
-              {showText && <span>精選收藏</span>}
-            </button>
-            <button className={filters.unrated ? "active" : ""} onClick={() => onPrivateFilter?.({ unrated: true })} title="尚未評分">
-              <Folder size={16} />
-              {showText && <span>尚未評分</span>}
-            </button>
-            <button className={filters.tag === PRIVATE_RECOMMENDED_TAG ? "active" : ""} onClick={() => onPrivateFilter?.({ tag: PRIVATE_RECOMMENDED_TAG })} title="網友推薦">
-              <Clapperboard size={16} />
-              {showText && <span>網友推薦</span>}
-            </button>
-          </NavSection>
-
-          <NavSection title="收藏" showText={showText} tone="secondary">
-            {collectionLevels.map((level) => (
-              <button key={level} className={filters.collectionLevel === level ? "active" : ""} onClick={() => onPrivateFilter?.({ collectionLevel: level })} title={level}>
-                <Heart size={15} />
-                {showText && <span>{level}{countForLevel(level) !== undefined ? ` ${countForLevel(level)}` : ""}</span>}
-              </button>
+          <NavSection title="全部" showText={showText} tone="primary">
+            <SidebarButton active={!hasPrivateSidebarFilter(filters)} title="全部" icon={<Database size={16} />} showText={showText} onClick={() => onPrivateFilter?.({})}>
+              全部
+            </SidebarButton>
+            {privateStatuses.map((status) => (
+              <SidebarButton key={status} active={filters.mediaStatus === status} title={status} icon={<Folder size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ mediaStatus: status })}>
+                {status}
+              </SidebarButton>
             ))}
           </NavSection>
 
-          <NavSection title="標籤" showText={showText} tone="tags">
-            {privateTags.length === 0 ? (
-              showText && <em>尚無標籤</em>
-            ) : (
-              <>
-                {visiblePrivateTags.map((tag) => (
-                  <button key={tag} className={filters.tag === tag ? "active" : ""} onClick={() => onPrivateFilter?.({ tag })} title={tag}>
-                    {!showText ? <Hash size={14} /> : <span className="tag-prefix">#</span>}
-                    {showText && <span>{tag}</span>}
-                  </button>
-                ))}
-                {showText && privateTags.length > 3 && (
-                  <button className="sidebar-more" onClick={() => setShowAllTags((value) => !value)}>
-                    <Tags size={13} />
-                    {showAllTags ? "收合標籤" : "更多標籤..."}
-                  </button>
-                )}
-              </>
-            )}
+          <NavSection title="收藏分類" showText={showText} tone="secondary">
+            {favoriteLevels.map((level) => (
+              <SidebarButton key={level} active={filters.favoriteLevel === level} title={level} icon={<Heart size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ favoriteLevel: level })}>
+                {level}{countForLevel(level) !== undefined ? ` ${countForLevel(level)}` : ""}
+              </SidebarButton>
+            ))}
+          </NavSection>
+
+          <NavSection title="使用分類" showText={showText} tone="secondary">
+            {usageFilters.map((entry) => (
+              <SidebarButton key={entry.usedFilter} active={filters.usedFilter === entry.usedFilter} title={entry.label} icon={<Heart size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ usedFilter: entry.usedFilter })}>
+                {entry.label}
+              </SidebarButton>
+            ))}
+          </NavSection>
+
+          <NavSection title="平台分類" showText={showText} tone="secondary">
+            {platformItems.map((platform) => (
+              <SidebarButton key={platform} active={filters.platform === platform} title={platform} icon={<Clapperboard size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ platform })}>
+                {platform}
+              </SidebarButton>
+            ))}
+          </NavSection>
+
+          <NavSection title="片商分類" showText={showText} tone="secondary">
+            {makerItems.map((maker) => (
+              <SidebarButton key={maker} active={filters.maker === maker} title={maker} icon={<Layers size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ maker })}>
+                {maker}
+              </SidebarButton>
+            ))}
+          </NavSection>
+
+          <NavSection title="標籤分類" showText={showText} tone="tags">
+            {tagItems.map((tag) => (
+              <SidebarButton key={tag} active={filters.tag === tag} title={tag} icon={!showText ? <Hash size={14} /> : <span className="tag-prefix">#</span>} showText={showText} onClick={() => onPrivateFilter?.({ tag })}>
+                {tag}
+              </SidebarButton>
+            ))}
           </NavSection>
         </aside>
       </>
     );
   }
 
+  const visibleTags = tags.slice(0, 12);
   return (
     <>
-      <div className={mobileOpen ? "sidebar-scrim open" : "sidebar-scrim"} onClick={onCloseMobile} />
-      <aside className={`${collapsed ? "database-sidebar collapsed" : "database-sidebar"} ${mobileOpen ? "mobile-open" : ""}`} aria-label="觀看資料庫導覽">
-        <div className="sidebar-top">
-          {showText && (
-            <div className="sidebar-brand">
-              <p>Personal Media Log</p>
-              <strong>觀看資料庫</strong>
-              <HomeDashboard items={summaryItems} inboxTotal={inboxTotal} />
-            </div>
-          )}
-          <button className="row-icon desktop-collapse" onClick={onToggleCollapsed} title={collapsed ? "展開側欄" : "收合側欄"}>
-            {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-          </button>
-          <button className="row-icon mobile-close" onClick={onCloseMobile} title="關閉側欄"><X size={16} /></button>
-        </div>
+      <SidebarScrim open={mobileOpen} onClose={onCloseMobile} />
+      <aside className={`${collapsed ? "database-sidebar collapsed" : "database-sidebar"} ${mobileOpen ? "mobile-open" : ""}`} aria-label="瀏覽選單">
+        <SidebarTop
+          showText={showText}
+          collapsed={collapsed}
+          title="觀影資料庫"
+          subtitle=""
+          onToggleCollapsed={onToggleCollapsed}
+          onCloseMobile={onCloseMobile}
+          extra={showText ? <HomeDashboard items={summaryItems} inboxTotal={inboxTotal} /> : null}
+        />
 
         <NavSection title="主要" showText={showText} tone="primary">
           {mainItems.map((item) => {
             const Icon = item.icon;
             return (
-              <button key={item.id} className={isMainActive(item.id, activeView, filters) ? "active" : ""} onClick={() => onView(item.id)} title={item.label}>
-                <Icon size={16} />
-                {showText && <span>{item.label}</span>}
-              </button>
+              <SidebarButton key={item.id} active={isMainActive(item.id, activeView, filters)} title={item.label} icon={<Icon size={16} />} showText={showText} onClick={() => onView(item.id)}>
+                {item.label}
+              </SidebarButton>
             );
           })}
         </NavSection>
 
-        <NavSection title="媒體類型" showText={showText} tone="secondary">
+        <NavSection title="媒體分類" showText={showText} tone="secondary">
           {libraryItems.map((entry) => (
-            <button key={entry.id} className={activeView === entry.label ? "active" : ""} onClick={() => onLibrary(entry.label)} title={entry.label}>
-              {iconFor(entry.label)}
-              {showText && <span>{entry.label}</span>}
-            </button>
+            <SidebarButton key={entry.id} active={activeView === entry.label} title={entry.label} icon={iconFor(entry.label)} showText={showText} onClick={() => onLibrary(entry.label)}>
+              {entry.label}
+            </SidebarButton>
           ))}
         </NavSection>
 
         <NavSection title="標籤" showText={showText} tone="tags">
-          {tags.length === 0 ? (
-            showText && <em>尚無標籤</em>
+          {visibleTags.length === 0 ? (
+            showText && <em>沒有標籤</em>
           ) : (
-            <>
-              {visibleTags.map((tag) => (
-                <button key={tag} className={filters.tag === tag ? "active" : ""} onClick={() => onTag(tag)} title={tag}>
-                  {!showText ? <Hash size={14} /> : <span className="tag-prefix">#</span>}
-                  {showText && <span>{tag}</span>}
-                </button>
-              ))}
-              {showText && tags.length > 3 && (
-                <button className="sidebar-more" onClick={() => setShowAllTags((value) => !value)}>
-                  <Tags size={13} />
-                  {showAllTags ? "收合標籤" : "更多標籤..."}
-                </button>
-              )}
-            </>
+            visibleTags.map((tag) => (
+              <SidebarButton key={tag} active={filters.tag === tag} title={tag} icon={!showText ? <Hash size={14} /> : <span className="tag-prefix">#</span>} showText={showText} onClick={() => onTag(tag)}>
+                {tag}
+              </SidebarButton>
+            ))
           )}
         </NavSection>
 
@@ -215,15 +195,62 @@ export function ViewSidebar({
           {toolItems.map((item) => {
             const Icon = item.icon;
             return (
-              <button key={item.id} className={activeTool === item.id ? "active" : ""} onClick={() => onTool(item.id)} title={item.label}>
-                <Icon size={15} />
-                {showText && <span>{item.label}</span>}
-              </button>
+              <SidebarButton key={item.id} active={activeTool === item.id} title={item.label} icon={<Icon size={15} />} showText={showText} onClick={() => onTool(item.id)}>
+                {item.label}
+              </SidebarButton>
             );
           })}
         </NavSection>
       </aside>
     </>
+  );
+}
+
+function SidebarScrim({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return <div className={open ? "sidebar-scrim open" : "sidebar-scrim"} onClick={onClose} />;
+}
+
+function SidebarTop({
+  showText,
+  collapsed,
+  title,
+  subtitle,
+  extra,
+  onToggleCollapsed,
+  onCloseMobile
+}: {
+  showText: boolean;
+  collapsed: boolean;
+  title: string;
+  subtitle: string;
+  extra?: ReactNode;
+  onToggleCollapsed: () => void;
+  onCloseMobile: () => void;
+}) {
+  return (
+    <div className="sidebar-top">
+      {showText && (
+        <div className="sidebar-brand">
+          <p>Personal Media Log</p>
+          <strong>{title}</strong>
+          {subtitle && <span>{subtitle}</span>}
+          {extra}
+        </div>
+      )}
+      <button className="row-icon desktop-collapse" onClick={onToggleCollapsed} title={collapsed ? "展開選單" : "收合選單"}>
+        {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+      </button>
+      <button className="row-icon mobile-close" onClick={onCloseMobile} title="關閉選單"><X size={16} /></button>
+    </div>
+  );
+}
+
+function SidebarButton({ active, title, icon, showText, children, onClick }: { active: boolean; title: string; icon: ReactNode; showText: boolean; children: ReactNode; onClick: () => void }) {
+  return (
+    <button className={active ? "active" : ""} onClick={onClick} title={title}>
+      {icon}
+      {showText && <span>{children}</span>}
+    </button>
   );
 }
 
@@ -244,14 +271,23 @@ function isMainActive(id: string, activeView: string, filters: ListFilters) {
 }
 
 function hasPrivateSidebarFilter(filters: ListFilters) {
-  return Boolean(filters.usedFilter !== "all" || filters.unrated || filters.collectionLevel || filters.tag);
+  return Boolean(
+    filters.mediaStatus !== "all" ||
+    filters.favoriteLevel !== "all" ||
+    filters.usedFilter !== "all" ||
+    filters.platform ||
+    filters.maker ||
+    filters.tag
+  );
 }
 
 function iconFor(label: string) {
-  if (label === "電影") return <Film size={15} />;
-  if (label === "影集") return <Tv size={15} />;
-  if (label === "動畫") return <Clapperboard size={15} />;
-  if (label === "沙雕动画") return <Clapperboard size={15} />;
-  if (label === "YouTube") return <Layers size={15} />;
+  if (label.includes("電影")) return <Film size={15} />;
+  if (label.includes("劇") || label.toLowerCase().includes("tv")) return <Tv size={15} />;
+  if (label.includes("動畫")) return <Clapperboard size={15} />;
   return <Folder size={15} />;
+}
+
+function HomeIcon({ size }: { size: number }) {
+  return <Folder size={size} />;
 }

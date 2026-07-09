@@ -63,9 +63,9 @@ export function privateItemDetails(item: MediaItem): PrivateItemDetails {
   return {
     code,
     title: privateTitle(item, metadata, code),
-    performers: firstValue([metadataValue(metadata, PERFORMER_KEYS), item.people.join(", ")]) || "-",
-    studio: metadataValue(metadata, STUDIO_KEYS) || "-",
-    releaseYear: firstValue([item.release_year?.toString(), yearFromValue(metadataValue(metadata, YEAR_KEYS))]) || "-",
+    performers: firstValue([item.people.join(", "), metadataValue(metadata, PERFORMER_KEYS)]) || "-",
+    studio: firstValue([item.maker, metadataValue(metadata, STUDIO_KEYS), item.platform]) || "-",
+    releaseYear: firstValue([item.year?.toString(), item.release_year?.toString(), yearFromValue(metadataValue(metadata, YEAR_KEYS))]) || "-",
     type: firstValue([item.category, item.type !== PRIVATE_LIBRARY_LABEL ? item.type : null, PRIVATE_LIBRARY_LABEL]) || PRIVATE_LIBRARY_LABEL
   };
 }

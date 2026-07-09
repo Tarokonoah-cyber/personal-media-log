@@ -16,6 +16,8 @@ export interface Actor {
 
 export type ItemStatus = "raw" | "partial" | "complete" | "archived" | "deleted";
 export type WatchStatus = "plan_to_watch" | "watching" | "completed" | "paused" | "dropped" | "rewatching";
+export type FavoriteLevel = "神作" | "收藏" | "一般" | "雷片" | "已刪";
+export type MediaStatus = "待觀看" | "已觀看" | "想重看" | "已刪除";
 
 export interface ItemInput {
   raw_title?: string;
@@ -25,7 +27,10 @@ export interface ItemInput {
   type?: string | null;
   category?: string | null;
   platform?: string | null;
+  maker?: string | null;
+  series?: string | null;
   release_year?: number | null;
+  year?: number | null;
   watched_at?: string | null;
   started_at?: string | null;
   completed_at?: string | null;
@@ -33,8 +38,11 @@ export interface ItemInput {
   rating?: number | null;
   rewatch_score?: number | null;
   favorite?: boolean;
+  favorite_level?: FavoriteLevel;
+  used?: boolean;
   is_private?: boolean;
   status?: ItemStatus;
+  media_status?: MediaStatus;
   quick_note?: string | null;
   long_note?: string | null;
   source_url?: string | null;
@@ -67,6 +75,8 @@ export interface ItemListParams {
   unrated?: boolean;
   usedFilter?: "all" | "used" | "unused";
   collectionLevel?: string;
+  favoriteLevel?: FavoriteLevel | "all";
+  mediaStatus?: MediaStatus | "all";
   includePrivate?: boolean;
   privateOnly?: boolean;
   watchStatus?: WatchStatus | "all";
@@ -76,6 +86,8 @@ export interface ItemListParams {
   excludeTag?: string;
   year?: number;
   platform?: string;
+  maker?: string;
+  series?: string;
   codeQuery?: string;
   titleQuery?: string;
   person?: string;

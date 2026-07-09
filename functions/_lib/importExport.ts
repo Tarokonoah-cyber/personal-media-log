@@ -60,7 +60,10 @@ export function toCsv(rows: Record<string, unknown>[]) {
     "type",
     "category",
     "platform",
+    "maker",
+    "series",
     "release_year",
+    "year",
     "watched_at",
     "started_at",
     "completed_at",
@@ -68,8 +71,11 @@ export function toCsv(rows: Record<string, unknown>[]) {
     "rating",
     "rewatch_score",
     "favorite",
+    "favorite_level",
+    "used",
     "is_private",
     "status",
+    "media_status",
     "quick_note",
     "long_note",
     "source_url",
@@ -105,7 +111,10 @@ function normalizeExternalRow(value: unknown): ItemInput {
     type: asString(row.type),
     category: asString(row.category),
     platform: asString(row.platform),
-    release_year: asNumber(row.release_year),
+    maker: asString(row.maker ?? row.studio),
+    series: asString(row.series),
+    release_year: asNumber(row.release_year ?? row.year),
+    year: asNumber(row.year ?? row.release_year),
     watched_at: asString(row.watched_at),
     started_at: asString(row.started_at),
     completed_at: asString(row.completed_at),
@@ -113,8 +122,11 @@ function normalizeExternalRow(value: unknown): ItemInput {
     rating: asNumber(row.rating),
     rewatch_score: asNumber(row.rewatch_score),
     favorite: asBoolean(row.favorite),
+    favorite_level: asFavoriteLevel(row.favorite_level ?? row.collection_level),
+    used: asBoolean(row.used),
     is_private: asBoolean(row.is_private) || hasPrivateSignalValues([row.type, row.category, row.platform, row.metadata_json, row.genres, row.tags]),
     status: asStatus(row.status),
+    media_status: asMediaStatus(row.media_status),
     quick_note: asString(row.quick_note ?? row.note),
     long_note: asString(row.long_note),
     source_url: asString(row.source_url),
@@ -169,4 +181,12 @@ function asList(value: unknown) {
 
 function asStatus(value: unknown) {
   return value === "raw" || value === "partial" || value === "complete" || value === "archived" || value === "deleted" ? value : undefined;
+}
+
+function asFavoriteLevel(value: unknown) {
+  return value === "神作" || value === "收藏" || value === "一般" || value === "雷片" || value === "已刪" ? value : undefined;
+}
+
+function asMediaStatus(value: unknown) {
+  return value === "待觀看" || value === "已觀看" || value === "想重看" || value === "已刪除" ? value : undefined;
 }

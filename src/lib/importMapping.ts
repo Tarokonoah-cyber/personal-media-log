@@ -10,7 +10,10 @@ export const importFields = [
   "type",
   "category",
   "platform",
+  "maker",
+  "series",
   "release_year",
+  "year",
   "watched_at",
   "started_at",
   "completed_at",
@@ -18,8 +21,11 @@ export const importFields = [
   "rating",
   "rewatch_score",
   "favorite",
+  "favorite_level",
+  "used",
   "is_private",
   "status",
+  "media_status",
   "quick_note",
   "long_note",
   "source_url",
@@ -60,7 +66,10 @@ function normalizeItem(row: Record<string, unknown>): ItemInput {
     type: nullableString(row.type),
     category: nullableString(row.category),
     platform: nullableString(row.platform),
-    release_year: numberValue(row.release_year),
+    maker: nullableString(row.maker ?? row.studio),
+    series: nullableString(row.series),
+    release_year: numberValue(row.release_year ?? row.year),
+    year: numberValue(row.year ?? row.release_year),
     watched_at: nullableString(row.watched_at),
     started_at: nullableString(row.started_at),
     completed_at: nullableString(row.completed_at),
@@ -68,8 +77,11 @@ function normalizeItem(row: Record<string, unknown>): ItemInput {
     rating: numberValue(row.rating),
     rewatch_score: numberValue(row.rewatch_score),
     favorite: booleanValue(row.favorite),
+    favorite_level: favoriteLevelValue(row.favorite_level ?? row.collection_level),
+    used: booleanValue(row.used),
     is_private: booleanValue(row.is_private) || hasPrivateSignalValues([row.type, row.category, row.platform, row.metadata_json, row.genres, row.tags]),
     status: statusValue(row.status),
+    media_status: mediaStatusValue(row.media_status),
     quick_note: nullableString(row.quick_note),
     long_note: nullableString(row.long_note),
     source_url: nullableString(row.source_url),
@@ -128,4 +140,14 @@ function isPrivateMarker(value: string) {
 function statusValue(value: unknown) {
   const text = stringValue(value);
   return text === "raw" || text === "partial" || text === "complete" || text === "archived" || text === "deleted" ? text : "raw";
+}
+
+function favoriteLevelValue(value: unknown) {
+  const text = stringValue(value);
+  return text === "神作" || text === "收藏" || text === "一般" || text === "雷片" || text === "已刪" ? text : "一般";
+}
+
+function mediaStatusValue(value: unknown) {
+  const text = stringValue(value);
+  return text === "待觀看" || text === "已觀看" || text === "想重看" || text === "已刪除" ? text : "待觀看";
 }

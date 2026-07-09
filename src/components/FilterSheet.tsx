@@ -1,6 +1,11 @@
 import { SlidersHorizontal, X } from "lucide-react";
-import { collectionLevelOptions } from "../lib/reflection";
 import type { ListFilters } from "../types";
+
+const favoriteLevels = ["神作", "收藏", "一般", "雷片", "已刪"] as const;
+const mediaStatuses = ["待觀看", "已觀看", "想重看", "已刪除"] as const;
+const platforms = ["FC2", "JAV", "SWAG", "麻豆", "糖心", "自拍", "歐美", "其他"] as const;
+const makers = ["S1", "SOD", "Prestige", "Moodyz", "FALENO", "其他片商"] as const;
+const tags = ["高顏值", "素人感", "劇情好", "畫質差", "有碼", "無碼", "雷"] as const;
 
 export function FilterSheet({
   open,
@@ -19,7 +24,7 @@ export function FilterSheet({
     <div className={open ? "filter-sheet open" : "filter-sheet"} onClick={onClose}>
       <div className="filter-sheet-panel" onClick={(event) => event.stopPropagation()}>
         <header className="sheet-head">
-          <span><SlidersHorizontal size={18} />{privateMode ? "私密篩選" : "進階篩選"}</span>
+          <span><SlidersHorizontal size={18} />{privateMode ? "私密進階篩選" : "進階篩選"}</span>
           <button className="ghost-icon" onClick={onClose} aria-label="關閉篩選"><X size={18} /></button>
         </header>
         {privateMode ? (
@@ -35,58 +40,15 @@ export function FilterSheet({
 function GeneralFilters({ filters, onChange }: { filters: ListFilters; onChange: (patch: Partial<ListFilters>) => void }) {
   return (
     <div className="filter-grid">
-      <label>
-        整理狀態
-        <select value={filters.status} onChange={(event) => onChange({ status: event.target.value as ListFilters["status"] })}>
-          <option value="all">全部</option>
-          <option value="inbox">待整理</option>
-          <option value="raw">原始</option>
-          <option value="partial">部分整理</option>
-          <option value="organized">已整理</option>
-          <option value="complete">完成</option>
-        </select>
-      </label>
-      <label>
-        觀看狀態
-        <select value={filters.watchStatus || "all"} onChange={(event) => onChange({ watchStatus: event.target.value as ListFilters["watchStatus"] })}>
-          <option value="all">全部</option>
-          <option value="plan_to_watch">待觀看</option>
-          <option value="watching">觀看中</option>
-          <option value="completed">看完</option>
-          <option value="paused">暫停</option>
-          <option value="dropped">已放棄</option>
-          <option value="rewatching">重看中</option>
-        </select>
-      </label>
-      <label>
-        類型
-        <input value={filters.type} onChange={(event) => onChange({ type: event.target.value })} placeholder="電影、影集、動畫..." />
-      </label>
-      <label>
-        分類
-        <input value={filters.category || ""} onChange={(event) => onChange({ category: event.target.value })} placeholder="韓劇、日本、動畫影集..." />
-      </label>
-      <label>
-        標籤
-        <input value={filters.tag} onChange={(event) => onChange({ tag: event.target.value })} placeholder="輸入標籤..." />
-      </label>
-      <label>
-        平台
-        <input value={filters.platform} onChange={(event) => onChange({ platform: event.target.value })} placeholder="Netflix、YouTube..." />
-      </label>
-      <label>
-        年份
-        <input value={filters.year} onChange={(event) => onChange({ year: event.target.value })} inputMode="numeric" placeholder="2026" />
-      </label>
-      <label>
-        日期起
-        <input value={filters.watchedFrom} onChange={(event) => onChange({ watchedFrom: event.target.value })} type="date" />
-      </label>
-      <label>
-        日期迄
-        <input value={filters.watchedTo} onChange={(event) => onChange({ watchedTo: event.target.value })} type="date" />
-      </label>
-      <label className="check"><input type="checkbox" checked={filters.favorite} onChange={(event) => onChange({ favorite: event.target.checked })} />只看收藏</label>
+      <Select label="狀態" value={filters.status} onChange={(value) => onChange({ status: value as ListFilters["status"] })} options={["all", "inbox", "raw", "partial", "organized", "complete"]} />
+      <Field label="類型" value={filters.type} onChange={(value) => onChange({ type: value })} />
+      <Field label="分類" value={filters.category || ""} onChange={(value) => onChange({ category: value })} />
+      <Field label="標籤" value={filters.tag} onChange={(value) => onChange({ tag: value })} />
+      <Field label="平台" value={filters.platform} onChange={(value) => onChange({ platform: value })} />
+      <Field label="年份" value={filters.year} inputMode="numeric" onChange={(value) => onChange({ year: value })} />
+      <Field label="觀看起日" value={filters.watchedFrom} type="date" onChange={(value) => onChange({ watchedFrom: value })} />
+      <Field label="觀看迄日" value={filters.watchedTo} type="date" onChange={(value) => onChange({ watchedTo: value })} />
+      <label className="check"><input type="checkbox" checked={filters.favorite} onChange={(event) => onChange({ favorite: event.target.checked })} />收藏</label>
       <label className="check"><input type="checkbox" checked={filters.highRated} onChange={(event) => onChange({ highRated: event.target.checked })} />高分</label>
     </div>
   );
@@ -95,58 +57,52 @@ function GeneralFilters({ filters, onChange }: { filters: ListFilters; onChange:
 function PrivateFilters({ filters, onChange }: { filters: ListFilters; onChange: (patch: Partial<ListFilters>) => void }) {
   return (
     <div className="filter-grid private-filter-grid">
-      <label>
-        關鍵字
-        <input value={filters.query} onChange={(event) => onChange({ query: event.target.value })} placeholder="搜尋番號、片名、女優、標籤" />
-      </label>
-      <label>
-        番號關鍵字
-        <input value={filters.codeQuery} onChange={(event) => onChange({ codeQuery: event.target.value })} placeholder="例如 SSIS-001" />
-      </label>
-      <label>
-        片名關鍵字
-        <input value={filters.titleQuery} onChange={(event) => onChange({ titleQuery: event.target.value })} placeholder="輸入片名..." />
-      </label>
-      <label>
-        分數下限
-        <input value={filters.ratingMin} onChange={(event) => onChange({ ratingMin: event.target.value })} inputMode="decimal" placeholder="0" />
-      </label>
-      <label>
-        分數上限
-        <input value={filters.ratingMax} onChange={(event) => onChange({ ratingMax: event.target.value })} inputMode="decimal" placeholder="10" />
-      </label>
-      <label>
-        精選狀態
-        <select value={filters.usedFilter} onChange={(event) => onChange({ usedFilter: event.target.value as ListFilters["usedFilter"] })}>
-          <option value="all">全部</option>
-          <option value="used">精選收藏</option>
-          <option value="unused">非精選</option>
-        </select>
-      </label>
-      <label className="check"><input type="checkbox" checked={Boolean(filters.unrated)} onChange={(event) => onChange({ unrated: event.target.checked })} />尚未評分</label>
-      <label>
-        收藏
-        <select value={filters.collectionLevel} onChange={(event) => onChange({ collectionLevel: event.target.value })}>
-          <option value="">全部</option>
-          {collectionLevelOptions.map((option) => <option key={option} value={option}>{option}</option>)}
-        </select>
-      </label>
-      <label>
-        標籤
-        <input value={filters.tag} onChange={(event) => onChange({ tag: event.target.value })} placeholder="輸入標籤..." />
-      </label>
-      <label>
-        女優
-        <input value={filters.person} onChange={(event) => onChange({ person: event.target.value })} />
-      </label>
-      <label>
-        片商
-        <input value={filters.studio} onChange={(event) => onChange({ studio: event.target.value })} />
-      </label>
-      <label>
-        年分
-        <input value={filters.year} onChange={(event) => onChange({ year: event.target.value })} inputMode="numeric" placeholder="2026" />
-      </label>
+      <Field label="搜尋" value={filters.query} onChange={(value) => onChange({ query: value })} placeholder="代號、女優、平台、片商、標籤、心得" />
+      <Field label="作品代號" value={filters.codeQuery} onChange={(value) => onChange({ codeQuery: value })} placeholder="FC2PPV-2255291" />
+      <Field label="女優 / 創作者" value={filters.person} onChange={(value) => onChange({ person: value })} />
+      <Field label="系列 / 番號前綴" value={filters.series} onChange={(value) => onChange({ series: value })} placeholder="SSIS / IPZZ / FC2PPV" />
+      <Field label="評分下限" value={filters.ratingMin} inputMode="decimal" onChange={(value) => onChange({ ratingMin: value })} />
+      <Field label="評分上限" value={filters.ratingMax} inputMode="decimal" onChange={(value) => onChange({ ratingMax: value })} />
+      <OptionSelect label="平台" value={filters.platform} options={platforms} onChange={(value) => onChange({ platform: value })} />
+      <OptionSelect label="片商" value={filters.maker} options={makers} onChange={(value) => onChange({ maker: value })} />
+      <OptionSelect label="收藏等級" value={filters.favoriteLevel || "all"} options={favoriteLevels} allLabel="全部" onChange={(value) => onChange({ favoriteLevel: value as ListFilters["favoriteLevel"] })} />
+      <Select label="已使用" value={filters.usedFilter} options={["all", "used", "unused"]} labels={{ all: "全部", used: "已使用", unused: "未使用" }} onChange={(value) => onChange({ usedFilter: value as ListFilters["usedFilter"] })} />
+      <OptionSelect label="狀態" value={filters.mediaStatus || "all"} options={mediaStatuses} allLabel="全部" onChange={(value) => onChange({ mediaStatus: value as ListFilters["mediaStatus"] })} />
+      <Field label="年份" value={filters.year} inputMode="numeric" onChange={(value) => onChange({ year: value })} />
+      <OptionSelect label="標籤" value={filters.tag} options={tags} onChange={(value) => onChange({ tag: value })} />
+      <label className="check"><input type="checkbox" checked={Boolean(filters.unrated)} onChange={(event) => onChange({ unrated: event.target.checked })} />未評分</label>
     </div>
+  );
+}
+
+function Field({ label, value, onChange, placeholder, type = "text", inputMode }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; type?: string; inputMode?: "numeric" | "decimal" }) {
+  return (
+    <label>
+      {label}
+      <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} type={type} inputMode={inputMode} />
+    </label>
+  );
+}
+
+function Select({ label, value, options, labels, onChange }: { label: string; value: string; options: readonly string[]; labels?: Record<string, string>; onChange: (value: string) => void }) {
+  return (
+    <label>
+      {label}
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => <option key={option} value={option}>{labels?.[option] || option}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function OptionSelect<T extends string>({ label, value, options, allLabel = "不限", onChange }: { label: string; value: string; options: readonly T[]; allLabel?: string; onChange: (value: "" | T | "all") => void }) {
+  return (
+    <label>
+      {label}
+      <select value={value} onChange={(event) => onChange(event.target.value as "" | T | "all")}>
+        <option value={label === "收藏等級" || label === "狀態" ? "all" : ""}>{allLabel}</option>
+        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+      </select>
+    </label>
   );
 }

@@ -2,9 +2,10 @@ import { HttpError } from "./http";
 import { inboxWhereSql } from "./organization";
 import { hasPrivateSignalValues, isPrivateMarker as isPrivateMarkerValue, privateItemWhereSql, publicItemWhereSql } from "./privacy";
 import { newId, nowIso } from "./ids";
-import type { Actor, Env, ItemInput, ItemListParams, ItemRecord, ItemStatus, WatchStatus, PrivateSummary } from "./types";
+import type { Actor, Env, FavoriteLevel, ItemInput, ItemListParams, ItemRecord, ItemStatus, MediaStatus, WatchStatus, PrivateSummary } from "./types";
 
 type Row = Record<string, unknown>;
+type NormalizedInput = Required<ItemInput> & { search_text: string };
 
 const itemColumns = [
   "id",
@@ -15,7 +16,10 @@ const itemColumns = [
   "type",
   "category",
   "platform",
+  "maker",
+  "series",
   "release_year",
+  "year",
   "watched_at",
   "started_at",
   "completed_at",
@@ -23,8 +27,11 @@ const itemColumns = [
   "rating",
   "rewatch_score",
   "favorite",
+  "favorite_level",
+  "used",
   "is_private",
   "status",
+  "media_status",
   "quick_note",
   "long_note",
   "source_url",
@@ -36,15 +43,21 @@ const itemColumns = [
   "deleted_at"
 ].join(", ");
 
+const listItemColumns = itemColumns
+  .split(", ")
+  .filter((column) => column !== "long_note")
+  .join(", ");
+
 export async function listItems(env: Env, params: ItemListParams) {
   const { whereSql, bind } = buildItemWhere(params);
   const page = Math.max(1, params.page);
-  const pageSize = Math.min(100, Math.max(1, params.pageSize));
+  const pageSize = Math.min(200, Math.max(1, params.pageSize));
   const offset = (page - 1) * pageSize;
+  const orderSql = listOrderSql(params);
 
   const countStmt = env.MEDIA_LOG_DB.prepare(`SELECT COUNT(*) AS count FROM items ${whereSql}`).bind(...bind);
   const listStmt = env.MEDIA_LOG_DB
-    .prepare(`SELECT ${itemColumns} FROM items ${whereSql} ORDER BY datetime(updated_at) DESC LIMIT ? OFFSET ?`)
+    .prepare(`SELECT ${listItemColumns} FROM items ${whereSql} ${orderSql} LIMIT ? OFFSET ?`)
     .bind(...bind, pageSize, offset);
   const summaryPromise = params.privateOnly ? getPrivateSummary(env, whereSql, bind) : Promise.resolve(undefined);
   const [countResult, listResult, privateSummary] = await Promise.all([
@@ -85,7 +98,7 @@ function buildItemWhere(params: ItemListParams) {
   if (params.watchStatus && params.watchStatus !== "all") {
     where.push(watchStatusWhereSql(params.watchStatus));
   }
-  if (params.highRated) where.push("items.rating >= 4");
+  if (params.highRated) where.push("items.rating >= 9");
   if (params.ratingMin !== undefined) {
     where.push("items.rating >= ?");
     bind.push(params.ratingMin);
@@ -96,15 +109,29 @@ function buildItemWhere(params: ItemListParams) {
   }
   if (params.unrated) where.push("items.rating IS NULL");
   if (params.usedFilter === "used") {
-    where.push("json_valid(items.metadata_json) AND json_extract(items.metadata_json, '$.used') = 1");
+    where.push("items.used = 1");
   } else if (params.usedFilter === "unused") {
-    where.push("(items.metadata_json IS NULL OR NOT (json_valid(items.metadata_json) AND json_extract(items.metadata_json, '$.used') = 1))");
+    where.push("items.used = 0");
+  }
+  if (params.favoriteLevel && params.favoriteLevel !== "all") {
+    where.push("items.favorite_level = ?");
+    bind.push(params.favoriteLevel);
+  }
+  if (params.mediaStatus && params.mediaStatus !== "all") {
+    where.push("items.media_status = ?");
+    bind.push(params.mediaStatus);
   }
   if (params.collectionLevel) {
-    where.push(`json_valid(items.metadata_json) AND coalesce(
-      json_extract(items.metadata_json, '$.reflection.collection_level'),
-      json_extract(items.metadata_json, '$.collection_level')
-    ) = ?`);
+    where.push(`(
+      items.favorite_level = ?
+      OR (
+        json_valid(items.metadata_json) AND coalesce(
+          json_extract(items.metadata_json, '$.reflection.collection_level'),
+          json_extract(items.metadata_json, '$.collection_level')
+        ) = ?
+      )
+    )`);
+    bind.push(params.collectionLevel);
     bind.push(params.collectionLevel);
   }
   if (params.type) {
@@ -116,12 +143,20 @@ function buildItemWhere(params: ItemListParams) {
     bind.push(params.category.toLowerCase());
   }
   if (params.year) {
-    where.push("items.release_year = ?");
+    where.push("coalesce(items.year, items.release_year) = ?");
     bind.push(params.year);
   }
   if (params.platform) {
     where.push("items.platform = ?");
     bind.push(params.platform);
+  }
+  if (params.maker) {
+    where.push("items.maker = ?");
+    bind.push(params.maker);
+  }
+  if (params.series) {
+    where.push("items.series = ?");
+    bind.push(params.series);
   }
   if (params.codeQuery) {
     const like = `%${params.codeQuery.trim().toLowerCase()}%`;
@@ -158,10 +193,11 @@ function buildItemWhere(params: ItemListParams) {
   if (params.studio) {
     const like = `%${params.studio.trim().toLowerCase()}%`;
     where.push(`(
-      lower(coalesce(items.platform, '')) LIKE ?
+      lower(coalesce(items.maker, '')) LIKE ?
+      OR lower(coalesce(items.platform, '')) LIKE ?
       OR lower(coalesce(items.metadata_json, '')) LIKE ?
     )`);
-    bind.push(like, like);
+    bind.push(like, like, like);
   }
   if (params.watchedFrom) {
     where.push("items.watched_at >= ?");
@@ -205,14 +241,20 @@ function buildItemWhere(params: ItemListParams) {
   }
   if (params.query) {
     const like = `%${params.query.trim().toLowerCase()}%`;
+    const fts = toFtsQuery(params.query);
     where.push(`(
+      ${fts ? `EXISTS (
+        SELECT 1 FROM items_search_fts
+        WHERE items_search_fts.item_id = items.id
+          AND items_search_fts MATCH ?
+      ) OR` : ""}
       lower(coalesce(items.raw_title, '')) LIKE ?
       OR lower(coalesce(items.official_title, '')) LIKE ?
       OR lower(coalesce(items.original_title, '')) LIKE ?
       OR lower(coalesce(items.code, '')) LIKE ?
       OR lower(coalesce(items.quick_note, '')) LIKE ?
-      OR lower(coalesce(items.long_note, '')) LIKE ?
       OR lower(coalesce(items.platform, '')) LIKE ?
+      OR lower(coalesce(items.maker, '')) LIKE ?
       OR EXISTS (
         SELECT 1 FROM item_tags it
         JOIN tags t ON t.id = it.tag_id
@@ -224,6 +266,7 @@ function buildItemWhere(params: ItemListParams) {
         WHERE ip.item_id = items.id AND lower(p.name) LIKE ?
       )
     )`);
+    if (fts) bind.push(fts);
     bind.push(like, like, like, like, like, like, like, like, like);
   }
 
@@ -232,7 +275,7 @@ function buildItemWhere(params: ItemListParams) {
 }
 
 async function getPrivateSummary(env: Env, whereSql: string, bind: unknown[]): Promise<PrivateSummary> {
-  const usedSql = "json_valid(items.metadata_json) AND json_extract(items.metadata_json, '$.used') = 1";
+  const usedSql = "items.used = 1";
   const totalsStmt = env.MEDIA_LOG_DB.prepare(`
     SELECT
       COUNT(*) AS total,
@@ -241,17 +284,18 @@ async function getPrivateSummary(env: Env, whereSql: string, bind: unknown[]): P
     FROM items ${whereSql}
   `).bind(...bind);
   const collectionStmt = env.MEDIA_LOG_DB.prepare(`
-    SELECT collection_level AS level, COUNT(*) AS count
-    FROM (
-      SELECT CASE WHEN json_valid(items.metadata_json) THEN coalesce(
-          json_extract(items.metadata_json, '$.reflection.collection_level'),
-          json_extract(items.metadata_json, '$.collection_level')
-        ) ELSE NULL END AS collection_level
-      FROM items ${whereSql}
-    )
-    WHERE collection_level IS NOT NULL AND collection_level != ''
-    GROUP BY collection_level
-    ORDER BY count DESC, collection_level ASC
+    SELECT items.favorite_level AS level, COUNT(*) AS count
+    FROM items ${whereSql}
+    WHERE items.favorite_level IS NOT NULL AND items.favorite_level != ''
+    GROUP BY items.favorite_level
+    ORDER BY CASE items.favorite_level
+      WHEN '神作' THEN 1
+      WHEN '收藏' THEN 2
+      WHEN '一般' THEN 3
+      WHEN '雷片' THEN 4
+      WHEN '已刪' THEN 5
+      ELSE 6
+    END
   `).bind(...bind);
   const [totals, collections] = await Promise.all([
     totalsStmt.first<{ total: number; used: number | null; averageRating: number | null }>(),
@@ -269,6 +313,23 @@ async function getPrivateSummary(env: Env, whereSql: string, bind: unknown[]): P
       count: Number(row.count)
     }))
   };
+}
+
+function listOrderSql(params: ItemListParams) {
+  if (params.mediaStatus === "待觀看") return "ORDER BY datetime(coalesce(planned_at, created_at)) DESC, id DESC";
+  if (params.mediaStatus === "已觀看" || params.mediaStatus === "想重看") return "ORDER BY datetime(coalesce(watched_at, updated_at, created_at)) DESC, id DESC";
+  return "ORDER BY datetime(updated_at) DESC, id DESC";
+}
+
+function toFtsQuery(value: string) {
+  const tokens = value
+    .trim()
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((token) => token.length > 0)
+    .slice(0, 8);
+  if (tokens.length === 0) return "";
+  return tokens.map((token) => `${token}*`).join(" AND ");
 }
 
 export async function getItem(env: Env, id: string) {
@@ -290,11 +351,11 @@ export async function createItem(env: Env, actor: Actor, input: ItemInput) {
   await env.MEDIA_LOG_DB.batch([
     env.MEDIA_LOG_DB
       .prepare(`INSERT INTO items (
-        id, raw_title, official_title, original_title, code, type, category, platform,
-        release_year, watched_at, started_at, completed_at, planned_at, rating, rewatch_score,
-        favorite, is_private, status, quick_note, long_note, source_url, cover_url, metadata_json,
-        progress_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        id, raw_title, official_title, original_title, code, type, category, platform, maker, series,
+        release_year, year, watched_at, started_at, completed_at, planned_at, rating, rewatch_score,
+        favorite, favorite_level, used, is_private, status, media_status, quick_note, long_note,
+        source_url, cover_url, metadata_json, progress_json, search_text, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(
         id,
         rawTitle,
@@ -304,7 +365,10 @@ export async function createItem(env: Env, actor: Actor, input: ItemInput) {
         normalized.type,
         normalized.category,
         normalized.platform,
+        normalized.maker,
+        normalized.series,
         normalized.release_year,
+        normalized.year,
         normalized.watched_at,
         normalized.started_at,
         normalized.completed_at,
@@ -312,14 +376,18 @@ export async function createItem(env: Env, actor: Actor, input: ItemInput) {
         normalized.rating,
         normalized.rewatch_score,
         normalized.favorite ? 1 : 0,
+        normalized.favorite_level,
+        normalized.used ? 1 : 0,
         normalized.is_private ? 1 : 0,
         status,
+        normalized.media_status,
         normalized.quick_note,
         normalized.long_note,
         normalized.source_url,
         normalized.cover_url,
         normalized.metadata_json,
         normalized.progress_json,
+        normalized.search_text,
         timestamp,
         timestamp
       ),
@@ -341,10 +409,11 @@ export async function updateItem(env: Env, actor: Actor, id: string, input: Item
     env.MEDIA_LOG_DB
       .prepare(`UPDATE items SET
         raw_title = ?, official_title = ?, original_title = ?, code = ?, type = ?,
-        category = ?, platform = ?, release_year = ?, watched_at = ?, started_at = ?,
+        category = ?, platform = ?, maker = ?, series = ?, release_year = ?, year = ?, watched_at = ?, started_at = ?,
         completed_at = ?, planned_at = ?, rating = ?, rewatch_score = ?, favorite = ?,
-        is_private = ?, status = ?, quick_note = ?, long_note = ?, source_url = ?, cover_url = ?,
-        metadata_json = ?, progress_json = ?, updated_at = ?
+        favorite_level = ?, used = ?, is_private = ?, status = ?, media_status = ?,
+        quick_note = ?, long_note = ?, source_url = ?, cover_url = ?,
+        metadata_json = ?, progress_json = ?, search_text = ?, updated_at = ?
         WHERE id = ?`)
       .bind(
         rawTitle,
@@ -354,7 +423,10 @@ export async function updateItem(env: Env, actor: Actor, id: string, input: Item
         normalized.type,
         normalized.category,
         normalized.platform,
+        normalized.maker,
+        normalized.series,
         normalized.release_year,
+        normalized.year,
         normalized.watched_at,
         normalized.started_at,
         normalized.completed_at,
@@ -362,14 +434,18 @@ export async function updateItem(env: Env, actor: Actor, id: string, input: Item
         normalized.rating,
         normalized.rewatch_score,
         normalized.favorite ? 1 : 0,
+        normalized.favorite_level,
+        normalized.used ? 1 : 0,
         normalized.is_private ? 1 : 0,
         status,
+        normalized.media_status,
         normalized.quick_note,
         normalized.long_note,
         normalized.source_url,
         normalized.cover_url,
         normalized.metadata_json,
         normalized.progress_json,
+        normalized.search_text,
         nowIso(),
         id
       ),
@@ -380,11 +456,56 @@ export async function updateItem(env: Env, actor: Actor, id: string, input: Item
   return getItem(env, id);
 }
 
+function insertItemStatement(env: Env, id: string, timestamp: string, normalized: NormalizedInput) {
+  return env.MEDIA_LOG_DB
+    .prepare(`INSERT INTO items (
+      id, raw_title, official_title, original_title, code, type, category, platform, maker, series,
+      release_year, year, watched_at, started_at, completed_at, planned_at, rating, rewatch_score,
+      favorite, favorite_level, used, is_private, status, media_status, quick_note, long_note,
+      source_url, cover_url, metadata_json, progress_json, search_text, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(
+      id,
+      normalized.raw_title,
+      normalized.official_title,
+      normalized.original_title,
+      normalized.code,
+      normalized.type,
+      normalized.category,
+      normalized.platform,
+      normalized.maker,
+      normalized.series,
+      normalized.release_year,
+      normalized.year,
+      normalized.watched_at,
+      normalized.started_at,
+      normalized.completed_at,
+      normalized.planned_at,
+      normalized.rating,
+      normalized.rewatch_score,
+      normalized.favorite ? 1 : 0,
+      normalized.favorite_level,
+      normalized.used ? 1 : 0,
+      normalized.is_private ? 1 : 0,
+      normalized.status,
+      normalized.media_status,
+      normalized.quick_note,
+      normalized.long_note,
+      normalized.source_url,
+      normalized.cover_url,
+      normalized.metadata_json,
+      normalized.progress_json,
+      normalized.search_text,
+      timestamp,
+      timestamp
+    );
+}
+
 export async function softDeleteItem(env: Env, actor: Actor, id: string) {
   await getItem(env, id);
   await env.MEDIA_LOG_DB.batch([
     env.MEDIA_LOG_DB
-      .prepare("UPDATE items SET status = 'deleted', deleted_at = ?, updated_at = ? WHERE id = ?")
+      .prepare("UPDATE items SET status = 'deleted', media_status = '已刪除', favorite_level = '已刪', deleted_at = ?, updated_at = ? WHERE id = ?")
       .bind(nowIso(), nowIso(), id),
     audit(env, actor, "soft_delete", "item", id, {})
   ]);
@@ -534,24 +655,43 @@ export async function importItems(env: Env, actor: Actor, rows: ItemInput[], sou
   let imported = 0;
   let skipped = 0;
   const duplicates: string[] = [];
+  const chunkSize = 100;
 
   await env.MEDIA_LOG_DB.prepare("INSERT INTO import_jobs (id, source_name, source_type, row_count) VALUES (?, ?, ?, ?)")
     .bind(jobId, sourceName, sourceType, rows.length)
     .run();
 
-  for (const row of rows) {
-    const rawTitle = cleanString(row.raw_title);
-    if (!rawTitle) {
-      skipped += 1;
-      continue;
+  for (let index = 0; index < rows.length; index += chunkSize) {
+    const chunk = rows.slice(index, index + chunkSize);
+    const normalizedRows = chunk
+      .map((row) => {
+        const rawTitle = cleanString(row.raw_title);
+        if (!rawTitle) return null;
+        const normalized = normalizeInput({ ...row, raw_title: rawTitle });
+        return { row, rawTitle, normalized };
+      })
+      .filter((entry): entry is { row: ItemInput; rawTitle: string; normalized: NormalizedInput } => Boolean(entry));
+
+    skipped += chunk.length - normalizedRows.length;
+    const duplicateCodes = await existingCodes(env, normalizedRows.map((entry) => entry.normalized.code).filter((code): code is string => Boolean(code)));
+    const statements: D1PreparedStatement[] = [];
+
+    for (const entry of normalizedRows) {
+      if (entry.normalized.code && duplicateCodes.has(entry.normalized.code)) {
+        skipped += 1;
+        duplicates.push(entry.rawTitle);
+        continue;
+      }
+      const id = newId("item");
+      const timestamp = nowIso();
+      const status = entry.normalized.status || inferStatus(entry.normalized);
+      statements.push(insertItemStatement(env, id, timestamp, { ...entry.normalized, status }));
+      appendRelationStatements(env, statements, id, entry.normalized.tags, entry.normalized.people, entry.normalized.collections, false);
+      statements.push(audit(env, actor, "create", "item", id, { raw_title: entry.rawTitle, import_job_id: jobId }));
+      imported += 1;
     }
-    if (await isLikelyDuplicate(env, row)) {
-      skipped += 1;
-      duplicates.push(rawTitle);
-      continue;
-    }
-    await createItem(env, actor, { ...row, raw_title: rawTitle, status: row.status || inferStatus(normalizeInput(row)) });
-    imported += 1;
+
+    if (statements.length > 0) await env.MEDIA_LOG_DB.batch(statements);
   }
 
   const summary = { duplicates: duplicates.slice(0, 50) };
@@ -560,6 +700,22 @@ export async function importItems(env: Env, actor: Actor, rows: ItemInput[], sou
     .run();
 
   return { jobId, imported, skipped, duplicates };
+}
+
+async function existingCodes(env: Env, codes: string[]) {
+  const uniqueCodes = Array.from(new Set(codes));
+  if (uniqueCodes.length === 0) return new Set<string>();
+  const result = new Set<string>();
+  for (let index = 0; index < uniqueCodes.length; index += 100) {
+    const chunk = uniqueCodes.slice(index, index + 100);
+    const placeholders = chunk.map(() => "?").join(", ");
+    const rows = await env.MEDIA_LOG_DB
+      .prepare(`SELECT code FROM items WHERE status != 'deleted' AND code IN (${placeholders})`)
+      .bind(...chunk)
+      .all<{ code: string }>();
+    for (const row of rows.results || []) result.add(row.code);
+  }
+  return result;
 }
 
 export async function isLikelyDuplicate(env: Env, input: ItemInput) {
@@ -609,7 +765,10 @@ async function hydrateItems(env: Env, rows: Row[]): Promise<ItemRecord[]> {
     type: nullableString(row.type),
     category: nullableString(row.category),
     platform: nullableString(row.platform),
+    maker: nullableString(row.maker),
+    series: nullableString(row.series),
     release_year: nullableNumber(row.release_year),
+    year: nullableNumber(row.year),
     watched_at: nullableString(row.watched_at),
     started_at: nullableString(row.started_at),
     completed_at: nullableString(row.completed_at),
@@ -617,8 +776,11 @@ async function hydrateItems(env: Env, rows: Row[]): Promise<ItemRecord[]> {
     rating: nullableNumber(row.rating),
     rewatch_score: nullableNumber(row.rewatch_score),
     favorite: Boolean(row.favorite),
+    favorite_level: normalizeFavoriteLevel(nullableString(row.favorite_level), Boolean(row.favorite), row.rating),
+    used: Boolean(row.used),
     is_private: Boolean(row.is_private),
     status: String(row.status || "raw") as ItemStatus,
+    media_status: normalizeMediaStatus(nullableString(row.media_status), String(row.status || "raw") as ItemStatus, nullableString(row.progress_json)),
     quick_note: nullableString(row.quick_note),
     long_note: nullableString(row.long_note),
     source_url: nullableString(row.source_url),
@@ -651,6 +813,11 @@ async function replaceRelations(env: Env, itemId: string, tags: string[], people
     env.MEDIA_LOG_DB.prepare("DELETE FROM collection_items WHERE item_id = ?").bind(itemId)
   ];
 
+  appendRelationStatements(env, statements, itemId, tags, people, collections, true);
+  await env.MEDIA_LOG_DB.batch(statements);
+}
+
+function appendRelationStatements(env: Env, statements: D1PreparedStatement[], itemId: string, tags: string[], people: string[], collections: string[], replace: boolean) {
   for (const tag of uniqueClean(tags)) {
     const tagId = newId("tag");
     statements.push(env.MEDIA_LOG_DB.prepare("INSERT OR IGNORE INTO tags (id, name) VALUES (?, ?)").bind(tagId, tag));
@@ -668,20 +835,37 @@ async function replaceRelations(env: Env, itemId: string, tags: string[], people
     statements.push(env.MEDIA_LOG_DB.prepare("INSERT OR IGNORE INTO collection_items (collection_id, item_id, position) SELECT id, ?, ? FROM collections WHERE name = ? COLLATE NOCASE").bind(itemId, position, collection));
     position += 1;
   }
-
-  await env.MEDIA_LOG_DB.batch(statements);
+  void replace;
 }
 
-function normalizeInput(input: ItemInput): Required<ItemInput> {
-  return {
-    raw_title: cleanString(input.raw_title) || "",
+function normalizeInput(input: ItemInput): NormalizedInput {
+  const rawTitle = cleanString(input.raw_title) || "";
+  const code = cleanString(input.code);
+  const metadata = parseMetadata(input.metadata_json);
+  const parsed = parseCode(code || rawTitle);
+  const platform = normalizePlatform(cleanString(input.platform), parsed);
+  const maker = normalizeMaker(cleanString(input.maker) || metadataString(metadata, ["maker", "studio"]) || (input.is_private ? cleanString(input.platform) : null), parsed);
+  const series = cleanString(input.series) || metadataString(metadata, ["series"]) || parsed.series;
+  const year = nullableNumber(input.year ?? input.release_year ?? metadataNumber(metadata, ["year", "releaseYear"]));
+  const favoriteLevel = normalizeFavoriteLevel(input.favorite_level || metadataString(metadata, ["favorite_level", "collection_level"]) || reflectionString(metadata, "collection_level"), input.favorite, input.rating);
+  const used = input.used ?? metadataBool(metadata, ["used", "is_used", "viewed"]);
+  const mediaStatus = normalizeMediaStatus(input.media_status, input.status, input.progress_json);
+  const quickNote = cleanString(input.quick_note);
+  const longNote = cleanString(input.long_note);
+  const tags = (input.tags || []).filter((tag) => !isPrivateMarkerValue(tag));
+  const people = input.people || [];
+  const normalized = {
+    raw_title: rawTitle,
     official_title: cleanString(input.official_title),
     original_title: cleanString(input.original_title),
-    code: cleanString(input.code),
+    code,
     type: cleanString(input.type),
     category: cleanString(input.category),
-    platform: cleanString(input.platform),
-    release_year: nullableNumber(input.release_year),
+    platform,
+    maker,
+    series,
+    release_year: nullableNumber(input.release_year) ?? year,
+    year,
     watched_at: cleanString(input.watched_at),
     started_at: cleanString(input.started_at),
     completed_at: cleanString(input.completed_at),
@@ -689,17 +873,24 @@ function normalizeInput(input: ItemInput): Required<ItemInput> {
     rating: clampNumber(input.rating, 0, 10),
     rewatch_score: clampNumber(input.rewatch_score, 0, 10),
     favorite: Boolean(input.favorite),
+    favorite_level: favoriteLevel,
+    used: Boolean(used),
     is_private: Boolean(input.is_private) || hasPrivateSignal(input),
     status: input.status || "raw",
-    quick_note: cleanString(input.quick_note),
-    long_note: cleanString(input.long_note),
+    media_status: mediaStatus,
+    quick_note: quickNote,
+    long_note: longNote,
     source_url: cleanString(input.source_url),
     cover_url: cleanString(input.cover_url),
     metadata_json: cleanString(input.metadata_json),
     progress_json: cleanString(input.progress_json),
-    tags: (input.tags || []).filter((tag) => !isPrivateMarkerValue(tag)),
-    people: input.people || [],
+    tags,
+    people,
     collections: input.collections || []
+  };
+  return {
+    ...normalized,
+    search_text: buildSearchText(normalized)
   };
 }
 
@@ -735,6 +926,112 @@ function inferStatus(input: Required<ItemInput>): ItemStatus {
   if (hasOrganizedTitle && hasClassification) return "complete";
   if (hasOrganizedTitle || hasClassification || input.rating || input.long_note) return "partial";
   return "raw";
+}
+
+function parseCode(value: string | null) {
+  const text = (value || "").trim().toUpperCase();
+  const compact = text.replace(/[\s_]+/g, "-");
+  const prefixMatch = compact.match(/^([A-Z]+[A-Z0-9]*)(?:-|\d)/);
+  const series = compact.startsWith("FC2-PPV") || compact.startsWith("FC2PPV") ? "FC2PPV" : prefixMatch?.[1] || null;
+  return { text, series, platform: series === "FC2PPV" ? "FC2" : null };
+}
+
+function normalizePlatform(value: string | null, parsed: ReturnType<typeof parseCode>) {
+  if (parsed.platform) return parsed.platform;
+  return value || "其他";
+}
+
+function normalizeMaker(value: string | null, parsed: ReturnType<typeof parseCode>) {
+  const series = (parsed.series || "").toUpperCase();
+  if (["SSIS", "IPZZ", "SONE"].includes(series)) return "S1";
+  if (["STARS", "SDAB", "SDDE"].includes(series)) return "SOD";
+  if (["ABW", "CHN"].includes(series)) return "Prestige";
+  return value || "";
+}
+
+function normalizeFavoriteLevel(value: unknown, favorite?: unknown, rating?: unknown): FavoriteLevel {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (text === "神作" || text === "收藏" || text === "一般" || text === "雷片" || text === "已刪") return text;
+  const numericRating = nullableNumber(rating);
+  if (numericRating !== null && numericRating >= 9) return "神作";
+  if (favorite) return "收藏";
+  return "一般";
+}
+
+function normalizeMediaStatus(value: unknown, status?: ItemStatus, progressJson?: string | null): MediaStatus {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (text === "待觀看" || text === "已觀看" || text === "想重看" || text === "已刪除") return text;
+  const watchStatus = progressWatchStatus(progressJson);
+  if (status === "deleted") return "已刪除";
+  if (watchStatus === "rewatching") return "想重看";
+  if (watchStatus === "completed" || status === "complete") return "已觀看";
+  return "待觀看";
+}
+
+function progressWatchStatus(value: string | null | undefined) {
+  const parsed = parseMetadata(value);
+  const status = parsed.watch_status;
+  return typeof status === "string" ? status : "";
+}
+
+function buildSearchText(input: Pick<NormalizedInput, "raw_title" | "official_title" | "original_title" | "code" | "platform" | "maker" | "series" | "quick_note" | "long_note" | "metadata_json" | "tags" | "people">) {
+  return [
+    input.raw_title,
+    input.official_title,
+    input.original_title,
+    input.code,
+    input.platform,
+    input.maker,
+    input.series,
+    input.quick_note,
+    input.long_note,
+    input.metadata_json,
+    ...input.tags,
+    ...input.people
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function metadataString(metadata: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = metadata[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function metadataNumber(metadata: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = nullableNumber(metadata[key]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function metadataBool(metadata: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = metadata[key];
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value === 1;
+    if (typeof value === "string" && ["true", "1", "yes", "y", "used"].includes(value.trim().toLowerCase())) return true;
+  }
+  return false;
+}
+
+function reflectionString(metadata: Record<string, unknown>, key: string) {
+  const reflection = metadata.reflection;
+  if (!reflection || typeof reflection !== "object" || Array.isArray(reflection)) return null;
+  const value = (reflection as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : null;
+}
+
+function parseMetadata(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return {} as Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
 }
 
 function cleanString(value: unknown) {

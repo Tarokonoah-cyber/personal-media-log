@@ -16,12 +16,16 @@ const baseFilters: ListFilters = {
   ratingMax: "",
   usedFilter: "all",
   collectionLevel: "",
+  favoriteLevel: "all",
+  mediaStatus: "all",
   watchStatus: "all",
   type: "",
   category: "",
   tag: "",
   year: "",
   platform: "",
+  maker: "",
+  series: "",
   codeQuery: "",
   titleQuery: "",
   person: "",
@@ -89,7 +93,7 @@ export function SmartOrganizer({
         allItems.push(...result.items);
         total = result.total;
         page += 1;
-      } while (allItems.length < total);
+      } while (allItems.length < total && page <= 5);
       setItems(allItems);
     } catch (err) {
       setError(err instanceof Error ? err.message : "整理資料載入失敗");

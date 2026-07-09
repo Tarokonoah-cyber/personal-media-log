@@ -225,7 +225,8 @@ function PrivateForm({
           <Field label="番號" value={form.private_code} onChange={(value) => setForm({ ...form, private_code: value, code: value })} />
           <Field label="片名" value={form.private_title} onChange={(value) => setForm({ ...form, private_title: value })} />
           <Field label="女優 / 演員" value={form.private_performers} onChange={(value) => setForm({ ...form, private_performers: value, people: value })} />
-          <Field label="片商" value={form.private_studio} onChange={(value) => setForm({ ...form, private_studio: value, platform: value })} />
+          <Field label="平台" value={form.private_platform} onChange={(value) => setForm({ ...form, private_platform: value, platform: value })} />
+          <Field label="片商" value={form.private_studio} onChange={(value) => setForm({ ...form, private_studio: value })} />
           <Field label="發售年份" value={form.release_year} onChange={(value) => setForm({ ...form, release_year: value })} inputMode="numeric" />
           <Field label="類型" value={form.private_type} onChange={(value) => setForm({ ...form, private_type: value, category: value })} />
         </div>
@@ -239,6 +240,7 @@ function PrivateForm({
           <SelectField label="收藏等級" value={form.collection_level} options={collectionLevelOptions} onChange={(value) => setForm({ ...form, collection_level: value })} />
           <Field label="標籤" value={form.tags} onChange={(value) => setForm({ ...form, tags: value })} />
           <label className="wide">快速筆記<textarea value={form.quick_note} onChange={(event) => setForm({ ...form, quick_note: event.target.value })} rows={3} /></label>
+          <label className="wide">完整心得<textarea value={form.long_note} onChange={(event) => setForm({ ...form, long_note: event.target.value })} rows={6} /></label>
         </div>
       </section>
     </div>
@@ -322,12 +324,13 @@ function toForm(item: MediaItem) {
     collections: item.collections.join(", "),
     mood: reflection.mood,
     rewatch_intent: reflection.rewatch_intent,
-    collection_level: reflection.collection_level,
-    used: privateUsedValue(metadata),
+    collection_level: String(item.favorite_level || reflection.collection_level || ""),
+    used: item.used || privateUsedValue(metadata),
     private_code: details.code !== "-" ? details.code : "",
     private_title: privateTitle,
     private_performers: details.performers !== "-" ? details.performers : metadataList(metadata, ["actresses", "performers", "cast", "actors"]),
-    private_studio: details.studio !== "-" ? details.studio : "",
+    private_platform: item.platform || "",
+    private_studio: item.maker || (details.studio !== "-" ? details.studio : ""),
     private_type: privateType
   };
 }
@@ -373,6 +376,7 @@ function toPrivateInput(form: FormState): ItemInput {
   const title = form.private_title.trim();
   const performers = splitList(form.private_performers);
   const studio = form.private_studio.trim();
+  const platform = form.private_platform.trim();
   const privateType = form.private_type.trim();
   const metadata = mergePrivateMetadata(form.metadata_json, {
     code,
@@ -392,8 +396,11 @@ function toPrivateInput(form: FormState): ItemInput {
     code: code || null,
     type: PRIVATE_LIBRARY_LABEL,
     category: privateType || null,
-    platform: studio || null,
+    platform: platform || null,
+    maker: studio || null,
+    series: code ? codeSeries(code) : null,
     release_year: numberOrNull(form.release_year),
+    year: numberOrNull(form.release_year),
     watched_at: null,
     started_at: null,
     completed_at: null,
@@ -401,9 +408,12 @@ function toPrivateInput(form: FormState): ItemInput {
     rating: numberOrNull(form.rating),
     rewatch_score: null,
     favorite: false,
+    favorite_level: favoriteLevel(form.collection_level, numberOrNull(form.rating)),
+    used: form.used,
     is_private: true,
+    media_status: "已觀看",
     quick_note: emptyToNull(form.quick_note),
-    long_note: null,
+    long_note: emptyToNull(form.long_note),
     source_url: emptyToNull(form.source_url),
     cover_url: emptyToNull(form.cover_url),
     metadata_json: metadataToString(metadataWithUsed),
@@ -538,6 +548,19 @@ function numberOrNull(value: string) {
   if (!value.trim()) return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function favoriteLevel(value: string, rating: number | null) {
+  if (value === "神作" || value === "收藏" || value === "一般" || value === "雷片" || value === "已刪") return value;
+  if (rating !== null && rating >= 9) return "神作";
+  return "一般";
+}
+
+function codeSeries(code: string) {
+  const normalized = code.trim().toUpperCase();
+  if (normalized.startsWith("FC2PPV") || normalized.startsWith("FC2-PPV")) return "FC2PPV";
+  const match = normalized.match(/^([A-Z]+[A-Z0-9]*)[-_ ]?\d+/);
+  return match?.[1] || null;
 }
 
 function todayDate() {
