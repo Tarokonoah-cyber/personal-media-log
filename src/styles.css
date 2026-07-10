@@ -7218,3 +7218,258 @@ h2 {
     border-radius: 10px;
   }
 }
+
+/* Private table readability pass: remove the washed-out/disabled look. */
+.private-workbench .private-data-table-wrap {
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+}
+
+.private-workbench .private-dense-table {
+  background: #ffffff;
+  color: #111827;
+}
+
+.private-workbench .private-dense-table th {
+  height: 32px;
+  border-bottom: 1px solid #dbe3ee;
+  color: #334155;
+  background: #f8fafc;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.private-workbench .private-dense-table td {
+  height: 32px;
+  padding: 4px 8px;
+  border-bottom: 1px solid #e5e7eb;
+  color: #111827;
+  background: #ffffff;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.private-workbench .private-dense-table tbody tr:nth-child(even) td {
+  background: #fafafa;
+}
+
+.private-workbench .private-dense-table tbody tr:hover td {
+  background: #eff6ff;
+}
+
+.private-workbench .private-dense-table tbody tr:hover {
+  background: #eff6ff;
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+
+.private-workbench .private-title-code-cell strong {
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.private-workbench .private-dense-table tbody tr:hover .private-title-code-cell strong {
+  color: #1e40af;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.private-workbench .private-title-code-cell span {
+  color: #475569;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.private-workbench .private-summary-cell {
+  color: #1f2937;
+  font-weight: 500;
+}
+
+.private-workbench .private-muted-cell,
+.private-workbench .private-ellipsis {
+  color: #475569;
+  font-weight: 500;
+}
+
+.private-workbench .private-rating {
+  color: #b45309;
+  font-weight: 700;
+}
+
+.private-workbench .private-rating svg {
+  color: #f59e0b;
+}
+
+.private-workbench .private-badge,
+.private-workbench .private-used-badge {
+  min-height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.private-workbench .private-badge.platform {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.private-workbench .private-badge.platform.fc2 {
+  border-color: #93c5fd;
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.private-workbench .private-badge.platform.jav {
+  border-color: #c4b5fd;
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.private-workbench .private-badge.favorite {
+  border-color: #f59e0b;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.private-workbench .private-badge.favorite.神作 {
+  border-color: #f59e0b;
+  background: #fef3c7;
+  color: #78350f;
+  font-weight: 700;
+}
+
+.private-workbench .private-badge.favorite.收藏 {
+  border-color: #fda4af;
+  background: #ffe4e6;
+  color: #9f1239;
+}
+
+.private-workbench .private-badge.favorite.一般 {
+  border-color: #f59e0b;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.private-workbench .private-badge.favorite.雷片 {
+  border-color: #fca5a5;
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.private-workbench .private-badge.favorite.已刪 {
+  border-color: #d1d5db;
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.private-workbench .private-used-badge.used {
+  border-color: #86efac;
+  background: #dcfce7;
+  color: #166534;
+  font-weight: 700;
+}
+
+.private-workbench .private-used-badge:not(.used) {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.private-workbench .private-badge.status {
+  border-color: #c4b5fd;
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.private-workbench .private-badge.status.已觀看 {
+  border-color: #86efac;
+  background: #dcfce7;
+  color: #166534;
+}
+
+.private-workbench .private-badge.status.待觀看,
+.private-workbench .private-badge.status.想重看 {
+  border-color: #c4b5fd;
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.private-workbench .private-badge.status.已刪除 {
+  border-color: #d1d5db;
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.private-workbench .private-tags span {
+  border: 1px solid #dbe3ee;
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 600;
+}
+
+.private-workbench .private-mobile-card {
+  border-color: #e5e7eb;
+  background: #ffffff;
+  color: #111827;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+}
+
+.private-workbench .private-mobile-card p {
+  color: #475569;
+}
+
+.private-workbench .private-card-head strong,
+.private-workbench .private-card-note {
+  color: #1f2937;
+}
+
+:root[data-theme="dark"] .private-workbench .private-data-table-wrap {
+  border-color: rgba(148, 163, 184, 0.32);
+  background: #111827;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.26);
+}
+
+:root[data-theme="dark"] .private-workbench .private-dense-table,
+:root[data-theme="dark"] .private-workbench .private-dense-table td {
+  background: #111827;
+  color: #f8fafc;
+}
+
+:root[data-theme="dark"] .private-workbench .private-dense-table th {
+  border-bottom-color: rgba(148, 163, 184, 0.28);
+  background: #1f2937;
+  color: #e2e8f0;
+}
+
+:root[data-theme="dark"] .private-workbench .private-dense-table td {
+  border-bottom-color: rgba(148, 163, 184, 0.18);
+}
+
+:root[data-theme="dark"] .private-workbench .private-dense-table tbody tr:nth-child(even) td {
+  background: #172033;
+}
+
+:root[data-theme="dark"] .private-workbench .private-dense-table tbody tr:hover td {
+  background: #1e3a5f;
+}
+
+:root[data-theme="dark"] .private-workbench .private-title-code-cell strong {
+  color: #93c5fd;
+}
+
+:root[data-theme="dark"] .private-workbench .private-title-code-cell span,
+:root[data-theme="dark"] .private-workbench .private-muted-cell,
+:root[data-theme="dark"] .private-workbench .private-ellipsis {
+  color: #cbd5e1;
+}
+
+:root[data-theme="dark"] .private-workbench .private-summary-cell {
+  color: #f1f5f9;
+}
