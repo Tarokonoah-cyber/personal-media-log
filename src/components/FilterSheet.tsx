@@ -3,7 +3,7 @@ import type { ListFilters } from "../types";
 
 const favoriteLevels = ["神作", "收藏", "一般", "雷片", "已刪"] as const;
 const mediaStatuses = ["待觀看", "已觀看", "想重看", "已刪除"] as const;
-const platforms = ["FC2", "JAV", "SWAG", "麻豆", "糖心", "自拍", "歐美", "其他"] as const;
+const platforms = ["FC2", "JAV", "糖心"] as const;
 const makers = ["S1", "SOD", "Prestige", "Moodyz", "FALENO", "其他片商"] as const;
 const tags = ["高顏值", "素人感", "劇情好", "畫質差", "有碼", "無碼", "雷"] as const;
 

@@ -27,7 +27,7 @@ const usageFilters = [
   { label: "已使用", usedFilter: "used" },
   { label: "未使用", usedFilter: "unused" }
 ] as const;
-const platformItems = ["FC2", "JAV", "SWAG", "麻豆", "糖心", "自拍", "歐美", "其他"] as const;
+const platformItems = ["FC2", "JAV", "糖心"] as const;
 const makerItems = ["S1", "SOD", "Prestige", "Moodyz", "FALENO", "其他片商"] as const;
 const tagItems = ["高顏值", "素人感", "劇情好", "畫質差", "有碼", "無碼", "雷"] as const;
 
@@ -104,6 +104,9 @@ export function ViewSidebar({
             </SidebarButton>
             <SidebarButton active={filters.platform === "JAV"} title="JAV" icon={<Clapperboard size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ platform: "JAV" })}>
               JAV
+            </SidebarButton>
+            <SidebarButton active={filters.platform === "糖心"} title="糖心" icon={<Clapperboard size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ platform: "糖心" })}>
+              糖心
             </SidebarButton>
             <SidebarButton active={Boolean(filters.tag)} title="標籤" icon={<Tags size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ tag: "" })}>
               標籤

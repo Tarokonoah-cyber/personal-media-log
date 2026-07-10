@@ -972,13 +972,14 @@ function PrivateWorkbenchV2({
   const unused = summary?.unused ?? Math.max(0, summaryTotal - used);
   const averageRating = summary?.averageRating === null || summary?.averageRating === undefined ? "-" : summary.averageRating.toFixed(1);
   const quickFilters: Array<{ label: string; patch: Partial<ListFilters> }> = [
-    { label: "神作 9+", patch: { ratingMin: "9", favoriteLevel: "神作" } },
+    { label: "9+", patch: { ratingMin: "9", ratingMax: "", favoriteLevel: "all", unrated: false } },
     { label: "已使用", patch: { usedFilter: "used" } },
     { label: "收藏", patch: { favoriteLevel: "收藏" } },
     { label: "雷片", patch: { favoriteLevel: "雷片" } },
-    { label: "已刪除", patch: { mediaStatus: "已刪除" } },
     { label: "FC2", patch: { platform: "FC2" } },
-    { label: "JAV", patch: { platform: "JAV" } }
+    { label: "JAV", patch: { platform: "JAV" } },
+    { label: "糖心", patch: { platform: "糖心" } },
+    { label: "未評分", patch: { unrated: true, ratingMin: "", ratingMax: "" } }
   ];
 
   return (
@@ -1101,13 +1102,14 @@ function PrivateWorkbenchV3({
   const averageRating = summary?.averageRating === null || summary?.averageRating === undefined ? "-" : summary.averageRating.toFixed(1);
   const chips: Array<{ label: string; active: boolean; patch?: Partial<ListFilters> }> = [
     { label: "全部", active: !hasPrivateFilters(filters) },
-    { label: "神作 9+", active: filters.ratingMin === "9" && filters.favoriteLevel === "神作", patch: { ratingMin: "9", favoriteLevel: "神作" as ListFilters["favoriteLevel"] } },
+    { label: "9+", active: filters.ratingMin === "9" && !filters.ratingMax && (filters.favoriteLevel === "all" || filters.favoriteLevel === "") && !filters.unrated, patch: { ratingMin: "9", ratingMax: "", favoriteLevel: "all", unrated: false } },
     { label: "已使用", active: filters.usedFilter === "used", patch: { usedFilter: "used" } },
     { label: "收藏", active: filters.favoriteLevel === "收藏", patch: { favoriteLevel: "收藏" as ListFilters["favoriteLevel"] } },
     { label: "雷片", active: filters.favoriteLevel === "雷片", patch: { favoriteLevel: "雷片" as ListFilters["favoriteLevel"] } },
-    { label: "已刪除", active: filters.mediaStatus === "已刪除", patch: { mediaStatus: "已刪除" as ListFilters["mediaStatus"] } },
     { label: "FC2", active: filters.platform === "FC2", patch: { platform: "FC2" } },
-    { label: "JAV", active: filters.platform === "JAV", patch: { platform: "JAV" } }
+    { label: "JAV", active: filters.platform === "JAV", patch: { platform: "JAV" } },
+    { label: "糖心", active: filters.platform === "糖心", patch: { platform: "糖心" } },
+    { label: "未評分", active: Boolean(filters.unrated), patch: { unrated: true, ratingMin: "", ratingMax: "" } }
   ];
 
   return (
@@ -1189,11 +1191,20 @@ function PrivateDataTable({ items, onSelect }: { items: MediaItem[]; onSelect: (
         <tbody>
           {items.map((item) => {
             const details = privateItemDetails(item);
+            const titleText = details.title && details.title !== details.code ? details.title : "";
+            const codeTitleText = titleText ? `${details.code} — ${titleText}` : details.code;
             return (
               <tr key={item.id} onClick={() => onSelect(item)}>
-                <td className="private-title-code-cell">
-                  <strong>{details.code}</strong>
-                  <span>{details.title}</span>
+                <td className="private-title-code-cell" title={codeTitleText}>
+                  <span className="private-code-title-line">
+                    <strong>{details.code}</strong>
+                    {titleText && (
+                      <>
+                        <span className="private-title-separator">—</span>
+                        <span className="private-title-text">{titleText}</span>
+                      </>
+                    )}
+                  </span>
                 </td>
                 <td><PrivateRating item={item} /></td>
                 <td><PrivateBadge tone="favorite">{privateFavoriteLevel(item)}</PrivateBadge></td>

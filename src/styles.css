@@ -7473,3 +7473,71 @@ h2 {
 :root[data-theme="dark"] .private-workbench .private-summary-cell {
   color: #f1f5f9;
 }
+
+/* Private title/code column fix: single-line, no clipping in dense rows. */
+.private-workbench .private-dense-table th:nth-child(1),
+.private-workbench .private-dense-table td:nth-child(1) {
+  width: 320px;
+}
+
+.private-workbench .private-title-code-cell {
+  display: table-cell;
+  min-width: 0;
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+.private-workbench .private-code-title-line {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.private-workbench .private-code-title-line strong {
+  flex: 0 0 auto;
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-decoration: none;
+}
+
+.private-workbench .private-title-separator {
+  flex: 0 0 auto;
+  margin: 0 6px;
+  color: #94a3b8;
+  line-height: 1.25;
+}
+
+.private-workbench .private-title-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.private-workbench .private-dense-table tbody tr:hover .private-code-title-line strong {
+  color: #1e40af;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+:root[data-theme="dark"] .private-workbench .private-code-title-line strong {
+  color: #93c5fd;
+}
+
+:root[data-theme="dark"] .private-workbench .private-title-separator {
+  color: #64748b;
+}
+
+:root[data-theme="dark"] .private-workbench .private-title-text {
+  color: #cbd5e1;
+}
