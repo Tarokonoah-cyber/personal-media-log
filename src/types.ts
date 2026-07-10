@@ -52,6 +52,7 @@ export interface ItemListResponse {
   pageSize: number;
   total: number;
   privateSummary?: PrivateSummary;
+  privateFacets?: PrivateFacets;
 }
 
 export interface PrivateSummary {
@@ -60,6 +61,23 @@ export interface PrivateSummary {
   unused: number;
   averageRating: number | null;
   collectionCounts: Array<{ level: string; count: number }>;
+}
+
+export interface PrivateFacetItem {
+  value: string;
+  count: number;
+}
+
+export interface PrivateFacets {
+  source: PrivateFacetItem[];
+  maker: PrivateFacetItem[];
+  series: PrivateFacetItem[];
+  actress: PrivateFacetItem[];
+  tags: PrivateFacetItem[];
+  ratingBuckets: PrivateFacetItem[];
+  favoriteLevel: PrivateFacetItem[];
+  used: PrivateFacetItem[];
+  status: PrivateFacetItem[];
 }
 
 export interface ListFilters {
@@ -76,6 +94,7 @@ export interface ListFilters {
   mediaStatus: MediaStatus | "all" | "";
   includePrivate?: boolean;
   privateOnly?: boolean;
+  includeFacets?: boolean;
   watchStatus?: WatchStatus | "all";
   type: string;
   category?: string;

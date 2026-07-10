@@ -19,7 +19,7 @@ import { parseQuickEntry } from "./lib/quickParse";
 import { collectionLevelOptions } from "./lib/reflection";
 import { classifyItem, libraryTree } from "./lib/taxonomy";
 import { getWatchStatus, updateWatchProgress } from "./lib/watch";
-import type { ItemInput, ListFilters, MediaItem, PrivateSummary, SmartAddResponse, TmdbCandidate } from "./types";
+import type { ItemInput, ListFilters, MediaItem, PrivateFacets, PrivateSummary, SmartAddResponse, TmdbCandidate } from "./types";
 
 const defaultFilters: ListFilters = {
   query: "",
@@ -74,6 +74,7 @@ export default function App() {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [summaryItems, setSummaryItems] = useState<MediaItem[]>([]);
   const [privateSummary, setPrivateSummary] = useState<PrivateSummary | null>(null);
+  const [privateFacets, setPrivateFacets] = useState<PrivateFacets | null>(null);
   const [total, setTotal] = useState(0);
   const [inboxTotal, setInboxTotal] = useState(0);
   const [selected, setSelected] = useState<MediaItem | null>(null);
@@ -162,10 +163,11 @@ export default function App() {
     setLoading(true);
     setError("");
     try {
-      const result = await listItems({ ...filters, includePrivate, privateOnly: includePrivate });
+      const result = await listItems({ ...filters, includePrivate, privateOnly: includePrivate, includeFacets: includePrivate });
       setItems(result.items);
       setTotal(result.total);
       setPrivateSummary(result.privateSummary || null);
+      setPrivateFacets(result.privateFacets || null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "讀取紀錄失敗");
     } finally {
@@ -712,7 +714,7 @@ export default function App() {
         </section>
       </main>
 
-      <FilterSheet open={filtersOpen} filters={filters} privateMode={privateActive} onChange={patchFilters} onClose={() => setFiltersOpen(false)} />
+      <FilterSheet open={filtersOpen} filters={filters} privateMode={privateActive} privateFacets={privateFacets} onChange={patchFilters} onClose={() => setFiltersOpen(false)} />
 
       {simpleAddOpen && (
         <SimpleAddModal
@@ -1181,8 +1183,7 @@ function PrivateDataTable({ items, onSelect }: { items: MediaItem[]; onSelect: (
             <th>評分</th>
             <th>收藏</th>
             <th>已使用</th>
-            <th>平台</th>
-            <th>片商</th>
+            <th>來源</th>
             <th>女優</th>
             <th>標籤</th>
             <th>一句話心得</th>
@@ -1191,7 +1192,7 @@ function PrivateDataTable({ items, onSelect }: { items: MediaItem[]; onSelect: (
         <tbody>
           {items.map((item) => {
             const details = privateItemDetails(item);
-            const titleText = details.title && details.title !== details.code ? details.title : "";
+            const titleText = privateDisplayTitle(details.title, details.code);
             const codeTitleText = titleText ? `${details.code} — ${titleText}` : details.code;
             return (
               <tr key={item.id} onClick={() => onSelect(item)}>
@@ -1209,8 +1210,7 @@ function PrivateDataTable({ items, onSelect }: { items: MediaItem[]; onSelect: (
                 <td><PrivateRating item={item} /></td>
                 <td><PrivateBadge tone="favorite">{privateFavoriteLevel(item)}</PrivateBadge></td>
                 <td><PrivateUsedBadge used={item.used} /></td>
-                <td><PrivateBadge tone="platform">{item.platform || "-"}</PrivateBadge></td>
-                <td className="private-muted-cell">{item.maker || details.studio}</td>
+                <td><PrivateSource item={item} /></td>
                 <td className="private-ellipsis" title={details.performers}>{details.performers}</td>
                 <td><PrivateTags tags={item.tags} /></td>
                 <td className="private-summary-cell" title={item.quick_note || ""}>{item.quick_note || "-"}</td>
@@ -1271,6 +1271,12 @@ function PrivateUsedBadge({ used }: { used: boolean }) {
   return <span className={used ? "private-used-badge used" : "private-used-badge"}>{used ? "已使用" : "未使用"}</span>;
 }
 
+function PrivateSource({ item }: { item: MediaItem }) {
+  const source = privateSourceLabel(item);
+  if (!source) return <span className="private-muted-cell">—</span>;
+  return <PrivateBadge tone="platform">{source}</PrivateBadge>;
+}
+
 function PrivateBadge({ tone, children }: { tone: "platform" | "favorite" | "status"; children: string }) {
   return <span className={`private-badge ${tone} ${privateBadgeClass(children)}`}>{children || "-"}</span>;
 }
@@ -1326,6 +1332,19 @@ function PrivateEmptyState({ onClear, onAdd }: { onClear: () => void; onAdd: () 
 
 function privateFavoriteLevel(item: MediaItem) {
   return item.favorite_level || "一般";
+}
+
+function privateDisplayTitle(title: string, code: string) {
+  const normalized = title.trim();
+  if (!normalized || normalized === "-" || normalized === "—" || normalized === code) return "";
+  return normalized;
+}
+
+function privateSourceLabel(item: MediaItem) {
+  const platform = (item.platform || "").trim();
+  const maker = (item.maker || "").trim();
+  if (platform && maker && platform.toLowerCase() !== maker.toLowerCase()) return `${platform} / ${maker}`;
+  return platform || maker;
 }
 
 function privateFilterSummary(filters: ListFilters) {

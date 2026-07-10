@@ -79,6 +79,7 @@ export interface ItemListParams {
   mediaStatus?: MediaStatus | "all";
   includePrivate?: boolean;
   privateOnly?: boolean;
+  includeFacets?: boolean;
   watchStatus?: WatchStatus | "all";
   type?: string;
   category?: string;
@@ -108,4 +109,21 @@ export interface PrivateSummary {
   unused: number;
   averageRating: number | null;
   collectionCounts: Array<{ level: string; count: number }>;
+}
+
+export interface PrivateFacetItem {
+  value: string;
+  count: number;
+}
+
+export interface PrivateFacets {
+  source: PrivateFacetItem[];
+  maker: PrivateFacetItem[];
+  series: PrivateFacetItem[];
+  actress: PrivateFacetItem[];
+  tags: PrivateFacetItem[];
+  ratingBuckets: PrivateFacetItem[];
+  favoriteLevel: PrivateFacetItem[];
+  used: PrivateFacetItem[];
+  status: PrivateFacetItem[];
 }

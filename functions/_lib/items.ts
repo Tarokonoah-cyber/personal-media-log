@@ -2,7 +2,7 @@ import { HttpError } from "./http";
 import { inboxWhereSql } from "./organization";
 import { hasPrivateSignalValues, isPrivateMarker as isPrivateMarkerValue, privateItemWhereSql, publicItemWhereSql } from "./privacy";
 import { newId, nowIso } from "./ids";
-import type { Actor, Env, FavoriteLevel, ItemInput, ItemListParams, ItemRecord, ItemStatus, MediaStatus, WatchStatus, PrivateSummary } from "./types";
+import type { Actor, Env, FavoriteLevel, ItemInput, ItemListParams, ItemRecord, ItemStatus, MediaStatus, WatchStatus, PrivateFacets, PrivateSummary } from "./types";
 
 type Row = Record<string, unknown>;
 type NormalizedInput = Required<ItemInput> & { search_text: string };
@@ -65,10 +65,17 @@ export async function listItems(env: Env, params: ItemListParams) {
       return undefined;
     })
     : Promise.resolve(undefined);
-  const [countResult, listResult, privateSummary] = await Promise.all([
+  const facetsPromise = params.privateOnly && params.includeFacets
+    ? getPrivateFacets(env, whereSql, bind).catch((error) => {
+      console.error("Private facets query failed", error);
+      return undefined;
+    })
+    : Promise.resolve(undefined);
+  const [countResult, listResult, privateSummary, privateFacets] = await Promise.all([
     countStmt.first<{ count: number }>(),
     listStmt.all<Row>(),
-    summaryPromise
+    summaryPromise,
+    facetsPromise
   ]);
   const items = await hydrateItems(env, listResult.results || []);
   return {
@@ -76,7 +83,8 @@ export async function listItems(env: Env, params: ItemListParams) {
     page,
     pageSize,
     total: countResult?.count || 0,
-    ...(privateSummary ? { privateSummary } : {})
+    ...(privateSummary ? { privateSummary } : {}),
+    ...(privateFacets ? { privateFacets } : {})
   };
 }
 
@@ -319,6 +327,146 @@ async function getPrivateSummary(env: Env, whereSql: string, bind: unknown[]): P
       level: String(row.level),
       count: Number(row.count)
     }))
+  };
+}
+
+async function getPrivateFacets(env: Env, whereSql: string, bind: unknown[]): Promise<PrivateFacets> {
+  const bindAll = (...extra: unknown[]) => [...bind, ...extra];
+  const facetRows = (rows: Array<{ value: string | null; count: number }>) =>
+    rows
+      .map((row) => ({ value: String(row.value || "未設定"), count: Number(row.count || 0) }))
+      .filter((row) => row.value.trim().length > 0);
+
+  const sourceStmt = env.MEDIA_LOG_DB.prepare(`
+    SELECT
+      CASE
+        WHEN items.platform IN ('FC2', 'JAV', '糖心') THEN items.platform
+        ELSE '其他'
+      END AS value,
+      COUNT(*) AS count
+    FROM items ${whereSql}
+    GROUP BY value
+    ORDER BY CASE value
+      WHEN 'FC2' THEN 1
+      WHEN 'JAV' THEN 2
+      WHEN '糖心' THEN 3
+      ELSE 4
+    END
+  `).bind(...bind);
+
+  const makerStmt = env.MEDIA_LOG_DB.prepare(`
+    SELECT coalesce(nullif(trim(items.maker), ''), '未設定') AS value, COUNT(*) AS count
+    FROM items ${whereSql}
+    GROUP BY value
+    ORDER BY count DESC, value ASC
+    LIMIT 20
+  `).bind(...bind);
+
+  const seriesStmt = env.MEDIA_LOG_DB.prepare(`
+    SELECT coalesce(nullif(trim(items.series), ''), '未設定') AS value, COUNT(*) AS count
+    FROM items ${whereSql}
+    GROUP BY value
+    ORDER BY count DESC, value ASC
+    LIMIT 20
+  `).bind(...bind);
+
+  const actressStmt = env.MEDIA_LOG_DB.prepare(`
+    SELECT people.name AS value, COUNT(*) AS count
+    FROM people
+    JOIN item_people ON item_people.person_id = people.id
+    JOIN items ON items.id = item_people.item_id
+    ${whereSql}
+    GROUP BY people.id
+    ORDER BY count DESC, people.name ASC
+    LIMIT 20
+  `).bind(...bind);
+
+  const tagsStmt = env.MEDIA_LOG_DB.prepare(`
+    SELECT tags.name AS value, COUNT(*) AS count
+    FROM tags
+    JOIN item_tags ON item_tags.tag_id = tags.id
+    JOIN items ON items.id = item_tags.item_id
+    ${whereSql}
+    GROUP BY tags.id
+    ORDER BY count DESC, tags.name ASC
+    LIMIT 30
+  `).bind(...bind);
+
+  const ratingStmt = env.MEDIA_LOG_DB.prepare(`
+    SELECT '9+' AS value, SUM(CASE WHEN items.rating >= 9 THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
+    UNION ALL
+    SELECT '8+' AS value, SUM(CASE WHEN items.rating >= 8 THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
+    UNION ALL
+    SELECT '6-7' AS value, SUM(CASE WHEN items.rating >= 6 AND items.rating <= 7 THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
+    UNION ALL
+    SELECT '1-5' AS value, SUM(CASE WHEN items.rating >= 1 AND items.rating <= 5 THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
+    UNION ALL
+    SELECT '未評分' AS value, SUM(CASE WHEN items.rating IS NULL THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
+  `).bind(...bindAll(...bind, ...bind, ...bind, ...bind));
+
+  const favoriteStmt = env.MEDIA_LOG_DB.prepare(`
+    SELECT items.favorite_level AS value, COUNT(*) AS count
+    FROM items ${whereSql}
+    WHERE_PLACEHOLDER
+  `.replace(
+    "WHERE_PLACEHOLDER",
+    whereSql
+      ? "AND items.favorite_level IN ('神作', '收藏', '一般', '雷片', '已刪')"
+      : "WHERE items.favorite_level IN ('神作', '收藏', '一般', '雷片', '已刪')"
+  ) + `
+    GROUP BY items.favorite_level
+    ORDER BY CASE items.favorite_level
+      WHEN '神作' THEN 1
+      WHEN '收藏' THEN 2
+      WHEN '一般' THEN 3
+      WHEN '雷片' THEN 4
+      WHEN '已刪' THEN 5
+      ELSE 6
+    END
+  `).bind(...bind);
+
+  const usedStmt = env.MEDIA_LOG_DB.prepare(`
+    SELECT '已使用' AS value, SUM(CASE WHEN items.used = 1 THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
+    UNION ALL
+    SELECT '未使用' AS value, SUM(CASE WHEN items.used = 0 THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
+  `).bind(...bindAll(...bind));
+
+  const statusStmt = env.MEDIA_LOG_DB.prepare(`
+    SELECT items.media_status AS value, COUNT(*) AS count
+    FROM items ${whereSql}
+    ${whereSql ? "AND" : "WHERE"} items.media_status IS NOT NULL AND items.media_status != ''
+    GROUP BY items.media_status
+    ORDER BY CASE items.media_status
+      WHEN '待觀看' THEN 1
+      WHEN '已觀看' THEN 2
+      WHEN '想重看' THEN 3
+      WHEN '已刪除' THEN 4
+      ELSE 5
+    END
+  `).bind(...bind);
+
+  const [source, maker, series, actress, tags, ratingBuckets, favoriteLevel, used, status] = await Promise.all([
+    sourceStmt.all<{ value: string; count: number }>(),
+    makerStmt.all<{ value: string; count: number }>(),
+    seriesStmt.all<{ value: string; count: number }>(),
+    actressStmt.all<{ value: string; count: number }>(),
+    tagsStmt.all<{ value: string; count: number }>(),
+    ratingStmt.all<{ value: string; count: number }>(),
+    favoriteStmt.all<{ value: string; count: number }>(),
+    usedStmt.all<{ value: string; count: number }>(),
+    statusStmt.all<{ value: string; count: number }>()
+  ]);
+
+  return {
+    source: facetRows(source.results || []),
+    maker: facetRows(maker.results || []),
+    series: facetRows(series.results || []),
+    actress: facetRows(actress.results || []),
+    tags: facetRows(tags.results || []),
+    ratingBuckets: facetRows(ratingBuckets.results || []),
+    favoriteLevel: facetRows(favoriteLevel.results || []),
+    used: facetRows(used.results || []),
+    status: facetRows(status.results || [])
   };
 }
 

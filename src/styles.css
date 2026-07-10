@@ -7541,3 +7541,136 @@ h2 {
 :root[data-theme="dark"] .private-workbench .private-title-text {
   color: #cbd5e1;
 }
+
+/* Private dense table 8-column layout after merging platform/maker into Source. */
+.private-workbench .private-dense-table th:nth-child(1),
+.private-workbench .private-dense-table td:nth-child(1) {
+  width: 340px;
+}
+
+.private-workbench .private-dense-table th:nth-child(2),
+.private-workbench .private-dense-table td:nth-child(2) {
+  width: 70px;
+}
+
+.private-workbench .private-dense-table th:nth-child(3),
+.private-workbench .private-dense-table td:nth-child(3),
+.private-workbench .private-dense-table th:nth-child(4),
+.private-workbench .private-dense-table td:nth-child(4) {
+  width: 82px;
+}
+
+.private-workbench .private-dense-table th:nth-child(5),
+.private-workbench .private-dense-table td:nth-child(5) {
+  width: 118px;
+}
+
+.private-workbench .private-dense-table th:nth-child(6),
+.private-workbench .private-dense-table td:nth-child(6) {
+  width: 140px;
+}
+
+.private-workbench .private-dense-table th:nth-child(7),
+.private-workbench .private-dense-table td:nth-child(7) {
+  width: 150px;
+}
+
+.private-workbench .private-dense-table th:nth-child(8),
+.private-workbench .private-dense-table td:nth-child(8) {
+  width: auto;
+}
+
+.private-workbench .private-badge.platform {
+  max-width: 100%;
+}
+
+.private-facet-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.private-facet-group {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.private-facet-group h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.private-facet-search-group input {
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.private-facet-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.private-facet-options button {
+  min-height: 26px;
+  max-width: 100%;
+  padding: 0 7px;
+  border: 1px solid #dbe3ee;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.private-facet-options button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.private-facet-options button b {
+  color: #64748b;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.private-facet-options button.active {
+  border-color: #93c5fd;
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.private-facet-options button.active b {
+  color: #1d4ed8;
+}
+
+.private-facet-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+:root[data-theme="dark"] .private-facet-options button {
+  border-color: rgba(148, 163, 184, 0.26);
+  background: #1f2937;
+  color: #e2e8f0;
+}
+
+:root[data-theme="dark"] .private-facet-options button b {
+  color: #94a3b8;
+}
+
+:root[data-theme="dark"] .private-facet-options button.active {
+  border-color: #60a5fa;
+  background: #1e3a5f;
+  color: #bfdbfe;
+}

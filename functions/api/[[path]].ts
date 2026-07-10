@@ -196,6 +196,7 @@ function getListParams(url: URL): ItemListParams {
     mediaStatus: isMediaStatusFilter(url.searchParams.get("mediaStatus")) ? url.searchParams.get("mediaStatus") as MediaStatus | "all" : "all",
     includePrivate: url.searchParams.get("includePrivate") === "true",
     privateOnly: url.searchParams.get("privateOnly") === "true",
+    includeFacets: url.searchParams.get("includeFacets") === "true",
     watchStatus: isWatchStatusFilter(url.searchParams.get("watchStatus")) ? url.searchParams.get("watchStatus") as WatchStatus | "all" : "all",
     type: optional(url.searchParams.get("type")),
     category: optional(url.searchParams.get("category")),
