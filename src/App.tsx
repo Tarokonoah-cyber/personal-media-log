@@ -1,4 +1,4 @@
-import { Columns3, Eye, Home, Menu, Moon, Pencil, Plus, Search, SlidersHorizontal, Star, Sun } from "lucide-react";
+import { Columns3, Home, Menu, Moon, Plus, Search, SlidersHorizontal, Star, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { FilterSheet } from "./components/FilterSheet";
 import { HomeDashboard } from "./components/HomeDashboard";
@@ -13,7 +13,6 @@ import { StatsPanel } from "./components/StatsPanel";
 import { Toast } from "./components/Toast";
 import { ViewSidebar } from "./components/ViewSidebar";
 import { applyMetadata, createItem, deleteItem, getItem, listItems, parseSmartAdd, searchMetadata, updateItem } from "./lib/api";
-import { displayDate } from "./lib/date";
 import { toItemInput } from "./lib/itemTransforms";
 import { isPrivateItem, isPrivateLibraryLabel, isPrivateMarker, privateItemDetails, PRIVATE_LIBRARY_LABEL, PRIVATE_RECOMMENDED_LABEL, PRIVATE_RECOMMENDED_TAG } from "./lib/privacy";
 import { parseQuickEntry } from "./lib/quickParse";
@@ -57,7 +56,7 @@ const defaultFilters: ListFilters = {
 
 type Tab = "log" | "organizer" | "stats" | "data" | "settings";
 type DisplayView = "table" | "list" | "poster" | "calendar";
-type PrivateDisplayView = "list" | "table";
+type PrivateDisplayView = "table" | "list";
 type DisplayDensity = "comfortable" | "standard" | "compact";
 const displayViews: DisplayView[] = ["table", "list", "poster", "calendar"];
 const displayDensities: DisplayDensity[] = ["comfortable", "standard", "compact"];
@@ -66,7 +65,6 @@ const quickStatusViews = ["home", "watching", "plan_to_watch", "completed"];
 export default function App() {
   const [tab, setTab] = useState<Tab>("log");
   const [displayView, setDisplayView] = useState<DisplayView>(() => (localStorage.getItem("displayView") as DisplayView) || "table");
-  const [privateDisplayView, setPrivateDisplayView] = useState<PrivateDisplayView>(() => localStorage.getItem("privateDisplayView") === "table" ? "table" : "list");
   const [displayDensity, setDisplayDensity] = useState<DisplayDensity>(() => (localStorage.getItem("displayDensity") as DisplayDensity) || "standard");
   const [safeMode, setSafeMode] = useState(() => localStorage.getItem("safeMode") !== "false");
   const [quickText, setQuickText] = useState("");
@@ -103,7 +101,7 @@ export default function App() {
   const privateActive = privateView && includePrivate;
   const privateRecommendedActive = activeView === PRIVATE_RECOMMENDED_LABEL && includePrivate;
   const privatePageTitle = privateRecommendedActive ? PRIVATE_RECOMMENDED_LABEL : PRIVATE_LIBRARY_LABEL;
-  const currentDisplayView = privateActive ? privateDisplayView : displayView;
+  const currentDisplayView = privateActive ? "table" : displayView;
   const effectiveSidebarCollapsed = privateActive ? !privateSidebarExpanded : sidebarCollapsed;
 
   useEffect(() => {
@@ -122,10 +120,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("displayView", displayView);
   }, [displayView]);
-
-  useEffect(() => {
-    localStorage.setItem("privateDisplayView", privateDisplayView);
-  }, [privateDisplayView]);
 
   useEffect(() => {
     localStorage.setItem("displayDensity", displayDensity);
@@ -592,16 +586,13 @@ export default function App() {
                   total={total}
                   title={privatePageTitle}
                   summary={privateSummary}
-                  view={privateDisplayView}
                   error={error}
                   onPatchFilters={patchFilters}
                   onClearFilters={resetFilters}
                   onRetry={() => void loadItems()}
                   onOpenAdvanced={() => setFiltersOpen(true)}
-                  onView={setPrivateDisplayView}
                   onAdd={() => setSimpleAddOpen(true)}
                   onSelect={(item) => void openItemDetail(item)}
-                  onQuickUpdate={quickUpdate}
                 />
               ) : activeView === "home" && !filters.query && !filters.favorite ? (
                 <HomeDashboard
@@ -1083,16 +1074,13 @@ function PrivateWorkbenchV3({
   total,
   title,
   summary,
-  view,
   error,
   onPatchFilters,
   onClearFilters,
   onRetry,
   onOpenAdvanced,
-  onView,
   onAdd,
-  onSelect,
-  onQuickUpdate
+  onSelect
 }: {
   filters: ListFilters;
   items: MediaItem[];
@@ -1101,16 +1089,13 @@ function PrivateWorkbenchV3({
   total: number;
   title: string;
   summary: PrivateSummary | null;
-  view: PrivateDisplayView;
   error: string;
   onPatchFilters: (patch: Partial<ListFilters>) => void;
   onClearFilters: () => void;
   onRetry: () => void;
   onOpenAdvanced: () => void;
-  onView: (view: PrivateDisplayView) => void;
   onAdd: () => void;
   onSelect: (item: MediaItem) => void;
-  onQuickUpdate: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
 }) {
   const summaryTotal = summary?.total ?? total;
   const averageRating = summary?.averageRating === null || summary?.averageRating === undefined ? "-" : summary.averageRating.toFixed(1);
@@ -1152,14 +1137,10 @@ function PrivateWorkbenchV3({
         </div>
       </div>
 
-      <div className="private-summary-strip private-filter-panel">
+      <div className="private-summary-strip private-filter-panel" aria-label="私密統計摘要">
         <SummaryValue label="私密總數" value={summaryTotal.toString()} />
         <SummaryValue label="已使用" value={String(summary?.used ?? 0)} />
         <SummaryValue label="平均分" value={averageRating} />
-        <div className="segmented-control private-view-switch" aria-label="私密列表顯示模式">
-          <button className={view === "list" ? "active" : ""} onClick={() => onView("list")}>卡片</button>
-          <button className={view === "table" ? "active" : ""} onClick={() => onView("table")}>表格</button>
-        </div>
       </div>
 
       <div className="private-filter-chips" aria-label="快捷篩選">
@@ -1181,35 +1162,28 @@ function PrivateWorkbenchV3({
       ) : (
         <>
           <PrivateMobileCards items={items} onSelect={onSelect} />
-          {view === "table" ? (
-            <PrivateDataTable items={items} onSelect={onSelect} onQuickUpdate={onQuickUpdate} />
-          ) : (
-            <PrivateCardList items={items} onSelect={onSelect} />
-          )}
+          <PrivateDataTable items={items} onSelect={onSelect} />
         </>
       )}
     </section>
   );
 }
 
-function PrivateDataTable({ items, onSelect, onQuickUpdate }: { items: MediaItem[]; onSelect: (item: MediaItem) => void; onQuickUpdate: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void> }) {
+function PrivateDataTable({ items, onSelect }: { items: MediaItem[]; onSelect: (item: MediaItem) => void }) {
   return (
     <div className="private-data-table-wrap">
-      <table className="private-data-table">
+      <table className="private-data-table private-dense-table">
         <thead>
           <tr>
-            <th>作品代號</th>
-            <th>平台</th>
-            <th>片商</th>
-            <th>女優</th>
+            <th>作品代號 / 標題</th>
             <th>評分</th>
             <th>收藏</th>
             <th>已使用</th>
-            <th>狀態</th>
+            <th>平台</th>
+            <th>片商</th>
+            <th>女優</th>
             <th>標籤</th>
             <th>一句話心得</th>
-            <th>日期</th>
-            <th>操作</th>
           </tr>
         </thead>
         <tbody>
@@ -1217,24 +1191,18 @@ function PrivateDataTable({ items, onSelect, onQuickUpdate }: { items: MediaItem
             const details = privateItemDetails(item);
             return (
               <tr key={item.id} onClick={() => onSelect(item)}>
-                <td className="private-code-cell">{details.code}</td>
+                <td className="private-title-code-cell">
+                  <strong>{details.code}</strong>
+                  <span>{details.title}</span>
+                </td>
+                <td><PrivateRating item={item} /></td>
+                <td><PrivateBadge tone="favorite">{privateFavoriteLevel(item)}</PrivateBadge></td>
+                <td><PrivateUsedBadge used={item.used} /></td>
                 <td><PrivateBadge tone="platform">{item.platform || "-"}</PrivateBadge></td>
                 <td className="private-muted-cell">{item.maker || details.studio}</td>
                 <td className="private-ellipsis" title={details.performers}>{details.performers}</td>
-                <td><PrivateRating item={item} /></td>
-                <td><PrivateBadge tone="favorite">{privateFavoriteLevel(item)}</PrivateBadge></td>
-                <td>
-                  <button className="private-used-action" onClick={(event) => { event.stopPropagation(); void onQuickUpdate(item, { used: !item.used }); }}>
-                    <PrivateUsedBadge used={item.used} />
-                  </button>
-                </td>
-                <td><PrivateBadge tone="status">{item.media_status || item.status}</PrivateBadge></td>
                 <td><PrivateTags tags={item.tags} /></td>
                 <td className="private-summary-cell" title={item.quick_note || ""}>{item.quick_note || "-"}</td>
-                <td className="private-muted-cell">{displayDate(item.watched_at || item.created_at)}</td>
-                <td>
-                  <button className="private-row-action" onClick={(event) => { event.stopPropagation(); onSelect(item); }}><Pencil size={14} />編輯 / 查看</button>
-                </td>
               </tr>
             );
           })}
@@ -1278,7 +1246,6 @@ function PrivateMobileCard({ item, onSelect, desktop = false }: { item: MediaIte
       {item.quick_note && <p className="private-card-note">{item.quick_note}</p>}
       <div className="private-card-bottom">
         <PrivateTags tags={item.tags} />
-        <span>{displayDate(item.watched_at || item.created_at)}</span>
       </div>
     </article>
   );

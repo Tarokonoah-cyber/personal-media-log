@@ -6926,3 +6926,295 @@ h2 {
     grid-template-columns: 1fr;
   }
 }
+
+/* Private workbench dense-table refinement. Scoped so the normal library UI stays untouched. */
+.private-workbench {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.private-workbench .private-toolbar {
+  grid-template-columns: minmax(176px, 0.7fr) minmax(300px, 1.15fr) max-content max-content;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 10px;
+}
+
+.private-workbench .private-toolbar-title {
+  min-width: 0;
+  gap: 2px;
+}
+
+.private-workbench .private-toolbar-title strong {
+  font-size: 17px;
+  line-height: 1.15;
+}
+
+.private-workbench .private-toolbar-title span,
+.private-workbench .private-toolbar-title em {
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.private-workbench .private-toolbar .private-search-field {
+  height: 38px;
+  min-height: 38px;
+}
+
+.private-workbench .private-toolbar-actions,
+.private-workbench .private-pagination {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.private-workbench .private-toolbar-actions button,
+.private-workbench .private-pagination button,
+.private-workbench .private-pagination select {
+  height: 32px;
+  min-height: 32px;
+  border-radius: 7px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.private-workbench .private-pagination span {
+  min-width: 44px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums lining-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.private-workbench .private-summary-strip {
+  display: none;
+}
+
+.private-workbench .private-filter-chips {
+  gap: 6px;
+  padding: 0 1px 3px;
+}
+
+.private-workbench .private-filter-chips button {
+  min-height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.private-workbench .private-filter-chips button.active {
+  color: #ffffff;
+  border-color: rgba(96, 165, 250, 0.82);
+  background: linear-gradient(180deg, #2563eb, #1e40af);
+  box-shadow: 0 8px 22px rgba(37, 99, 235, 0.24);
+}
+
+.private-workbench .private-data-table-wrap {
+  max-height: calc(100vh - 214px);
+  overflow: auto;
+  border-radius: 10px;
+}
+
+.private-workbench .private-dense-table {
+  min-width: 1040px;
+  table-layout: fixed;
+}
+
+.private-workbench .private-dense-table th {
+  top: 0;
+  height: 34px;
+  padding: 0 8px;
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.private-workbench .private-dense-table td {
+  height: 36px;
+  padding: 5px 8px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.private-workbench .private-dense-table th:nth-child(1),
+.private-workbench .private-dense-table td:nth-child(1) {
+  width: 230px;
+}
+
+.private-workbench .private-dense-table th:nth-child(2),
+.private-workbench .private-dense-table td:nth-child(2) {
+  width: 70px;
+}
+
+.private-workbench .private-dense-table th:nth-child(3),
+.private-workbench .private-dense-table td:nth-child(3),
+.private-workbench .private-dense-table th:nth-child(4),
+.private-workbench .private-dense-table td:nth-child(4),
+.private-workbench .private-dense-table th:nth-child(5),
+.private-workbench .private-dense-table td:nth-child(5) {
+  width: 82px;
+}
+
+.private-workbench .private-dense-table th:nth-child(6),
+.private-workbench .private-dense-table td:nth-child(6) {
+  width: 96px;
+}
+
+.private-workbench .private-dense-table th:nth-child(7),
+.private-workbench .private-dense-table td:nth-child(7) {
+  width: 128px;
+}
+
+.private-workbench .private-dense-table th:nth-child(8),
+.private-workbench .private-dense-table td:nth-child(8) {
+  width: 150px;
+}
+
+.private-workbench .private-dense-table th:nth-child(9),
+.private-workbench .private-dense-table td:nth-child(9) {
+  width: auto;
+}
+
+.private-workbench .private-title-code-cell {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.private-workbench .private-title-code-cell strong,
+.private-workbench .private-title-code-cell span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.private-workbench .private-title-code-cell strong {
+  color: #bfdbfe;
+  font-size: 13px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.private-workbench .private-title-code-cell span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.private-workbench .private-rating {
+  min-width: 0;
+  gap: 3px;
+  font-size: 12px;
+}
+
+.private-workbench .private-rating svg {
+  width: 12px;
+  height: 12px;
+}
+
+.private-workbench .private-badge,
+.private-workbench .private-used-badge {
+  min-height: 20px;
+  max-width: 100%;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.private-workbench .private-tags {
+  gap: 3px;
+}
+
+.private-workbench .private-tags span {
+  min-height: 19px;
+  max-width: 58px;
+  padding: 0 5px;
+  border-radius: 5px;
+  font-size: 11px;
+}
+
+.private-workbench .private-summary-cell,
+.private-workbench .private-muted-cell,
+.private-workbench .private-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.private-workbench .private-dense-table tbody tr:hover {
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.16), rgba(59, 130, 246, 0.045));
+  box-shadow: inset 3px 0 0 rgba(96, 165, 250, 0.8);
+}
+
+@media (min-width: 820px) {
+  .private-workbench .private-mobile-list,
+  .private-workbench .private-card-list {
+    display: none;
+  }
+
+  .private-workbench .private-data-table-wrap {
+    display: block;
+  }
+}
+
+@media (max-width: 1120px) {
+  .private-workbench .private-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .private-workbench .private-toolbar-actions,
+  .private-workbench .private-pagination {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 819px) {
+  .private-workbench {
+    gap: 9px;
+  }
+
+  .private-workbench .private-toolbar {
+    grid-template-columns: 1fr;
+    position: static;
+  }
+
+  .private-workbench .private-toolbar-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .private-workbench .private-pagination {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .private-workbench .private-pagination select {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .private-workbench .private-data-table-wrap {
+    display: none;
+  }
+
+  .private-workbench .private-mobile-list {
+    display: grid;
+    gap: 9px;
+  }
+
+  .private-workbench .private-mobile-card {
+    padding: 11px;
+    border-radius: 10px;
+  }
+}
