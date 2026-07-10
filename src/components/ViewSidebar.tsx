@@ -1,8 +1,8 @@
-import { BarChart3, ChevronLeft, ChevronRight, Clapperboard, Database, Film, Folder, Hash, Heart, Layers, Settings, Sparkles, Tags, Tv, X } from "lucide-react";
-import type { ReactNode } from "react";
+import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, Database, Film, Folder, Hash, Heart, Settings, Sparkles, Tv, X } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
 import { isPrivateLibraryLabel } from "../lib/privacy";
 import { libraryTree } from "../lib/taxonomy";
-import type { ListFilters, MediaItem, PrivateSummary } from "../types";
+import type { ListFilters, MediaItem, PrivateFacets, PrivateSummary } from "../types";
 import { HomeDashboard } from "./HomeDashboard";
 
 type DisplayView = "table" | "list" | "poster" | "calendar";
@@ -21,16 +21,6 @@ const toolItems = [
   { id: "settings", label: "設定", icon: Settings }
 ] as const;
 
-const privateStatuses = ["待觀看", "已觀看", "想重看", "已刪除"] as const;
-const favoriteLevels = ["神作", "收藏", "一般", "雷片", "已刪"] as const;
-const usageFilters = [
-  { label: "已使用", usedFilter: "used" },
-  { label: "未使用", usedFilter: "unused" }
-] as const;
-const platformItems = ["FC2", "JAV", "糖心"] as const;
-const makerItems = ["S1", "SOD", "Prestige", "Moodyz", "FALENO", "其他片商"] as const;
-const tagItems = ["高顏值", "素人感", "劇情好", "畫質差", "有碼", "無碼", "雷"] as const;
-
 export function ViewSidebar({
   activeView,
   activeTool,
@@ -40,6 +30,7 @@ export function ViewSidebar({
   filters,
   privateMode = false,
   privateSummary,
+  privateFacets,
   safeMode,
   collapsed,
   mobileOpen,
@@ -60,6 +51,7 @@ export function ViewSidebar({
   filters: ListFilters;
   privateMode?: boolean;
   privateSummary?: PrivateSummary | null;
+  privateFacets?: PrivateFacets | null;
   safeMode: boolean;
   collapsed: boolean;
   mobileOpen: boolean;
@@ -74,6 +66,52 @@ export function ViewSidebar({
 }) {
   const showText = !collapsed || mobileOpen;
   const libraryItems = libraryTree.filter((entry) => !safeMode || !isPrivateLibraryLabel(entry.label));
+  const [platformOpen, setPlatformOpen] = useState(true);
+  const [javOpen, setJavOpen] = useState(true);
+  const [favoriteOpen, setFavoriteOpen] = useState(true);
+  const [actressOpen, setActressOpen] = useState(true);
+  const [actressQuery, setActressQuery] = useState("");
+  const platformFilters = filterValues(filters.platformFilters);
+  const makerFilters = filterValues(filters.makerFilters);
+  const favoriteFilters = filterValues(filters.favoriteLevelFilters);
+  const personFilters = filterValues(filters.personFilters);
+  const actressItems = useMemo(() => {
+    const query = actressQuery.trim().toLowerCase();
+    const items = privateFacets?.actress || [];
+    return query ? items.filter((item) => item.value.toLowerCase().includes(query)) : items;
+  }, [actressQuery, privateFacets?.actress]);
+
+  const patchMulti = (key: "platformFilters" | "makerFilters" | "favoriteLevelFilters" | "personFilters", value: string) => {
+    const current = filterValues(filters[key]);
+    const next = current.includes(value) ? current.filter((entry) => entry !== value) : [...current, value];
+    onPrivateFilter?.({ [key]: next.join(","), ...(key === "platformFilters" ? { platform: "" } : {}) });
+  };
+
+  const patchJavMaker = (maker: string) => {
+    const platforms = platformFilters.includes("JAV") ? platformFilters : [...platformFilters, "JAV"];
+    const makers = makerFilters.includes(maker) ? makerFilters.filter((entry) => entry !== maker) : [...makerFilters, maker];
+    onPrivateFilter?.({ platformFilters: platforms.join(","), makerFilters: makers.join(","), platform: "", maker: "" });
+  };
+
+  const clearPrivateFilters = () => onPrivateFilter?.({
+    query: "",
+    platformFilters: "",
+    makerFilters: "",
+    favoriteLevelFilters: "",
+    personFilters: "",
+    missingPeople: false,
+    platform: "",
+    maker: "",
+    person: "",
+    tag: "",
+    ratingMin: "",
+    ratingMax: "",
+    unrated: false,
+    usedFilter: "all",
+    hasNote: "all",
+    hasCover: "all",
+    page: 1
+  });
 
   if (privateMode) {
     return (
@@ -89,29 +127,53 @@ export function ViewSidebar({
             onCloseMobile={onCloseMobile}
           />
 
-          <NavSection title="私密" showText={showText} tone="primary">
-            <SidebarButton active={!hasPrivateSidebarFilter(filters)} title="全部" icon={<Database size={16} />} showText={showText} onClick={() => onPrivateFilter?.({})}>
+          <NavSection title="全部" showText={showText} tone="primary">
+            <SidebarButton active={!hasPrivateSidebarFilter(filters)} title="全部" icon={<Database size={16} />} showText={showText} onClick={clearPrivateFilters}>
               全部
             </SidebarButton>
-            <SidebarButton active={filters.usedFilter === "used"} title="已使用" icon={<Heart size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ usedFilter: "used" })}>
-              已使用
-            </SidebarButton>
-            <SidebarButton active={filters.usedFilter === "unused"} title="未使用" icon={<Heart size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ usedFilter: "unused" })}>
-              未使用
-            </SidebarButton>
-            <SidebarButton active={filters.platform === "FC2"} title="FC2" icon={<Clapperboard size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ platform: "FC2" })}>
-              FC2
-            </SidebarButton>
-            <SidebarButton active={filters.platform === "JAV"} title="JAV" icon={<Clapperboard size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ platform: "JAV" })}>
-              JAV
-            </SidebarButton>
-            <SidebarButton active={filters.platform === "糖心"} title="糖心" icon={<Clapperboard size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ platform: "糖心" })}>
-              糖心
-            </SidebarButton>
-            <SidebarButton active={Boolean(filters.tag)} title="標籤" icon={<Tags size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ tag: "" })}>
-              標籤
-            </SidebarButton>
           </NavSection>
+
+          <PrivateNavSection title="平台" open={platformOpen} showText={showText} onToggle={() => setPlatformOpen((value) => !value)}>
+            <PrivateFilterButton label="FC2" count={facetCount(privateFacets?.source, "FC2")} active={platformFilters.includes("FC2")} showText={showText} icon={<Clapperboard size={15} />} onClick={() => patchMulti("platformFilters", "FC2")} />
+            <div className="private-nav-tree">
+              <div className="private-nav-tree-row">
+                <button className="private-nav-expand" onClick={() => setJavOpen((value) => !value)} aria-label={javOpen ? "收合 JAV 片商" : "展開 JAV 片商"}>
+                  {javOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                </button>
+                <PrivateFilterButton label="JAV" count={facetCount(privateFacets?.source, "JAV")} active={platformFilters.includes("JAV")} showText={showText} icon={<Clapperboard size={15} />} onClick={() => patchMulti("platformFilters", "JAV")} />
+              </div>
+              {javOpen && showText && (
+                <div className="private-nav-children">
+                  {(privateFacets?.javMaker || []).map((maker) => (
+                    <PrivateFilterButton key={maker.value} label={maker.value} count={maker.count} active={makerFilters.includes(maker.value)} showText={showText} onClick={() => patchJavMaker(maker.value)} />
+                  ))}
+                </div>
+              )}
+            </div>
+            {facetCount(privateFacets?.source, "其他") > 0 && <PrivateFilterButton label="其他" count={facetCount(privateFacets?.source, "其他")} active={platformFilters.includes("其他")} showText={showText} icon={<Clapperboard size={15} />} onClick={() => patchMulti("platformFilters", "其他")} />}
+          </PrivateNavSection>
+
+          <PrivateNavSection title="收藏" open={favoriteOpen} showText={showText} onToggle={() => setFavoriteOpen((value) => !value)}>
+            {[
+              { label: "神作", value: "神作" },
+              { label: "一般", value: "一般" },
+              { label: "刪除", value: "已刪" }
+            ].map((entry) => (
+              <PrivateFilterButton key={entry.value} label={entry.label} count={facetCount(privateFacets?.favoriteLevel, entry.value)} active={favoriteFilters.includes(entry.value)} showText={showText} icon={<Heart size={15} />} onClick={() => patchMulti("favoriteLevelFilters", entry.value)} />
+            ))}
+          </PrivateNavSection>
+
+          <PrivateNavSection title="女優" open={actressOpen} showText={showText} onToggle={() => setActressOpen((value) => !value)}>
+            {showText && <input className="private-nav-search" value={actressQuery} onChange={(event) => setActressQuery(event.target.value)} placeholder="搜尋女優" />}
+            <div className="private-nav-actress-list">
+              {actressItems.length === 0 ? (
+                showText && <em>沒有女優資料</em>
+              ) : actressItems.map((actress) => (
+                <PrivateFilterButton key={actress.value} label={actress.value} count={actress.count} active={personFilters.includes(actress.value)} showText={showText} onClick={() => patchMulti("personFilters", actress.value)} />
+              ))}
+            </div>
+            <PrivateFilterButton label="未填女優" count={0} active={Boolean(filters.missingPeople)} showText={showText} onClick={() => onPrivateFilter?.({ missingPeople: !filters.missingPeople })} />
+          </PrivateNavSection>
 
           <NavSection title="工具" showText={showText} tone="tools">
             <SidebarButton active={activeTool === "stats"} title="統計" icon={<BarChart3 size={15} />} showText={showText} onClick={() => onTool("stats")}>
@@ -125,73 +187,6 @@ export function ViewSidebar({
       </>
     );
 
-    const countForLevel = (level: string) => privateSummary?.collectionCounts.find((entry) => entry.level === level)?.count;
-    return (
-      <>
-        <SidebarScrim open={mobileOpen} onClose={onCloseMobile} />
-        <aside className={`${collapsed ? "database-sidebar collapsed private-sidebar" : "database-sidebar private-sidebar"} ${mobileOpen ? "mobile-open" : ""}`} aria-label="私密工作台分類">
-          <SidebarTop
-            showText={showText}
-            collapsed={collapsed}
-            title="私密工作台"
-            subtitle={`${privateSummary?.total || 0} 筆`}
-            onToggleCollapsed={onToggleCollapsed}
-            onCloseMobile={onCloseMobile}
-          />
-
-          <NavSection title="全部" showText={showText} tone="primary">
-            <SidebarButton active={!hasPrivateSidebarFilter(filters)} title="全部" icon={<Database size={16} />} showText={showText} onClick={() => onPrivateFilter?.({})}>
-              全部
-            </SidebarButton>
-            {privateStatuses.map((status) => (
-              <SidebarButton key={status} active={filters.mediaStatus === status} title={status} icon={<Folder size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ mediaStatus: status })}>
-                {status}
-              </SidebarButton>
-            ))}
-          </NavSection>
-
-          <NavSection title="收藏分類" showText={showText} tone="secondary">
-            {favoriteLevels.map((level) => (
-              <SidebarButton key={level} active={filters.favoriteLevel === level} title={level} icon={<Heart size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ favoriteLevel: level })}>
-                {level}{countForLevel(level) !== undefined ? ` ${countForLevel(level)}` : ""}
-              </SidebarButton>
-            ))}
-          </NavSection>
-
-          <NavSection title="使用分類" showText={showText} tone="secondary">
-            {usageFilters.map((entry) => (
-              <SidebarButton key={entry.usedFilter} active={filters.usedFilter === entry.usedFilter} title={entry.label} icon={<Heart size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ usedFilter: entry.usedFilter })}>
-                {entry.label}
-              </SidebarButton>
-            ))}
-          </NavSection>
-
-          <NavSection title="平台分類" showText={showText} tone="secondary">
-            {platformItems.map((platform) => (
-              <SidebarButton key={platform} active={filters.platform === platform} title={platform} icon={<Clapperboard size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ platform })}>
-                {platform}
-              </SidebarButton>
-            ))}
-          </NavSection>
-
-          <NavSection title="片商分類" showText={showText} tone="secondary">
-            {makerItems.map((maker) => (
-              <SidebarButton key={maker} active={filters.maker === maker} title={maker} icon={<Layers size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ maker })}>
-                {maker}
-              </SidebarButton>
-            ))}
-          </NavSection>
-
-          <NavSection title="標籤分類" showText={showText} tone="tags">
-            {tagItems.map((tag) => (
-              <SidebarButton key={tag} active={filters.tag === tag} title={tag} icon={!showText ? <Hash size={14} /> : <span className="tag-prefix">#</span>} showText={showText} onClick={() => onPrivateFilter?.({ tag })}>
-                {tag}
-              </SidebarButton>
-            ))}
-          </NavSection>
-        </aside>
-      </>
-    );
   }
 
   const visibleTags = tags.slice(0, 12);
@@ -312,6 +307,48 @@ function NavSection({ title, showText, tone, children }: { title: string; showTe
   );
 }
 
+function PrivateNavSection({ title, open, showText, children, onToggle }: { title: string; open: boolean; showText: boolean; children: ReactNode; onToggle: () => void }) {
+  return (
+    <div className="sidebar-group sidebar-private-facet">
+      {showText && (
+        <button className="private-nav-section-title" onClick={onToggle}>
+          {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          <span>{title}</span>
+        </button>
+      )}
+      {(!showText || open) && <div className="private-nav-section-body">{children}</div>}
+    </div>
+  );
+}
+
+function PrivateFilterButton({
+  label,
+  count,
+  active,
+  showText,
+  icon,
+  onClick
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  showText: boolean;
+  icon?: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button className={active ? "active private-nav-filter" : "private-nav-filter"} onClick={onClick} title={`${label} ${count}`}>
+      {icon || <span className="private-nav-dot" />}
+      {showText && (
+        <>
+          <span>{label}</span>
+          <b>{count}</b>
+        </>
+      )}
+    </button>
+  );
+}
+
 function isMainActive(id: string, activeView: string, filters: ListFilters) {
   if (id === "home") return activeView === "home" && !filters.favorite;
   if (id === "database") return activeView === "database" && !filters.favorite;
@@ -324,10 +361,30 @@ function hasPrivateSidebarFilter(filters: ListFilters) {
     filters.mediaStatus !== "all" ||
     filters.favoriteLevel !== "all" ||
     filters.usedFilter !== "all" ||
+    filters.platformFilters?.trim() ||
+    filters.makerFilters?.trim() ||
+    filters.favoriteLevelFilters?.trim() ||
+    filters.personFilters?.trim() ||
+    filters.missingPeople ||
+    filters.query?.trim() ||
+    filters.ratingMin?.trim() ||
+    filters.ratingMax?.trim() ||
+    filters.unrated ||
+    (filters.hasNote && filters.hasNote !== "all") ||
+    (filters.hasCover && filters.hasCover !== "all") ||
     filters.platform ||
     filters.maker ||
+    filters.person ||
     filters.tag
   );
+}
+
+function filterValues(value: string | undefined) {
+  return (value || "").split(",").map((entry) => entry.trim()).filter(Boolean);
+}
+
+function facetCount(items: Array<{ value: string; count: number }> | undefined, value: string) {
+  return items?.find((item) => item.value === value)?.count || 0;
 }
 
 function iconFor(label: string) {

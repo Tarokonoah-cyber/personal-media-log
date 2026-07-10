@@ -1,5 +1,5 @@
-import { Bookmark, Check, ChevronDown, ChevronRight, Circle, Columns3, Home, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, SlidersHorizontal, Star, Sun, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Bookmark, Check, Columns3, Home, Menu, Moon, Plus, Search, SlidersHorizontal, Star, Sun, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { FilterSheet } from "./components/FilterSheet";
 import { HomeDashboard } from "./components/HomeDashboard";
 import { ImportExport } from "./components/ImportExport";
@@ -68,6 +68,84 @@ type DisplayDensity = "comfortable" | "standard" | "compact";
 const displayViews: DisplayView[] = ["table", "list", "poster", "calendar"];
 const displayDensities: DisplayDensity[] = ["comfortable", "standard", "compact"];
 const quickStatusViews = ["home", "watching", "plan_to_watch", "completed"];
+const PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v1";
+
+type PrivateColumnId = "title" | "rating" | "favorite" | "used" | "actress" | "tags" | "source" | "summary";
+
+type PrivateColumnDefinition = {
+  id: PrivateColumnId;
+  label: string;
+  width: number;
+  minWidth: number;
+  maxWidth: number;
+  required?: boolean;
+  defaultHidden?: boolean;
+};
+
+type PrivateTablePreferences = {
+  order: PrivateColumnId[];
+  widths: Record<PrivateColumnId, number>;
+  visible: Record<PrivateColumnId, boolean>;
+  pageSize: number;
+};
+
+const privateColumnDefinitions: PrivateColumnDefinition[] = [
+  { id: "title", label: "作品代號 / 標題", width: 520, minWidth: 320, maxWidth: 900, required: true },
+  { id: "rating", label: "評分", width: 78, minWidth: 64, maxWidth: 120 },
+  { id: "favorite", label: "收藏", width: 68, minWidth: 56, maxWidth: 110 },
+  { id: "used", label: "已使用", width: 56, minWidth: 50, maxWidth: 90 },
+  { id: "actress", label: "女優", width: 180, minWidth: 120, maxWidth: 360 },
+  { id: "tags", label: "標籤", width: 220, minWidth: 140, maxWidth: 420 },
+  { id: "source", label: "來源", width: 140, minWidth: 100, maxWidth: 260, defaultHidden: true },
+  { id: "summary", label: "一句話心得", width: 280, minWidth: 180, maxWidth: 520, defaultHidden: true }
+];
+
+const privateColumnMap = Object.fromEntries(privateColumnDefinitions.map((column) => [column.id, column])) as Record<PrivateColumnId, PrivateColumnDefinition>;
+const privateColumnIds = privateColumnDefinitions.map((column) => column.id);
+
+function defaultPrivateTablePreferences(): PrivateTablePreferences {
+  return {
+    order: privateColumnIds,
+    widths: Object.fromEntries(privateColumnDefinitions.map((column) => [column.id, column.width])) as Record<PrivateColumnId, number>,
+    visible: Object.fromEntries(privateColumnDefinitions.map((column) => [column.id, !column.defaultHidden])) as Record<PrivateColumnId, boolean>,
+    pageSize: 100
+  };
+}
+
+function normalizePrivateTablePreferences(value?: Partial<PrivateTablePreferences> | null): PrivateTablePreferences {
+  const defaults = defaultPrivateTablePreferences();
+  const order = [...(value?.order || []).filter((id): id is PrivateColumnId => privateColumnIds.includes(id as PrivateColumnId)), ...privateColumnIds.filter((id) => !(value?.order || []).includes(id))];
+  const widths = { ...defaults.widths, ...(value?.widths || {}) };
+  const visible = { ...defaults.visible, ...(value?.visible || {}), title: true };
+  for (const column of privateColumnDefinitions) {
+    widths[column.id] = Math.min(column.maxWidth, Math.max(column.minWidth, Number(widths[column.id]) || column.width));
+    if (column.required) visible[column.id] = true;
+  }
+  return {
+    order,
+    widths,
+    visible,
+    pageSize: [50, 100, 200].includes(Number(value?.pageSize)) ? Number(value?.pageSize) : defaults.pageSize
+  };
+}
+
+function readPrivateTablePreferences() {
+  if (typeof localStorage === "undefined") return defaultPrivateTablePreferences();
+  try {
+    return normalizePrivateTablePreferences(JSON.parse(localStorage.getItem(PRIVATE_TABLE_PREFERENCES_KEY) || "null"));
+  } catch {
+    return defaultPrivateTablePreferences();
+  }
+}
+
+function savePrivateTablePreferences(preferences: PrivateTablePreferences) {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(PRIVATE_TABLE_PREFERENCES_KEY, JSON.stringify(normalizePrivateTablePreferences(preferences)));
+}
+
+function initialPrivatePageSize() {
+  return readPrivateTablePreferences().pageSize;
+}
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("log");
@@ -82,8 +160,6 @@ export default function App() {
   const [summaryItems, setSummaryItems] = useState<MediaItem[]>([]);
   const [privateSummary, setPrivateSummary] = useState<PrivateSummary | null>(null);
   const [privateFacets, setPrivateFacets] = useState<PrivateFacets | null>(null);
-  const [privateFacetCollapsed, setPrivateFacetCollapsed] = useState(false);
-  const [privateFacetMobileOpen, setPrivateFacetMobileOpen] = useState(false);
   const [total, setTotal] = useState(0);
   const [inboxTotal, setInboxTotal] = useState(0);
   const [selected, setSelected] = useState<MediaItem | null>(null);
@@ -99,6 +175,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState("");
   const [error, setError] = useState("");
+  const loadRequestId = useRef(0);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [columnManagerOpen, setColumnManagerOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -125,6 +202,12 @@ export default function App() {
 
   useEffect(() => {
     if (!privateActive) setPrivateSidebarExpanded(false);
+  }, [privateActive]);
+
+  useEffect(() => {
+    if (!privateActive) return;
+    const privatePageSize = initialPrivatePageSize();
+    setFilters((current) => current.pageSize === privatePageSize ? current : { ...current, pageSize: privatePageSize, page: 1 });
   }, [privateActive]);
 
   useEffect(() => {
@@ -169,18 +252,21 @@ export default function App() {
   }, [activeCategory, activeView, includePrivate, items, libraryTypes]);
 
   async function loadItems() {
+    const requestId = ++loadRequestId.current;
     setLoading(true);
     setError("");
     try {
       const result = await listItems({ ...filters, includePrivate, privateOnly: includePrivate, includeFacets: includePrivate });
+      if (requestId !== loadRequestId.current) return;
       setItems(result.items);
       setTotal(result.total);
       setPrivateSummary(result.privateSummary || null);
       setPrivateFacets(result.privateFacets || null);
     } catch (err) {
+      if (requestId !== loadRequestId.current) return;
       setError(err instanceof Error ? err.message : "讀取紀錄失敗");
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestId.current) setLoading(false);
     }
   }
 
@@ -566,6 +652,7 @@ export default function App() {
           filters={filters}
           privateMode={privateActive}
           privateSummary={privateSummary}
+          privateFacets={privateFacets}
           safeMode={safeMode}
           collapsed={effectiveSidebarCollapsed}
           mobileOpen={sidebarOpen}
@@ -595,19 +682,11 @@ export default function App() {
                   loading={loading}
                   pageCount={pageCount}
                   total={total}
-                  title={privatePageTitle}
-                  summary={privateSummary}
-                  facets={privateFacets}
-                  facetCollapsed={privateFacetCollapsed}
-                  facetMobileOpen={privateFacetMobileOpen}
                   error={error}
                   onPatchFilters={patchFilters}
                   onClearFilters={resetFilters}
                   onRetry={() => void loadItems()}
                   onOpenAdvanced={() => setFiltersOpen(true)}
-                  onToggleFacetCollapsed={() => setPrivateFacetCollapsed((value) => !value)}
-                  onOpenFacetMobile={() => setPrivateFacetMobileOpen(true)}
-                  onCloseFacetMobile={() => setPrivateFacetMobileOpen(false)}
                   onAdd={() => setSimpleAddOpen(true)}
                   onSelect={(item) => void openItemDetail(item)}
                 />
@@ -1090,19 +1169,11 @@ function PrivateWorkbenchV3({
   loading,
   pageCount,
   total,
-  title,
-  summary,
-  facets,
-  facetCollapsed,
-  facetMobileOpen,
   error,
   onPatchFilters,
   onClearFilters,
   onRetry,
   onOpenAdvanced,
-  onToggleFacetCollapsed,
-  onOpenFacetMobile,
-  onCloseFacetMobile,
   onAdd,
   onSelect
 }: {
@@ -1111,222 +1182,117 @@ function PrivateWorkbenchV3({
   loading: boolean;
   pageCount: number;
   total: number;
-  title: string;
-  summary: PrivateSummary | null;
-  facets: PrivateFacets | null;
-  facetCollapsed: boolean;
-  facetMobileOpen: boolean;
   error: string;
   onPatchFilters: (patch: Partial<ListFilters>) => void;
   onClearFilters: () => void;
   onRetry: () => void;
   onOpenAdvanced: () => void;
-  onToggleFacetCollapsed: () => void;
-  onOpenFacetMobile: () => void;
-  onCloseFacetMobile: () => void;
   onAdd: () => void;
   onSelect: (item: MediaItem) => void;
 }) {
-  const summaryTotal = summary?.total ?? total;
-  const averageRating = summary?.averageRating === null || summary?.averageRating === undefined ? "-" : summary.averageRating.toFixed(1);
+  const [searchDraft, setSearchDraft] = useState(filters.query);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [columnPreferences, setColumnPreferences] = useState<PrivateTablePreferences>(() => readPrivateTablePreferences());
+  const visibleColumns = useMemo(
+    () => columnPreferences.order.filter((id) => columnPreferences.visible[id]).map((id) => privateColumnMap[id]),
+    [columnPreferences]
+  );
+
+  useEffect(() => {
+    setSearchDraft(filters.query);
+  }, [filters.query]);
+
+  useEffect(() => {
+    if (searchDraft === filters.query) return;
+    const id = window.setTimeout(() => onPatchFilters({ query: searchDraft, page: 1 }), 300);
+    return () => window.clearTimeout(id);
+  }, [filters.query, onPatchFilters, searchDraft]);
+
+  useEffect(() => {
+    savePrivateTablePreferences({ ...columnPreferences, pageSize: filters.pageSize });
+  }, [columnPreferences, filters.pageSize]);
+
+  function updatePageSize(pageSize: number) {
+    setColumnPreferences((current) => normalizePrivateTablePreferences({ ...current, pageSize }));
+    onPatchFilters({ pageSize, page: 1 });
+  }
+
+  function toggleColumn(id: PrivateColumnId) {
+    if (privateColumnMap[id].required) return;
+    setColumnPreferences((current) => normalizePrivateTablePreferences({
+      ...current,
+      visible: { ...current.visible, [id]: !current.visible[id] }
+    }));
+  }
+
+  function resetColumns() {
+    setColumnPreferences(defaultPrivateTablePreferences());
+  }
 
   return (
     <section className="private-workbench">
       <div className="private-toolbar">
-        <div className="private-toolbar-title">
-          <strong>{title}</strong>
-          <span>目前 {total} 筆</span>
-          <em>{privateFilterSummary(filters)}</em>
-        </div>
         <label className="private-search-field">
           <Search size={16} />
-          <input value={filters.query} onChange={(event) => onPatchFilters({ query: event.target.value })} placeholder="搜尋作品代號、女優、平台、片商、標籤、心得" />
+          <input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="搜尋作品代號、女優、平台、片商、標籤、心得" />
         </label>
         <div className="private-toolbar-actions">
-          <button className="filter-toggle private-facet-mobile-toggle" onClick={onOpenFacetMobile}><PanelLeftOpen size={16} />分類</button>
           <button className="filter-toggle advanced-filter" onClick={onOpenAdvanced}><SlidersHorizontal size={16} />進階篩選</button>
           <button className="filter-chip-clear" onClick={onClearFilters} disabled={!hasPrivateFilters(filters)}>清除篩選</button>
+          <div className="private-columns-menu">
+            <button className="filter-toggle column-toggle" onClick={() => setColumnsOpen((value) => !value)}><Columns3 size={16} />欄位</button>
+            {columnsOpen && (
+              <div className="private-columns-popover" role="dialog" aria-label="欄位設定">
+                <strong>欄位設定</strong>
+                {privateColumnDefinitions.map((column) => (
+                  <label key={column.id} className="private-column-option">
+                    <input type="checkbox" checked={columnPreferences.visible[column.id]} disabled={column.required} onChange={() => toggleColumn(column.id)} />
+                    <span>{column.label}</span>
+                  </label>
+                ))}
+                <button className="filter-chip-clear" onClick={resetColumns}>重設欄位</button>
+              </div>
+            )}
+          </div>
           <button className="primary" onClick={onAdd}><Plus size={16} />新增</button>
         </div>
         <div className="pagination-controls private-pagination">
           <button disabled={filters.page <= 1} onClick={() => onPatchFilters({ page: filters.page - 1 })}>上一頁</button>
           <span>{filters.page} / {pageCount}</span>
           <button disabled={filters.page >= pageCount} onClick={() => onPatchFilters({ page: filters.page + 1 })}>下一頁</button>
-          <select value={filters.pageSize} onChange={(event) => onPatchFilters({ pageSize: Number(event.target.value), page: 1 })} aria-label="每頁筆數">
+          <select value={filters.pageSize} onChange={(event) => updatePageSize(Number(event.target.value))} aria-label="每頁筆數">
             {[50, 100, 200].map((size) => <option key={size} value={size}>{size} / 頁</option>)}
           </select>
         </div>
       </div>
 
-      <div className="private-summary-strip private-filter-panel" aria-label="私密統計摘要">
-        <SummaryValue label="私密總數" value={summaryTotal.toString()} />
-        <SummaryValue label="已使用" value={String(summary?.used ?? 0)} />
-        <SummaryValue label="平均分" value={averageRating} />
-      </div>
-
       <FilterChips filters={filters} activeView={PRIVATE_LIBRARY_LABEL} onClear={onClearFilters} />
+      <div className="private-count-line">
+        <span>目前 {total} 筆</span>
+        <em>{privateFilterSummary(filters)}</em>
+      </div>
 
-      <div className={facetCollapsed ? "private-workbench-body facets-collapsed" : "private-workbench-body"}>
-        <PrivateLibraryFacets
-          facets={facets}
-          filters={filters}
-          collapsed={facetCollapsed}
-          mobileOpen={facetMobileOpen}
-          onPatchFilters={onPatchFilters}
-          onToggleCollapsed={onToggleFacetCollapsed}
-          onCloseMobile={onCloseFacetMobile}
-        />
-        <div className="private-list-region">
-          {error ? (
-            <PrivateErrorCard error={error} onRetry={onRetry} />
-          ) : loading ? (
-            <PrivateSkeleton />
-          ) : items.length === 0 ? (
-            <PrivateEmptyState onClear={onClearFilters} onAdd={onAdd} />
-          ) : (
-            <>
-              <PrivateMobileCards items={items} onSelect={onSelect} />
-              <PrivateDataTable items={items} onSelect={onSelect} />
-            </>
-          )}
-        </div>
+      <div className="private-list-region">
+        {error ? (
+          <PrivateErrorCard error={error} onRetry={onRetry} />
+        ) : loading ? (
+          <PrivateSkeleton />
+        ) : items.length === 0 ? (
+          <PrivateEmptyState onClear={onClearFilters} onAdd={onAdd} />
+        ) : (
+          <>
+            <PrivateMobileCards items={items} onSelect={onSelect} />
+            <PrivateDataTable
+              items={items}
+              columns={visibleColumns}
+              preferences={columnPreferences}
+              onPreferencesChange={setColumnPreferences}
+              onSelect={onSelect}
+            />
+          </>
+        )}
       </div>
     </section>
-  );
-}
-
-function PrivateLibraryFacets({
-  facets,
-  filters,
-  collapsed,
-  mobileOpen,
-  onPatchFilters,
-  onToggleCollapsed,
-  onCloseMobile
-}: {
-  facets: PrivateFacets | null;
-  filters: ListFilters;
-  collapsed: boolean;
-  mobileOpen: boolean;
-  onPatchFilters: (patch: Partial<ListFilters>) => void;
-  onToggleCollapsed: () => void;
-  onCloseMobile: () => void;
-}) {
-  const [platformOpen, setPlatformOpen] = useState(true);
-  const [javOpen, setJavOpen] = useState(true);
-  const [favoriteOpen, setFavoriteOpen] = useState(true);
-  const [actressOpen, setActressOpen] = useState(true);
-  const [actressQuery, setActressQuery] = useState("");
-  const platformFilters = filterValues(filters.platformFilters);
-  const makerFilters = filterValues(filters.makerFilters);
-  const favoriteFilters = filterValues(filters.favoriteLevelFilters);
-  const personFilters = filterValues(filters.personFilters);
-  const actressItems = useMemo(() => {
-    const query = actressQuery.trim().toLowerCase();
-    const items = facets?.actress || [];
-    return query ? items.filter((item) => item.value.toLowerCase().includes(query)) : items;
-  }, [actressQuery, facets?.actress]);
-
-  const patchMulti = (key: "platformFilters" | "makerFilters" | "favoriteLevelFilters" | "personFilters", value: string) => {
-    const current = filterValues(filters[key]);
-    const next = current.includes(value) ? current.filter((entry) => entry !== value) : [...current, value];
-    onPatchFilters({ [key]: next.join(","), ...(key === "platformFilters" ? { platform: "" } : {}) });
-  };
-
-  const patchJavMaker = (maker: string) => {
-    const platforms = platformFilters.includes("JAV") ? platformFilters : [...platformFilters, "JAV"];
-    const makers = makerFilters.includes(maker) ? makerFilters.filter((entry) => entry !== maker) : [...makerFilters, maker];
-    onPatchFilters({ platformFilters: platforms.join(","), makerFilters: makers.join(","), platform: "", maker: "" });
-  };
-
-  const panel = (
-    <aside className={collapsed ? "private-facet-sidebar collapsed" : "private-facet-sidebar"} aria-label="私密分類篩選">
-      <div className="private-facet-sidebar-head">
-        {!collapsed && <strong>分類</strong>}
-        <button onClick={onToggleCollapsed} title={collapsed ? "展開分類" : "收合分類"} aria-label={collapsed ? "展開分類" : "收合分類"}>
-          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-        </button>
-      </div>
-      {!collapsed && (
-        <div className="private-facet-sidebar-body">
-          <PrivateFacetSection title="平台" open={platformOpen} onToggle={() => setPlatformOpen((value) => !value)}>
-            <PrivateFacetButton label="FC2" count={facetCount(facets?.source, "FC2")} active={platformFilters.includes("FC2")} onClick={() => patchMulti("platformFilters", "FC2")} />
-            <div className="private-facet-tree-node">
-              <div className="private-facet-tree-row">
-                <button className="private-facet-expand" onClick={() => setJavOpen((value) => !value)} aria-label={javOpen ? "收合 JAV 片商" : "展開 JAV 片商"}>
-                  {javOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                </button>
-                <button className={platformFilters.includes("JAV") ? "private-facet-tree-parent active" : "private-facet-tree-parent"} onClick={() => patchMulti("platformFilters", "JAV")}>
-                  <span>JAV</span>
-                  <b>{facetCount(facets?.source, "JAV")}</b>
-                </button>
-              </div>
-              {javOpen && (
-                <div className="private-facet-children">
-                  {(facets?.javMaker || []).map((maker) => (
-                    <PrivateFacetButton key={maker.value} label={maker.value} count={maker.count} active={makerFilters.includes(maker.value)} onClick={() => patchJavMaker(maker.value)} />
-                  ))}
-                </div>
-              )}
-            </div>
-            {facetCount(facets?.source, "其他") > 0 && <PrivateFacetButton label="其他" count={facetCount(facets?.source, "其他")} active={platformFilters.includes("其他")} onClick={() => patchMulti("platformFilters", "其他")} />}
-          </PrivateFacetSection>
-
-          <PrivateFacetSection title="收藏" open={favoriteOpen} onToggle={() => setFavoriteOpen((value) => !value)}>
-            {[
-              { label: "神作", value: "神作" },
-              { label: "一般", value: "一般" },
-              { label: "刪除", value: "已刪" }
-            ].map((entry) => (
-              <PrivateFacetButton key={entry.value} label={entry.label} count={facetCount(facets?.favoriteLevel, entry.value)} active={favoriteFilters.includes(entry.value)} onClick={() => patchMulti("favoriteLevelFilters", entry.value)} />
-            ))}
-          </PrivateFacetSection>
-
-          <PrivateFacetSection title="女優" open={actressOpen} onToggle={() => setActressOpen((value) => !value)}>
-            <input className="private-actress-search" value={actressQuery} onChange={(event) => setActressQuery(event.target.value)} placeholder="搜尋女優" />
-            <div className="private-actress-list">
-              {actressItems.length === 0 ? (
-                <span className="private-facet-empty">沒有女優資料</span>
-              ) : actressItems.map((actress) => (
-                <PrivateFacetButton key={actress.value} label={actress.value} count={actress.count} active={personFilters.includes(actress.value)} onClick={() => patchMulti("personFilters", actress.value)} />
-              ))}
-            </div>
-            <PrivateFacetButton label="未填女優" count={0} active={Boolean(filters.missingPeople)} onClick={() => onPatchFilters({ missingPeople: !filters.missingPeople })} />
-          </PrivateFacetSection>
-        </div>
-      )}
-    </aside>
-  );
-
-  return (
-    <>
-      <div className={mobileOpen ? "private-facet-mobile-scrim open" : "private-facet-mobile-scrim"} onClick={onCloseMobile} />
-      <div className={mobileOpen ? "private-facet-mobile-drawer open" : "private-facet-mobile-drawer"}>
-        <button className="private-facet-mobile-close" onClick={onCloseMobile}>關閉</button>
-        {panel}
-      </div>
-      {panel}
-    </>
-  );
-}
-
-function PrivateFacetSection({ title, open, onToggle, children }: { title: string; open: boolean; onToggle: () => void; children: ReactNode }) {
-  return (
-    <section className="private-sidebar-section">
-      <button className="private-sidebar-section-title" onClick={onToggle}>
-        <span>{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{title}</span>
-      </button>
-      {open && <div className="private-sidebar-section-body">{children}</div>}
-    </section>
-  );
-}
-
-function PrivateFacetButton({ label, count, active, onClick }: { label: string; count: number; active: boolean; onClick: () => void }) {
-  return (
-    <button className={active ? "private-sidebar-filter active" : "private-sidebar-filter"} onClick={onClick} title={`${label} ${count}`}>
-      <span>{label}</span>
-      <b>{count}</b>
-    </button>
   );
 }
 
@@ -1334,47 +1300,91 @@ function filterValues(value: string | undefined) {
   return (value || "").split(",").map((entry) => entry.trim()).filter(Boolean);
 }
 
-function facetCount(items: Array<{ value: string; count: number }> | undefined, value: string) {
-  return items?.find((item) => item.value === value)?.count || 0;
-}
+function PrivateDataTable({
+  items,
+  columns,
+  preferences,
+  onPreferencesChange,
+  onSelect
+}: {
+  items: MediaItem[];
+  columns: PrivateColumnDefinition[];
+  preferences: PrivateTablePreferences;
+  onPreferencesChange: (preferences: PrivateTablePreferences | ((current: PrivateTablePreferences) => PrivateTablePreferences)) => void;
+  onSelect: (item: MediaItem) => void;
+}) {
+  const [dragColumn, setDragColumn] = useState<PrivateColumnId | null>(null);
+  const totalWidth = columns.reduce((sum, column) => sum + preferences.widths[column.id], 0);
 
-function PrivateDataTable({ items, onSelect }: { items: MediaItem[]; onSelect: (item: MediaItem) => void }) {
+  function updateWidth(column: PrivateColumnDefinition, width: number) {
+    onPreferencesChange((current) => normalizePrivateTablePreferences({
+      ...current,
+      widths: { ...current.widths, [column.id]: Math.min(column.maxWidth, Math.max(column.minWidth, width)) }
+    }));
+  }
+
+  function startResize(column: PrivateColumnDefinition, event: React.MouseEvent<HTMLSpanElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = preferences.widths[column.id];
+    const handleMove = (moveEvent: MouseEvent) => updateWidth(column, startWidth + moveEvent.clientX - startX);
+    const handleUp = () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+  }
+
+  function autosize(column: PrivateColumnDefinition) {
+    const width = Math.min(column.maxWidth, Math.max(column.minWidth, estimatePrivateColumnWidth(column.id, items)));
+    updateWidth(column, width);
+  }
+
+  function moveColumn(target: PrivateColumnId) {
+    if (!dragColumn || dragColumn === target) return;
+    onPreferencesChange((current) => {
+      const order = current.order.filter((id) => id !== dragColumn);
+      const targetIndex = order.indexOf(target);
+      order.splice(targetIndex < 0 ? order.length : targetIndex, 0, dragColumn);
+      return normalizePrivateTablePreferences({ ...current, order });
+    });
+    setDragColumn(null);
+  }
+
   return (
     <div className="private-data-table-wrap">
-      <table className="private-data-table private-dense-table">
+      <table className="private-data-table private-dense-table" style={{ "--private-table-width": `${Math.max(totalWidth, 760)}px` } as CSSProperties}>
+        <colgroup>
+          {columns.map((column) => <col key={column.id} style={{ width: preferences.widths[column.id] }} />)}
+        </colgroup>
         <thead>
           <tr>
-            <th>作品代號 / 標題</th>
-            <th>評分</th>
-            <th>收藏</th>
-            <th>已使用</th>
-            <th>女優</th>
-            <th>標籤</th>
+            {columns.map((column) => (
+              <th
+                key={column.id}
+                className={column.id === "title" ? "private-sticky-column" : undefined}
+                draggable
+                onDragStart={() => setDragColumn(column.id)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => moveColumn(column.id)}
+              >
+                <span>{column.label}</span>
+                <span className="private-column-resize" onMouseDown={(event) => startResize(column, event)} onDoubleClick={() => autosize(column)} title="拖曳調整寬度，雙擊自動寬度" />
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {items.map((item) => {
-            const details = privateItemDetails(item);
-            const titleText = privateDisplayTitle(details.title, details.code);
-            const codeTitleText = titleText ? `${details.code} — ${titleText}` : details.code;
             return (
               <tr key={item.id} onClick={() => onSelect(item)}>
-                <td className="private-title-code-cell" title={codeTitleText}>
-                  <span className="private-code-title-line">
-                    <strong>{details.code}</strong>
-                    {titleText && (
-                      <>
-                        <span className="private-title-separator">—</span>
-                        <span className="private-title-text">{titleText}</span>
-                      </>
-                    )}
-                  </span>
-                </td>
-                <td><PrivateRating item={item} /></td>
-                <td><PrivateFavoriteMark level={privateFavoriteLevel(item)} /></td>
-                <td><PrivateUsedBadge used={item.used} /></td>
-                <td className="private-ellipsis" title={details.performers}>{details.performers}</td>
-                <td><PrivateTags tags={item.tags} /></td>
+                {columns.map((column) => (
+                  <td key={column.id} className={column.id === "title" ? "private-sticky-column" : undefined}>
+                    <PrivateTableCell column={column.id} item={item} />
+                  </td>
+                ))}
               </tr>
             );
           })}
@@ -1382,6 +1392,50 @@ function PrivateDataTable({ items, onSelect }: { items: MediaItem[]; onSelect: (
       </table>
     </div>
   );
+}
+
+function PrivateTableCell({ column, item }: { column: PrivateColumnId; item: MediaItem }) {
+  const details = privateItemDetails(item);
+  if (column === "title") {
+    const titleText = privateDisplayTitle(details.title, details.code);
+    const codeTitleText = titleText ? `${details.code} — ${titleText}` : details.code;
+    return (
+      <span className="private-title-code-cell" title={codeTitleText}>
+        <span className="private-code-title-line">
+          <strong>{details.code}</strong>
+          {titleText && (
+            <>
+              <span className="private-title-separator">—</span>
+              <span className="private-title-text">{titleText}</span>
+            </>
+          )}
+        </span>
+      </span>
+    );
+  }
+  if (column === "rating") return <PrivateRating item={item} />;
+  if (column === "favorite") return <PrivateFavoriteMark level={privateFavoriteLevel(item)} />;
+  if (column === "used") return <PrivateUsedBadge used={item.used} />;
+  if (column === "actress") return <span className="private-ellipsis" title={details.performers}>{details.performers || "-"}</span>;
+  if (column === "tags") return <PrivateTags tags={item.tags} />;
+  if (column === "source") return <PrivateSource item={item} />;
+  return <span className="private-summary-cell" title={item.quick_note || ""}>{item.quick_note || "-"}</span>;
+}
+
+function estimatePrivateColumnWidth(column: PrivateColumnId, items: MediaItem[]) {
+  const sample = items.slice(0, 100).map((item) => {
+    const details = privateItemDetails(item);
+    if (column === "title") return privateDisplayTitle(details.title, details.code) ? `${details.code} — ${privateDisplayTitle(details.title, details.code)}` : details.code;
+    if (column === "rating") return item.rating ? Number(item.rating).toFixed(1) : "-";
+    if (column === "favorite") return privateFavoriteLevel(item);
+    if (column === "used") return item.used ? "✓" : "-";
+    if (column === "actress") return details.performers || "-";
+    if (column === "tags") return item.tags.join(" ");
+    if (column === "source") return privateSourceLabel(item) || "-";
+    return item.quick_note || "-";
+  });
+  const maxLength = Math.max(privateColumnMap[column].label.length, ...sample.map((value) => value.length));
+  return maxLength * 8 + 34;
 }
 
 function PrivateMobileCards({ items, onSelect }: { items: MediaItem[]; onSelect: (item: MediaItem) => void }) {
@@ -1431,7 +1485,7 @@ function PrivateRating({ item }: { item: MediaItem }) {
 function PrivateUsedBadge({ used }: { used: boolean }) {
   return (
     <span className={used ? "private-used-icon used" : "private-used-icon"} title={used ? "已使用" : "未使用"} aria-label={used ? "已使用" : "未使用"}>
-      {used ? <Check size={14} strokeWidth={3} /> : <Circle size={12} />}
+      {used ? <Check size={14} strokeWidth={3} /> : <span aria-hidden="true">-</span>}
     </span>
   );
 }
@@ -1446,16 +1500,8 @@ function PrivateFavoriteMark({ level }: { level: string }) {
   return (
     <span className={`private-favorite-mark ${privateBadgeClass(normalized)}`} title={`收藏：${normalized}`} aria-label={`收藏：${normalized}`}>
       {icon}
-      <span>{compactFavoriteLabel(normalized)}</span>
     </span>
   );
-}
-
-function compactFavoriteLabel(level: string) {
-  if (level === "神作") return "神";
-  if (level === "收藏") return "藏";
-  if (level === "刪除" || level === "雷片") return "刪";
-  return "般";
 }
 
 function PrivateSource({ item }: { item: MediaItem }) {
