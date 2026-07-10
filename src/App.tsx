@@ -1152,7 +1152,7 @@ function PrivateWorkbenchV3({
         </div>
       </div>
 
-      <div className="private-filter-panel">
+      <div className="private-summary-strip private-filter-panel">
         <SummaryValue label="私密總數" value={summaryTotal.toString()} />
         <SummaryValue label="已使用" value={String(summary?.used ?? 0)} />
         <SummaryValue label="平均分" value={averageRating} />
@@ -1294,7 +1294,15 @@ function PrivateUsedBadge({ used }: { used: boolean }) {
 }
 
 function PrivateBadge({ tone, children }: { tone: "platform" | "favorite" | "status"; children: string }) {
-  return <span className={`private-badge ${tone}`}>{children || "-"}</span>;
+  return <span className={`private-badge ${tone} ${privateBadgeClass(children)}`}>{children || "-"}</span>;
+}
+
+function privateBadgeClass(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function PrivateTags({ tags }: { tags: string[] }) {
