@@ -1,5 +1,5 @@
-import { Columns3, Home, Menu, Moon, Plus, Search, SlidersHorizontal, Star, Sun } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Bookmark, Check, ChevronDown, ChevronRight, Circle, Columns3, Home, Menu, Moon, PanelLeftClose, PanelLeftOpen, Plus, Search, SlidersHorizontal, Star, Sun, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { FilterSheet } from "./components/FilterSheet";
 import { HomeDashboard } from "./components/HomeDashboard";
 import { ImportExport } from "./components/ImportExport";
@@ -33,6 +33,13 @@ const defaultFilters: ListFilters = {
   collectionLevel: "",
   favoriteLevel: "all",
   mediaStatus: "all",
+  platformFilters: "",
+  makerFilters: "",
+  favoriteLevelFilters: "",
+  personFilters: "",
+  missingPeople: false,
+  hasNote: "all",
+  hasCover: "all",
   watchStatus: "all",
   type: "",
   category: "",
@@ -75,6 +82,8 @@ export default function App() {
   const [summaryItems, setSummaryItems] = useState<MediaItem[]>([]);
   const [privateSummary, setPrivateSummary] = useState<PrivateSummary | null>(null);
   const [privateFacets, setPrivateFacets] = useState<PrivateFacets | null>(null);
+  const [privateFacetCollapsed, setPrivateFacetCollapsed] = useState(false);
+  const [privateFacetMobileOpen, setPrivateFacetMobileOpen] = useState(false);
   const [total, setTotal] = useState(0);
   const [inboxTotal, setInboxTotal] = useState(0);
   const [selected, setSelected] = useState<MediaItem | null>(null);
@@ -588,11 +597,17 @@ export default function App() {
                   total={total}
                   title={privatePageTitle}
                   summary={privateSummary}
+                  facets={privateFacets}
+                  facetCollapsed={privateFacetCollapsed}
+                  facetMobileOpen={privateFacetMobileOpen}
                   error={error}
                   onPatchFilters={patchFilters}
                   onClearFilters={resetFilters}
                   onRetry={() => void loadItems()}
                   onOpenAdvanced={() => setFiltersOpen(true)}
+                  onToggleFacetCollapsed={() => setPrivateFacetCollapsed((value) => !value)}
+                  onOpenFacetMobile={() => setPrivateFacetMobileOpen(true)}
+                  onCloseFacetMobile={() => setPrivateFacetMobileOpen(false)}
                   onAdd={() => setSimpleAddOpen(true)}
                   onSelect={(item) => void openItemDetail(item)}
                 />
@@ -714,7 +729,7 @@ export default function App() {
         </section>
       </main>
 
-      <FilterSheet open={filtersOpen} filters={filters} privateMode={privateActive} privateFacets={privateFacets} onChange={patchFilters} onClose={() => setFiltersOpen(false)} />
+      <FilterSheet open={filtersOpen} filters={filters} privateMode={privateActive} onChange={patchFilters} onClose={() => setFiltersOpen(false)} />
 
       {simpleAddOpen && (
         <SimpleAddModal
@@ -1077,11 +1092,17 @@ function PrivateWorkbenchV3({
   total,
   title,
   summary,
+  facets,
+  facetCollapsed,
+  facetMobileOpen,
   error,
   onPatchFilters,
   onClearFilters,
   onRetry,
   onOpenAdvanced,
+  onToggleFacetCollapsed,
+  onOpenFacetMobile,
+  onCloseFacetMobile,
   onAdd,
   onSelect
 }: {
@@ -1092,27 +1113,22 @@ function PrivateWorkbenchV3({
   total: number;
   title: string;
   summary: PrivateSummary | null;
+  facets: PrivateFacets | null;
+  facetCollapsed: boolean;
+  facetMobileOpen: boolean;
   error: string;
   onPatchFilters: (patch: Partial<ListFilters>) => void;
   onClearFilters: () => void;
   onRetry: () => void;
   onOpenAdvanced: () => void;
+  onToggleFacetCollapsed: () => void;
+  onOpenFacetMobile: () => void;
+  onCloseFacetMobile: () => void;
   onAdd: () => void;
   onSelect: (item: MediaItem) => void;
 }) {
   const summaryTotal = summary?.total ?? total;
   const averageRating = summary?.averageRating === null || summary?.averageRating === undefined ? "-" : summary.averageRating.toFixed(1);
-  const chips: Array<{ label: string; active: boolean; patch?: Partial<ListFilters> }> = [
-    { label: "全部", active: !hasPrivateFilters(filters) },
-    { label: "9+", active: filters.ratingMin === "9" && !filters.ratingMax && (filters.favoriteLevel === "all" || filters.favoriteLevel === "") && !filters.unrated, patch: { ratingMin: "9", ratingMax: "", favoriteLevel: "all", unrated: false } },
-    { label: "已使用", active: filters.usedFilter === "used", patch: { usedFilter: "used" } },
-    { label: "收藏", active: filters.favoriteLevel === "收藏", patch: { favoriteLevel: "收藏" as ListFilters["favoriteLevel"] } },
-    { label: "雷片", active: filters.favoriteLevel === "雷片", patch: { favoriteLevel: "雷片" as ListFilters["favoriteLevel"] } },
-    { label: "FC2", active: filters.platform === "FC2", patch: { platform: "FC2" } },
-    { label: "JAV", active: filters.platform === "JAV", patch: { platform: "JAV" } },
-    { label: "糖心", active: filters.platform === "糖心", patch: { platform: "糖心" } },
-    { label: "未評分", active: Boolean(filters.unrated), patch: { unrated: true, ratingMin: "", ratingMax: "" } }
-  ];
 
   return (
     <section className="private-workbench">
@@ -1127,6 +1143,7 @@ function PrivateWorkbenchV3({
           <input value={filters.query} onChange={(event) => onPatchFilters({ query: event.target.value })} placeholder="搜尋作品代號、女優、平台、片商、標籤、心得" />
         </label>
         <div className="private-toolbar-actions">
+          <button className="filter-toggle private-facet-mobile-toggle" onClick={onOpenFacetMobile}><PanelLeftOpen size={16} />分類</button>
           <button className="filter-toggle advanced-filter" onClick={onOpenAdvanced}><SlidersHorizontal size={16} />進階篩選</button>
           <button className="filter-chip-clear" onClick={onClearFilters} disabled={!hasPrivateFilters(filters)}>清除篩選</button>
           <button className="primary" onClick={onAdd}><Plus size={16} />新增</button>
@@ -1147,30 +1164,178 @@ function PrivateWorkbenchV3({
         <SummaryValue label="平均分" value={averageRating} />
       </div>
 
-      <div className="private-filter-chips" aria-label="快捷篩選">
-        {chips.map((chip) => (
-          <button key={chip.label} className={chip.active ? "active" : ""} onClick={() => chip.patch ? onPatchFilters(chip.patch) : onClearFilters()}>
-            {chip.label}
-          </button>
-        ))}
-      </div>
-
       <FilterChips filters={filters} activeView={PRIVATE_LIBRARY_LABEL} onClear={onClearFilters} />
 
-      {error ? (
-        <PrivateErrorCard error={error} onRetry={onRetry} />
-      ) : loading ? (
-        <PrivateSkeleton />
-      ) : items.length === 0 ? (
-        <PrivateEmptyState onClear={onClearFilters} onAdd={onAdd} />
-      ) : (
-        <>
-          <PrivateMobileCards items={items} onSelect={onSelect} />
-          <PrivateDataTable items={items} onSelect={onSelect} />
-        </>
-      )}
+      <div className={facetCollapsed ? "private-workbench-body facets-collapsed" : "private-workbench-body"}>
+        <PrivateLibraryFacets
+          facets={facets}
+          filters={filters}
+          collapsed={facetCollapsed}
+          mobileOpen={facetMobileOpen}
+          onPatchFilters={onPatchFilters}
+          onToggleCollapsed={onToggleFacetCollapsed}
+          onCloseMobile={onCloseFacetMobile}
+        />
+        <div className="private-list-region">
+          {error ? (
+            <PrivateErrorCard error={error} onRetry={onRetry} />
+          ) : loading ? (
+            <PrivateSkeleton />
+          ) : items.length === 0 ? (
+            <PrivateEmptyState onClear={onClearFilters} onAdd={onAdd} />
+          ) : (
+            <>
+              <PrivateMobileCards items={items} onSelect={onSelect} />
+              <PrivateDataTable items={items} onSelect={onSelect} />
+            </>
+          )}
+        </div>
+      </div>
     </section>
   );
+}
+
+function PrivateLibraryFacets({
+  facets,
+  filters,
+  collapsed,
+  mobileOpen,
+  onPatchFilters,
+  onToggleCollapsed,
+  onCloseMobile
+}: {
+  facets: PrivateFacets | null;
+  filters: ListFilters;
+  collapsed: boolean;
+  mobileOpen: boolean;
+  onPatchFilters: (patch: Partial<ListFilters>) => void;
+  onToggleCollapsed: () => void;
+  onCloseMobile: () => void;
+}) {
+  const [platformOpen, setPlatformOpen] = useState(true);
+  const [javOpen, setJavOpen] = useState(true);
+  const [favoriteOpen, setFavoriteOpen] = useState(true);
+  const [actressOpen, setActressOpen] = useState(true);
+  const [actressQuery, setActressQuery] = useState("");
+  const platformFilters = filterValues(filters.platformFilters);
+  const makerFilters = filterValues(filters.makerFilters);
+  const favoriteFilters = filterValues(filters.favoriteLevelFilters);
+  const personFilters = filterValues(filters.personFilters);
+  const actressItems = useMemo(() => {
+    const query = actressQuery.trim().toLowerCase();
+    const items = facets?.actress || [];
+    return query ? items.filter((item) => item.value.toLowerCase().includes(query)) : items;
+  }, [actressQuery, facets?.actress]);
+
+  const patchMulti = (key: "platformFilters" | "makerFilters" | "favoriteLevelFilters" | "personFilters", value: string) => {
+    const current = filterValues(filters[key]);
+    const next = current.includes(value) ? current.filter((entry) => entry !== value) : [...current, value];
+    onPatchFilters({ [key]: next.join(","), ...(key === "platformFilters" ? { platform: "" } : {}) });
+  };
+
+  const patchJavMaker = (maker: string) => {
+    const platforms = platformFilters.includes("JAV") ? platformFilters : [...platformFilters, "JAV"];
+    const makers = makerFilters.includes(maker) ? makerFilters.filter((entry) => entry !== maker) : [...makerFilters, maker];
+    onPatchFilters({ platformFilters: platforms.join(","), makerFilters: makers.join(","), platform: "", maker: "" });
+  };
+
+  const panel = (
+    <aside className={collapsed ? "private-facet-sidebar collapsed" : "private-facet-sidebar"} aria-label="私密分類篩選">
+      <div className="private-facet-sidebar-head">
+        {!collapsed && <strong>分類</strong>}
+        <button onClick={onToggleCollapsed} title={collapsed ? "展開分類" : "收合分類"} aria-label={collapsed ? "展開分類" : "收合分類"}>
+          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+        </button>
+      </div>
+      {!collapsed && (
+        <div className="private-facet-sidebar-body">
+          <PrivateFacetSection title="平台" open={platformOpen} onToggle={() => setPlatformOpen((value) => !value)}>
+            <PrivateFacetButton label="FC2" count={facetCount(facets?.source, "FC2")} active={platformFilters.includes("FC2")} onClick={() => patchMulti("platformFilters", "FC2")} />
+            <div className="private-facet-tree-node">
+              <div className="private-facet-tree-row">
+                <button className="private-facet-expand" onClick={() => setJavOpen((value) => !value)} aria-label={javOpen ? "收合 JAV 片商" : "展開 JAV 片商"}>
+                  {javOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                </button>
+                <button className={platformFilters.includes("JAV") ? "private-facet-tree-parent active" : "private-facet-tree-parent"} onClick={() => patchMulti("platformFilters", "JAV")}>
+                  <span>JAV</span>
+                  <b>{facetCount(facets?.source, "JAV")}</b>
+                </button>
+              </div>
+              {javOpen && (
+                <div className="private-facet-children">
+                  {(facets?.javMaker || []).map((maker) => (
+                    <PrivateFacetButton key={maker.value} label={maker.value} count={maker.count} active={makerFilters.includes(maker.value)} onClick={() => patchJavMaker(maker.value)} />
+                  ))}
+                </div>
+              )}
+            </div>
+            {facetCount(facets?.source, "其他") > 0 && <PrivateFacetButton label="其他" count={facetCount(facets?.source, "其他")} active={platformFilters.includes("其他")} onClick={() => patchMulti("platformFilters", "其他")} />}
+          </PrivateFacetSection>
+
+          <PrivateFacetSection title="收藏" open={favoriteOpen} onToggle={() => setFavoriteOpen((value) => !value)}>
+            {[
+              { label: "神作", value: "神作" },
+              { label: "一般", value: "一般" },
+              { label: "刪除", value: "已刪" }
+            ].map((entry) => (
+              <PrivateFacetButton key={entry.value} label={entry.label} count={facetCount(facets?.favoriteLevel, entry.value)} active={favoriteFilters.includes(entry.value)} onClick={() => patchMulti("favoriteLevelFilters", entry.value)} />
+            ))}
+          </PrivateFacetSection>
+
+          <PrivateFacetSection title="女優" open={actressOpen} onToggle={() => setActressOpen((value) => !value)}>
+            <input className="private-actress-search" value={actressQuery} onChange={(event) => setActressQuery(event.target.value)} placeholder="搜尋女優" />
+            <div className="private-actress-list">
+              {actressItems.length === 0 ? (
+                <span className="private-facet-empty">沒有女優資料</span>
+              ) : actressItems.map((actress) => (
+                <PrivateFacetButton key={actress.value} label={actress.value} count={actress.count} active={personFilters.includes(actress.value)} onClick={() => patchMulti("personFilters", actress.value)} />
+              ))}
+            </div>
+            <PrivateFacetButton label="未填女優" count={0} active={Boolean(filters.missingPeople)} onClick={() => onPatchFilters({ missingPeople: !filters.missingPeople })} />
+          </PrivateFacetSection>
+        </div>
+      )}
+    </aside>
+  );
+
+  return (
+    <>
+      <div className={mobileOpen ? "private-facet-mobile-scrim open" : "private-facet-mobile-scrim"} onClick={onCloseMobile} />
+      <div className={mobileOpen ? "private-facet-mobile-drawer open" : "private-facet-mobile-drawer"}>
+        <button className="private-facet-mobile-close" onClick={onCloseMobile}>關閉</button>
+        {panel}
+      </div>
+      {panel}
+    </>
+  );
+}
+
+function PrivateFacetSection({ title, open, onToggle, children }: { title: string; open: boolean; onToggle: () => void; children: ReactNode }) {
+  return (
+    <section className="private-sidebar-section">
+      <button className="private-sidebar-section-title" onClick={onToggle}>
+        <span>{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{title}</span>
+      </button>
+      {open && <div className="private-sidebar-section-body">{children}</div>}
+    </section>
+  );
+}
+
+function PrivateFacetButton({ label, count, active, onClick }: { label: string; count: number; active: boolean; onClick: () => void }) {
+  return (
+    <button className={active ? "private-sidebar-filter active" : "private-sidebar-filter"} onClick={onClick} title={`${label} ${count}`}>
+      <span>{label}</span>
+      <b>{count}</b>
+    </button>
+  );
+}
+
+function filterValues(value: string | undefined) {
+  return (value || "").split(",").map((entry) => entry.trim()).filter(Boolean);
+}
+
+function facetCount(items: Array<{ value: string; count: number }> | undefined, value: string) {
+  return items?.find((item) => item.value === value)?.count || 0;
 }
 
 function PrivateDataTable({ items, onSelect }: { items: MediaItem[]; onSelect: (item: MediaItem) => void }) {
@@ -1183,10 +1348,8 @@ function PrivateDataTable({ items, onSelect }: { items: MediaItem[]; onSelect: (
             <th>評分</th>
             <th>收藏</th>
             <th>已使用</th>
-            <th>來源</th>
             <th>女優</th>
             <th>標籤</th>
-            <th>一句話心得</th>
           </tr>
         </thead>
         <tbody>
@@ -1208,12 +1371,10 @@ function PrivateDataTable({ items, onSelect }: { items: MediaItem[]; onSelect: (
                   </span>
                 </td>
                 <td><PrivateRating item={item} /></td>
-                <td><PrivateBadge tone="favorite">{privateFavoriteLevel(item)}</PrivateBadge></td>
+                <td><PrivateFavoriteMark level={privateFavoriteLevel(item)} /></td>
                 <td><PrivateUsedBadge used={item.used} /></td>
-                <td><PrivateSource item={item} /></td>
                 <td className="private-ellipsis" title={details.performers}>{details.performers}</td>
                 <td><PrivateTags tags={item.tags} /></td>
-                <td className="private-summary-cell" title={item.quick_note || ""}>{item.quick_note || "-"}</td>
               </tr>
             );
           })}
@@ -1268,7 +1429,33 @@ function PrivateRating({ item }: { item: MediaItem }) {
 }
 
 function PrivateUsedBadge({ used }: { used: boolean }) {
-  return <span className={used ? "private-used-badge used" : "private-used-badge"}>{used ? "已使用" : "未使用"}</span>;
+  return (
+    <span className={used ? "private-used-icon used" : "private-used-icon"} title={used ? "已使用" : "未使用"} aria-label={used ? "已使用" : "未使用"}>
+      {used ? <Check size={14} strokeWidth={3} /> : <Circle size={12} />}
+    </span>
+  );
+}
+
+function PrivateFavoriteMark({ level }: { level: string }) {
+  const normalized = level === "已刪" || level === "已刪除" ? "刪除" : level;
+  const icon = normalized === "神作"
+    ? <Star size={14} fill="currentColor" />
+    : normalized === "刪除" || normalized === "雷片"
+      ? <Trash2 size={14} />
+      : <Bookmark size={14} fill={normalized === "收藏" ? "currentColor" : "none"} />;
+  return (
+    <span className={`private-favorite-mark ${privateBadgeClass(normalized)}`} title={`收藏：${normalized}`} aria-label={`收藏：${normalized}`}>
+      {icon}
+      <span>{compactFavoriteLabel(normalized)}</span>
+    </span>
+  );
+}
+
+function compactFavoriteLabel(level: string) {
+  if (level === "神作") return "神";
+  if (level === "收藏") return "藏";
+  if (level === "刪除" || level === "雷片") return "刪";
+  return "般";
 }
 
 function PrivateSource({ item }: { item: MediaItem }) {
@@ -1349,8 +1536,11 @@ function privateSourceLabel(item: MediaItem) {
 
 function privateFilterSummary(filters: ListFilters) {
   const parts = ["全部"];
+  if (filters.platformFilters) parts.push(`平台 ${filterValues(filters.platformFilters).join("、")}`);
   if (filters.platform) parts.push(filters.platform);
+  if (filters.favoriteLevelFilters) parts.push(`收藏 ${filterValues(filters.favoriteLevelFilters).join("、")}`);
   if (filters.favoriteLevel && filters.favoriteLevel !== "all") parts.push(filters.favoriteLevel);
+  if (filters.personFilters) parts.push(`女優 ${filterValues(filters.personFilters).join("、")}`);
   if (filters.usedFilter === "used") parts.push("已使用");
   if (filters.usedFilter === "unused") parts.push("未使用");
   if (filters.mediaStatus && filters.mediaStatus !== "all") parts.push(filters.mediaStatus);
@@ -1386,6 +1576,13 @@ function hasPrivateFilters(filters: ListFilters) {
     filters.usedFilter !== "all" ||
     filters.collectionLevel.trim() ||
     filters.favoriteLevel !== "all" ||
+    filters.platformFilters?.trim() ||
+    filters.makerFilters?.trim() ||
+    filters.favoriteLevelFilters?.trim() ||
+    filters.personFilters?.trim() ||
+    filters.missingPeople ||
+    (filters.hasNote && filters.hasNote !== "all") ||
+    (filters.hasCover && filters.hasCover !== "all") ||
     filters.mediaStatus !== "all" ||
     filters.tag.trim() ||
     filters.platform.trim() ||
@@ -1432,22 +1629,31 @@ function activeFilterChips(filters: ListFilters, activeView: string) {
   if (filters.highRated) chips.push("高分");
   if (filters.ratingMin || filters.ratingMax) chips.push(`評分：${filters.ratingMin || "不限"} ~ ${filters.ratingMax || "不限"}`);
   if (filters.unrated) chips.push("尚未評分");
-  if (filters.usedFilter === "used") chips.push("精選收藏");
-  if (filters.usedFilter === "unused") chips.push("非精選");
+  if (filters.usedFilter === "used") chips.push("已使用");
+  if (filters.usedFilter === "unused") chips.push("未使用");
   if (filters.favoriteLevel && filters.favoriteLevel !== "all") chips.push(`收藏等級：${filters.favoriteLevel}`);
+  if (filters.favoriteLevelFilters?.trim()) chips.push(`收藏：${filterValues(filters.favoriteLevelFilters).join("、")}`);
   if (filters.mediaStatus && filters.mediaStatus !== "all") chips.push(`狀態：${filters.mediaStatus}`);
   if (filters.collectionLevel.trim()) chips.push(`收藏：${filters.collectionLevel.trim()}`);
   if (filters.type.trim()) chips.push(`類型：${filters.type.trim()}`);
   if ((filters.category || "").trim()) chips.push(`分類：${(filters.category || "").trim()}`);
   if (filters.tag.trim()) chips.push(`#${filters.tag.trim()}`);
   if (filters.platform.trim()) chips.push(`平台：${filters.platform.trim()}`);
+  if (filters.platformFilters?.trim()) chips.push(`平台：${filterValues(filters.platformFilters).join("、")}`);
   if (filters.maker.trim()) chips.push(`片商：${filters.maker.trim()}`);
+  if (filters.makerFilters?.trim()) chips.push(`片商：${filterValues(filters.makerFilters).join("、")}`);
   if (filters.series.trim()) chips.push(`系列：${filters.series.trim()}`);
   if (filters.year.trim()) chips.push(`年份：${filters.year.trim()}`);
   if (filters.codeQuery.trim()) chips.push(`番號：${filters.codeQuery.trim()}`);
   if (filters.titleQuery.trim()) chips.push(`片名：${filters.titleQuery.trim()}`);
   if (filters.person.trim()) chips.push(`人物：${filters.person.trim()}`);
+  if (filters.personFilters?.trim()) chips.push(`女優：${filterValues(filters.personFilters).join("、")}`);
+  if (filters.missingPeople) chips.push("未填女優");
   if (filters.studio.trim()) chips.push(`片商：${filters.studio.trim()}`);
+  if (filters.hasNote === "yes") chips.push("有心得");
+  if (filters.hasNote === "no") chips.push("無心得");
+  if (filters.hasCover === "yes") chips.push("有封面");
+  if (filters.hasCover === "no") chips.push("無封面");
   if (filters.watchedFrom || filters.watchedTo) chips.push(`觀看日：${filters.watchedFrom || "不限"} ~ ${filters.watchedTo || "不限"}`);
   if (filters.updatedFrom || filters.updatedTo) chips.push(`更新日：${filters.updatedFrom || "不限"} ~ ${filters.updatedTo || "不限"}`);
   return chips;

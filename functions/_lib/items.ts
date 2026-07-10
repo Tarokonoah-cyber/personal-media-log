@@ -163,9 +163,53 @@ function buildItemWhere(params: ItemListParams) {
     where.push("items.platform = ?");
     bind.push(params.platform);
   }
+  if (params.platformFilters?.length) {
+    const clauses: string[] = [];
+    const directPlatforms = params.platformFilters.filter((value) => value !== "其他");
+    if (directPlatforms.length) {
+      clauses.push(`items.platform IN (${directPlatforms.map(() => "?").join(", ")})`);
+      bind.push(...directPlatforms);
+    }
+    if (params.platformFilters.includes("其他")) {
+      clauses.push("(items.platform IS NULL OR items.platform = '' OR items.platform NOT IN ('FC2', 'JAV'))");
+    }
+    if (clauses.length) where.push(`(${clauses.join(" OR ")})`);
+  }
   if (params.maker) {
     where.push("items.maker = ?");
     bind.push(params.maker);
+  }
+  if (params.makerFilters?.length) {
+    where.push(`items.maker IN (${params.makerFilters.map(() => "?").join(", ")})`);
+    bind.push(...params.makerFilters);
+  }
+  if (params.favoriteLevelFilters?.length) {
+    where.push(`items.favorite_level IN (${params.favoriteLevelFilters.map(() => "?").join(", ")})`);
+    bind.push(...params.favoriteLevelFilters);
+  }
+  if (params.personFilters?.length) {
+    where.push(`EXISTS (
+      SELECT 1 FROM item_people selected_ip
+      JOIN people selected_people ON selected_people.id = selected_ip.person_id
+      WHERE selected_ip.item_id = items.id AND selected_people.name IN (${params.personFilters.map(() => "?").join(", ")})
+    )`);
+    bind.push(...params.personFilters);
+  }
+  if (params.missingPeople) {
+    where.push(`NOT EXISTS (
+      SELECT 1 FROM item_people missing_ip
+      WHERE missing_ip.item_id = items.id
+    )`);
+  }
+  if (params.hasNote === "yes") {
+    where.push("(coalesce(nullif(trim(items.quick_note), ''), nullif(trim(items.long_note), '')) IS NOT NULL)");
+  } else if (params.hasNote === "no") {
+    where.push("(coalesce(nullif(trim(items.quick_note), ''), nullif(trim(items.long_note), '')) IS NULL)");
+  }
+  if (params.hasCover === "yes") {
+    where.push("(items.cover_url IS NOT NULL AND trim(items.cover_url) != '')");
+  } else if (params.hasCover === "no") {
+    where.push("(items.cover_url IS NULL OR trim(items.cover_url) = '')");
   }
   if (params.series) {
     where.push("items.series = ?");
@@ -392,6 +436,23 @@ async function getPrivateFacets(env: Env, whereSql: string, bind: unknown[]): Pr
     LIMIT 30
   `).bind(...bind);
 
+  const javMakerStmt = env.MEDIA_LOG_DB.prepare(`
+    SELECT coalesce(nullif(trim(items.maker), ''), '未分類') AS value, COUNT(*) AS count
+    FROM items ${whereSql}
+    ${whereSql ? "AND" : "WHERE"} items.platform = 'JAV'
+    GROUP BY value
+    ORDER BY CASE value
+      WHEN 'S1' THEN 1
+      WHEN 'SOD' THEN 2
+      WHEN 'Prestige' THEN 3
+      WHEN 'Moodyz' THEN 4
+      WHEN 'FALENO' THEN 5
+      WHEN '未分類' THEN 99
+      ELSE 20
+    END, count DESC, value ASC
+    LIMIT 30
+  `).bind(...bind);
+
   const ratingStmt = env.MEDIA_LOG_DB.prepare(`
     SELECT '9+' AS value, SUM(CASE WHEN items.rating >= 9 THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
     UNION ALL
@@ -445,11 +506,12 @@ async function getPrivateFacets(env: Env, whereSql: string, bind: unknown[]): Pr
     END
   `).bind(...bind);
 
-  const [source, maker, series, actress, tags, ratingBuckets, favoriteLevel, used, status] = await Promise.all([
+  const [source, maker, series, actress, javMaker, tags, ratingBuckets, favoriteLevel, used, status] = await Promise.all([
     sourceStmt.all<{ value: string; count: number }>(),
     makerStmt.all<{ value: string; count: number }>(),
     seriesStmt.all<{ value: string; count: number }>(),
     actressStmt.all<{ value: string; count: number }>(),
+    javMakerStmt.all<{ value: string; count: number }>(),
     tagsStmt.all<{ value: string; count: number }>(),
     ratingStmt.all<{ value: string; count: number }>(),
     favoriteStmt.all<{ value: string; count: number }>(),
@@ -462,6 +524,7 @@ async function getPrivateFacets(env: Env, whereSql: string, bind: unknown[]): Pr
     maker: facetRows(maker.results || []),
     series: facetRows(series.results || []),
     actress: facetRows(actress.results || []),
+    javMaker: facetRows(javMaker.results || []),
     tags: facetRows(tags.results || []),
     ratingBuckets: facetRows(ratingBuckets.results || []),
     favoriteLevel: facetRows(favoriteLevel.results || []),

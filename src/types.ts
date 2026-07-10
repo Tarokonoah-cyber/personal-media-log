@@ -73,6 +73,7 @@ export interface PrivateFacets {
   maker: PrivateFacetItem[];
   series: PrivateFacetItem[];
   actress: PrivateFacetItem[];
+  javMaker: PrivateFacetItem[];
   tags: PrivateFacetItem[];
   ratingBuckets: PrivateFacetItem[];
   favoriteLevel: PrivateFacetItem[];
@@ -95,6 +96,13 @@ export interface ListFilters {
   includePrivate?: boolean;
   privateOnly?: boolean;
   includeFacets?: boolean;
+  platformFilters?: string;
+  makerFilters?: string;
+  favoriteLevelFilters?: string;
+  personFilters?: string;
+  missingPeople?: boolean;
+  hasNote?: "all" | "yes" | "no";
+  hasCover?: "all" | "yes" | "no";
   watchStatus?: WatchStatus | "all";
   type: string;
   category?: string;

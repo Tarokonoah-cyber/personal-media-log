@@ -197,6 +197,13 @@ function getListParams(url: URL): ItemListParams {
     includePrivate: url.searchParams.get("includePrivate") === "true",
     privateOnly: url.searchParams.get("privateOnly") === "true",
     includeFacets: url.searchParams.get("includeFacets") === "true",
+    platformFilters: csvValues(url.searchParams.get("platformFilters")),
+    makerFilters: csvValues(url.searchParams.get("makerFilters")),
+    favoriteLevelFilters: csvValues(url.searchParams.get("favoriteLevelFilters")).filter(isFavoriteLevelFilter) as FavoriteLevel[],
+    personFilters: csvValues(url.searchParams.get("personFilters")),
+    missingPeople: url.searchParams.get("missingPeople") === "true",
+    hasNote: isTriState(url.searchParams.get("hasNote")) ? url.searchParams.get("hasNote") as "all" | "yes" | "no" : "all",
+    hasCover: isTriState(url.searchParams.get("hasCover")) ? url.searchParams.get("hasCover") as "all" | "yes" | "no" : "all",
     watchStatus: isWatchStatusFilter(url.searchParams.get("watchStatus")) ? url.searchParams.get("watchStatus") as WatchStatus | "all" : "all",
     type: optional(url.searchParams.get("type")),
     category: optional(url.searchParams.get("category")),
@@ -226,6 +233,13 @@ function optional(value: string | null) {
   return trimmed || undefined;
 }
 
+function csvValues(value: string | null) {
+  return (value || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 function optionalNumber(value: string | null) {
   const number = Number(value);
   return Number.isFinite(number) && value !== null && value !== "" ? number : undefined;
@@ -241,6 +255,10 @@ function isWatchStatusFilter(value: string | null): value is WatchStatus | "all"
 
 function isUsedFilter(value: string | null): value is "all" | "used" | "unused" {
   return value === "all" || value === "used" || value === "unused";
+}
+
+function isTriState(value: string | null): value is "all" | "yes" | "no" {
+  return value === "all" || value === "yes" || value === "no";
 }
 
 function isFavoriteLevelFilter(value: string | null): value is FavoriteLevel | "all" {
