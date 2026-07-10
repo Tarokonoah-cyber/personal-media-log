@@ -5,7 +5,6 @@ import { HomeDashboard } from "./components/HomeDashboard";
 import { ImportExport } from "./components/ImportExport";
 import { ItemEditor } from "./components/ItemEditor";
 import { ItemList } from "./components/ItemList";
-import { LibraryDashboardV2 } from "./components/LibraryDashboardV2";
 import { CalendarView } from "./components/CalendarView";
 import { MetadataLookupModal } from "./components/MetadataLookupModal";
 import { QuickCapture } from "./components/QuickCapture";
@@ -56,23 +55,19 @@ const defaultFilters: ListFilters = {
 };
 
 type Tab = "log" | "organizer" | "stats" | "data" | "settings";
-type DisplayView = "cards" | "table" | "list" | "poster" | "calendar";
+type DisplayView = "table" | "list" | "poster" | "calendar";
 type DisplayDensity = "comfortable" | "standard" | "compact";
-const displayViews: DisplayView[] = ["cards", "list", "table"];
+const displayViews: DisplayView[] = ["table", "list", "poster", "calendar"];
 const displayDensities: DisplayDensity[] = ["comfortable", "standard", "compact"];
 const quickStatusViews = ["home", "watching", "plan_to_watch", "completed"];
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("log");
-  const [displayView, setDisplayView] = useState<DisplayView>(() => {
-    const stored = localStorage.getItem("displayView") as DisplayView | null;
-    return stored === "cards" || stored === "list" || stored === "table" ? stored : "cards";
-  });
+  const [displayView, setDisplayView] = useState<DisplayView>(() => (localStorage.getItem("displayView") as DisplayView) || "table");
   const [displayDensity, setDisplayDensity] = useState<DisplayDensity>(() => (localStorage.getItem("displayDensity") as DisplayDensity) || "standard");
   const [safeMode, setSafeMode] = useState(() => localStorage.getItem("safeMode") !== "false");
   const [quickText, setQuickText] = useState("");
   const [filters, setFilters] = useState<ListFilters>(defaultFilters);
-  const [searchDraft, setSearchDraft] = useState(defaultFilters.query);
   const [activeView, setActiveView] = useState("home");
   const [activeCategory, setActiveCategory] = useState("");
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -102,8 +97,6 @@ export default function App() {
   const [dark, setDark] = useState(() => localStorage.getItem("theme") !== "light");
   const privateView = isPrivateWorkspaceView(activeView);
   const includePrivate = privateView && !safeMode;
-  const effectiveIncludePrivate = Boolean(filters.includePrivate) || includePrivate;
-  const effectivePrivateOnly = Boolean(filters.privateOnly) || includePrivate;
   const privateActive = privateView && includePrivate;
   const privateRecommendedActive = activeView === PRIVATE_RECOMMENDED_LABEL && includePrivate;
   const privatePageTitle = privateRecommendedActive ? PRIVATE_RECOMMENDED_LABEL : PRIVATE_LIBRARY_LABEL;
@@ -137,18 +130,7 @@ export default function App() {
 
   useEffect(() => {
     void loadItems();
-  }, [filters, effectiveIncludePrivate, effectivePrivateOnly]);
-
-  useEffect(() => {
-    setSearchDraft(filters.query);
-  }, [filters.query]);
-
-  useEffect(() => {
-    const id = window.setTimeout(() => {
-      setFilters((current) => current.query === searchDraft ? current : { ...current, query: searchDraft, page: 1 });
-    }, 350);
-    return () => window.clearTimeout(id);
-  }, [searchDraft]);
+  }, [filters, includePrivate]);
 
   useEffect(() => {
     void loadSummary();
@@ -163,23 +145,23 @@ export default function App() {
   const pageCount = useMemo(() => Math.max(1, Math.ceil(total / filters.pageSize)), [total, filters.pageSize]);
   const knownTags = useMemo(() => Array.from(new Set(summaryItems.flatMap((item) => item.tags))).sort((a, b) => a.localeCompare(b, "zh-Hant")), [summaryItems]);
   const sidebarTags = useMemo(() => {
-    if (!effectiveIncludePrivate) return knownTags;
+    if (!includePrivate) return knownTags;
     return Array.from(new Set(items.filter(isPrivateItem).flatMap((item) => item.tags))).sort((a, b) => a.localeCompare(b, "zh-Hant"));
-  }, [effectiveIncludePrivate, items, knownTags]);
+  }, [includePrivate, items, knownTags]);
   const libraryTypes = useMemo(() => new Set<string>(libraryTree.map((entry) => entry.label)), []);
   const visibleItems = useMemo(() => {
-    const scopedItems = items;
+    const scopedItems = includePrivate ? items.filter(isPrivateItem) : items.filter((item) => !isPrivateItem(item));
     if (activeCategory) return scopedItems;
     if (libraryTypes.has(activeView)) return scopedItems;
     if (["plan_to_watch", "watching", "completed", "paused", "dropped", "rewatching"].includes(activeView)) return scopedItems;
     return scopedItems;
-  }, [activeCategory, activeView, items, libraryTypes]);
+  }, [activeCategory, activeView, includePrivate, items, libraryTypes]);
 
   async function loadItems() {
     setLoading(true);
     setError("");
     try {
-      const result = await listItems({ ...filters, includePrivate: effectiveIncludePrivate, privateOnly: effectivePrivateOnly });
+      const result = await listItems({ ...filters, includePrivate, privateOnly: includePrivate });
       setItems(result.items);
       setTotal(result.total);
       setPrivateSummary(result.privateSummary || null);
@@ -399,13 +381,13 @@ export default function App() {
   }
 
   function selectPrivateFilter(patch: Partial<ListFilters>) {
+    const recommendedPage = patch.tag === PRIVATE_RECOMMENDED_TAG;
     setTab("log");
-    setActiveView("database");
+    setActiveView(recommendedPage ? PRIVATE_RECOMMENDED_LABEL : PRIVATE_LIBRARY_LABEL);
     setActiveCategory("");
-    setDisplayView("cards");
     setFilters({
       ...defaultFilters,
-      includePrivate: true,
+      excludeTag: recommendedPage ? "" : PRIVATE_RECOMMENDED_TAG,
       ...patch,
       page: 1
     });
@@ -440,21 +422,6 @@ export default function App() {
   function selectDisplayView(view: DisplayView) {
     setTab("log");
     setDisplayView(view);
-  }
-
-  function selectDashboardFilter(patch: Partial<ListFilters>) {
-    setTab("log");
-    setActiveView("database");
-    setActiveCategory("");
-    setDisplayView("cards");
-    setFilters({
-      ...defaultFilters,
-      includePrivate: true,
-      ...patch,
-      page: 1,
-      pageSize: filters.pageSize
-    });
-    setSidebarOpen(false);
   }
 
   function selectDisplayDensity(density: DisplayDensity) {
@@ -542,7 +509,7 @@ export default function App() {
             />
             <div className="search-field header-search">
               <Search size={15} />
-              <input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="搜尋作品代號、女優、平台、片商、標籤、心得" />
+              <input value={filters.query} onChange={(event) => patchFilters({ query: event.target.value })} placeholder="搜尋標題、標籤、平台" />
             </div>
           </div>
         )}
@@ -619,8 +586,11 @@ export default function App() {
                   onBatchDelete={batchDelete}
                 />
               ) : activeView === "home" && !filters.query && !filters.favorite ? (
-                <LibraryDashboardV2
-                  onFilter={selectDashboardFilter}
+                <HomeDashboard
+                  variant="main"
+                  includePrivate={includePrivate}
+                  onView={selectView}
+                  onTool={selectTool}
                   onSelect={setSelected}
                 />
               ) : (
@@ -674,7 +644,6 @@ export default function App() {
                     </div>
                   </div>
                   <FilterChips filters={filters} activeView={activeView} onClear={resetFilters} />
-                  <QuickFilterBar onSelect={patchFilters} onClear={resetFilters} />
                 </div>
               </div>
               {currentDisplayView === "calendar" ? (
@@ -768,7 +737,6 @@ function isWatchStatusView(view: string) {
 
 function viewLabel(view: string) {
   const labels: Record<string, string> = {
-    cards: "卡片",
     home: "首頁",
     inbox: "待整理",
     database: "資料庫",
@@ -1140,29 +1108,6 @@ function FilterChips({ filters, activeView, onClear }: { filters: ListFilters; a
     <div className="filter-chip-row" aria-label="目前篩選條件">
       {chips.map((chip) => <span className="filter-chip" key={chip}>{chip}</span>)}
       <button className="filter-chip-clear" onClick={onClear}>清除篩選</button>
-    </div>
-  );
-}
-
-function QuickFilterBar({ onSelect, onClear }: { onSelect: (patch: Partial<ListFilters>) => void; onClear: () => void }) {
-  const options: Array<{ label: string; patch: Partial<ListFilters> }> = [
-    { label: "神作", patch: { favoriteLevel: "神作" } },
-    { label: "9+", patch: { ratingMin: "9" } },
-    { label: "已使用", patch: { usedFilter: "used" } },
-    { label: "收藏", patch: { favoriteLevel: "收藏" } },
-    { label: "雷片", patch: { favoriteLevel: "雷片" } },
-    { label: "已刪除", patch: { mediaStatus: "已刪除" } },
-    { label: "FC2", patch: { platform: "FC2" } },
-    { label: "JAV", patch: { platform: "JAV" } }
-  ];
-  return (
-    <div className="quick-filter-row library-quick-filters">
-      {options.map((option) => (
-        <button key={option.label} type="button" onClick={() => onSelect(option.patch)}>
-          {option.label}
-        </button>
-      ))}
-      <button className="filter-chip-clear" type="button" onClick={onClear}>清除全部篩選</button>
     </div>
   );
 }

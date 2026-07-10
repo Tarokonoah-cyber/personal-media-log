@@ -2,7 +2,7 @@ import { HttpError } from "./http";
 import { inboxWhereSql } from "./organization";
 import { hasPrivateSignalValues, isPrivateMarker as isPrivateMarkerValue, privateItemWhereSql, publicItemWhereSql } from "./privacy";
 import { newId, nowIso } from "./ids";
-import type { Actor, Env, FavoriteLevel, ItemInput, ItemListParams, ItemRecord, ItemStatus, MediaStatus, WatchStatus, PrivateSummary, LibraryDashboardSummary } from "./types";
+import type { Actor, Env, FavoriteLevel, ItemInput, ItemListParams, ItemRecord, ItemStatus, MediaStatus, WatchStatus, PrivateSummary } from "./types";
 
 type Row = Record<string, unknown>;
 type NormalizedInput = Required<ItemInput> & { search_text: string };
@@ -568,70 +568,6 @@ export async function getStats(env: Env, includePrivate = false) {
     categories: categories.results || [],
     platforms: platforms.results || [],
     tags: tags.results || []
-  };
-}
-
-export async function getLibraryDashboard(env: Env, includePrivate = true): Promise<LibraryDashboardSummary> {
-  const visibleSql = includePrivate ? "1 = 1" : publicItemWhereSql("items");
-  const platformBuckets = ["FC2", "JAV", "SWAG", "麻豆", "糖心", "自拍", "歐美", "其他"];
-  const [totals, platforms, recentAdded, recentWatched, recentRated, recentUsed] = await Promise.all([
-    env.MEDIA_LOG_DB.prepare(`
-      SELECT
-        COUNT(*) AS allCount,
-        SUM(CASE WHEN items.is_private = 1 THEN 1 ELSE 0 END) AS privateCount,
-        SUM(CASE WHEN items.favorite_level = '神作' THEN 1 ELSE 0 END) AS masterpieceCount,
-        SUM(CASE WHEN items.used = 1 THEN 1 ELSE 0 END) AS usedCount,
-        SUM(CASE WHEN items.favorite_level = '收藏' THEN 1 ELSE 0 END) AS collectedCount,
-        SUM(CASE WHEN items.media_status = '待觀看' THEN 1 ELSE 0 END) AS pendingCount,
-        SUM(CASE WHEN items.media_status = '已刪除' OR items.status = 'deleted' THEN 1 ELSE 0 END) AS deletedCount
-      FROM items
-      WHERE ${visibleSql}
-    `).first<Record<string, number | null>>(),
-    env.MEDIA_LOG_DB.prepare(`
-      SELECT
-        CASE
-          WHEN items.platform IN (${platformBuckets.map(() => "?").join(", ")}) THEN items.platform
-          ELSE '其他'
-        END AS platform,
-        COUNT(*) AS count,
-        AVG(items.rating) AS averageRating,
-        SUM(CASE WHEN items.favorite_level = '神作' THEN 1 ELSE 0 END) AS masterpiece,
-        SUM(CASE WHEN items.used = 1 THEN 1 ELSE 0 END) AS used
-      FROM items
-      WHERE ${visibleSql}
-      GROUP BY platform
-    `).bind(...platformBuckets).all<{ platform: string; count: number; averageRating: number | null; masterpiece: number | null; used: number | null }>(),
-    env.MEDIA_LOG_DB.prepare(`SELECT ${listItemColumns} FROM items WHERE ${visibleSql} ORDER BY datetime(created_at) DESC, id DESC LIMIT 8`).all<Row>(),
-    env.MEDIA_LOG_DB.prepare(`SELECT ${listItemColumns} FROM items WHERE ${visibleSql} AND watched_at IS NOT NULL ORDER BY datetime(watched_at) DESC, id DESC LIMIT 8`).all<Row>(),
-    env.MEDIA_LOG_DB.prepare(`SELECT ${listItemColumns} FROM items WHERE ${visibleSql} AND rating IS NOT NULL ORDER BY datetime(updated_at) DESC, id DESC LIMIT 8`).all<Row>(),
-    env.MEDIA_LOG_DB.prepare(`SELECT ${listItemColumns} FROM items WHERE ${visibleSql} AND used = 1 ORDER BY datetime(updated_at) DESC, id DESC LIMIT 8`).all<Row>()
-  ]);
-
-  const platformMap = new Map((platforms.results || []).map((row) => [row.platform, row]));
-  return {
-    totals: {
-      all: Number(totals?.allCount || 0),
-      private: Number(totals?.privateCount || 0),
-      masterpiece: Number(totals?.masterpieceCount || 0),
-      used: Number(totals?.usedCount || 0),
-      collected: Number(totals?.collectedCount || 0),
-      pending: Number(totals?.pendingCount || 0),
-      deleted: Number(totals?.deletedCount || 0)
-    },
-    platforms: platformBuckets.map((platform) => {
-      const row = platformMap.get(platform);
-      return {
-        platform,
-        count: Number(row?.count || 0),
-        averageRating: row?.averageRating === null || row?.averageRating === undefined ? null : Number(Number(row.averageRating).toFixed(2)),
-        masterpiece: Number(row?.masterpiece || 0),
-        used: Number(row?.used || 0)
-      };
-    }),
-    recentAdded: await hydrateItems(env, recentAdded.results || []),
-    recentWatched: await hydrateItems(env, recentWatched.results || []),
-    recentRated: await hydrateItems(env, recentRated.results || []),
-    recentUsed: await hydrateItems(env, recentUsed.results || [])
   };
 }
 

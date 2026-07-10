@@ -109,26 +109,3 @@ export interface PrivateSummary {
   averageRating: number | null;
   collectionCounts: Array<{ level: string; count: number }>;
 }
-
-export interface LibraryDashboardSummary {
-  totals: {
-    all: number;
-    private: number;
-    masterpiece: number;
-    used: number;
-    collected: number;
-    pending: number;
-    deleted: number;
-  };
-  platforms: Array<{
-    platform: string;
-    count: number;
-    averageRating: number | null;
-    masterpiece: number;
-    used: number;
-  }>;
-  recentAdded: ItemRecord[];
-  recentWatched: ItemRecord[];
-  recentRated: ItemRecord[];
-  recentUsed: ItemRecord[];
-}

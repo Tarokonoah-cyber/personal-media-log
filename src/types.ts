@@ -116,29 +116,6 @@ export interface StatsResponse {
   tags: Array<{ name: string; count: number }>;
 }
 
-export interface LibraryDashboardSummary {
-  totals: {
-    all: number;
-    private: number;
-    masterpiece: number;
-    used: number;
-    collected: number;
-    pending: number;
-    deleted: number;
-  };
-  platforms: Array<{
-    platform: string;
-    count: number;
-    averageRating: number | null;
-    masterpiece: number;
-    used: number;
-  }>;
-  recentAdded: MediaItem[];
-  recentWatched: MediaItem[];
-  recentRated: MediaItem[];
-  recentUsed: MediaItem[];
-}
-
 export interface ImportPreview {
   sourceName: string;
   sourceType: "csv" | "json";
