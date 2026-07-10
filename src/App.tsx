@@ -1,4 +1,4 @@
-import { Columns3, Home, Menu, Moon, Plus, Search, SlidersHorizontal, Sun } from "lucide-react";
+import { Columns3, Eye, Home, Menu, Moon, Pencil, Plus, Search, SlidersHorizontal, Star, Sun } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { FilterSheet } from "./components/FilterSheet";
 import { HomeDashboard } from "./components/HomeDashboard";
@@ -12,9 +12,10 @@ import { SmartOrganizer } from "./components/SmartOrganizer";
 import { StatsPanel } from "./components/StatsPanel";
 import { Toast } from "./components/Toast";
 import { ViewSidebar } from "./components/ViewSidebar";
-import { applyMetadata, createItem, deleteItem, listItems, parseSmartAdd, searchMetadata, updateItem } from "./lib/api";
+import { applyMetadata, createItem, deleteItem, getItem, listItems, parseSmartAdd, searchMetadata, updateItem } from "./lib/api";
+import { displayDate } from "./lib/date";
 import { toItemInput } from "./lib/itemTransforms";
-import { isPrivateItem, isPrivateLibraryLabel, isPrivateMarker, PRIVATE_LIBRARY_LABEL, PRIVATE_RECOMMENDED_LABEL, PRIVATE_RECOMMENDED_TAG } from "./lib/privacy";
+import { isPrivateItem, isPrivateLibraryLabel, isPrivateMarker, privateItemDetails, PRIVATE_LIBRARY_LABEL, PRIVATE_RECOMMENDED_LABEL, PRIVATE_RECOMMENDED_TAG } from "./lib/privacy";
 import { parseQuickEntry } from "./lib/quickParse";
 import { collectionLevelOptions } from "./lib/reflection";
 import { classifyItem, libraryTree } from "./lib/taxonomy";
@@ -152,11 +153,11 @@ export default function App() {
   const knownTags = useMemo(() => Array.from(new Set(summaryItems.flatMap((item) => item.tags))).sort((a, b) => a.localeCompare(b, "zh-Hant")), [summaryItems]);
   const sidebarTags = useMemo(() => {
     if (!includePrivate) return knownTags;
-    return Array.from(new Set(items.filter(isPrivateItem).flatMap((item) => item.tags))).sort((a, b) => a.localeCompare(b, "zh-Hant"));
+    return Array.from(new Set(items.flatMap((item) => item.tags))).sort((a, b) => a.localeCompare(b, "zh-Hant"));
   }, [includePrivate, items, knownTags]);
   const libraryTypes = useMemo(() => new Set<string>(libraryTree.map((entry) => entry.label)), []);
   const visibleItems = useMemo(() => {
-    const scopedItems = includePrivate ? items.filter(isPrivateItem) : items.filter((item) => !isPrivateItem(item));
+    const scopedItems = includePrivate ? items : items.filter((item) => !isPrivateItem(item));
     if (activeCategory) return scopedItems;
     if (libraryTypes.has(activeView)) return scopedItems;
     if (["plan_to_watch", "watching", "completed", "paused", "dropped", "rewatching"].includes(activeView)) return scopedItems;
@@ -286,6 +287,16 @@ export default function App() {
     await refreshVisibleData();
   }
 
+  async function openItemDetail(item: MediaItem) {
+    setSelected(item);
+    try {
+      const fullItem = await getItem(item.id);
+      setSelected(fullItem);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "載入單筆資料失敗");
+    }
+  }
+
   async function removeItem(id: string) {
     if (!window.confirm("確定要刪除這筆紀錄嗎？")) return;
     await deleteItem(id);
@@ -393,7 +404,7 @@ export default function App() {
     setActiveCategory("");
     setFilters({
       ...defaultFilters,
-      excludeTag: recommendedPage ? "" : PRIVATE_RECOMMENDED_TAG,
+      excludeTag: "",
       ...patch,
       page: 1
     });
@@ -445,7 +456,7 @@ export default function App() {
       type,
       category: category || "",
       query: filters.query,
-      excludeTag: isPrivateLibraryLabel(type) ? PRIVATE_RECOMMENDED_TAG : "",
+      excludeTag: "",
       pageSize: 100
     });
     setSidebarOpen(false);
@@ -471,7 +482,7 @@ export default function App() {
     const keepRecommendedPage = privateRecommendedActive;
     setActiveView(privateActive ? (keepRecommendedPage ? PRIVATE_RECOMMENDED_LABEL : PRIVATE_LIBRARY_LABEL) : "database");
     setActiveCategory("");
-    setFilters(keepRecommendedPage ? { ...defaultFilters, tag: PRIVATE_RECOMMENDED_TAG } : { ...defaultFilters, excludeTag: PRIVATE_RECOMMENDED_TAG });
+    setFilters(keepRecommendedPage ? { ...defaultFilters, tag: PRIVATE_RECOMMENDED_TAG } : { ...defaultFilters, excludeTag: "" });
   }
 
   function returnHome() {
@@ -524,7 +535,7 @@ export default function App() {
         </button>
       </header>
 
-      {error && <div className="notice danger">{error}</div>}
+      {error && !privateActive && <div className="notice danger">{error}</div>}
       {smartPreview && smartDraft && (
         <SmartAddPreview
           preview={smartPreview}
@@ -573,7 +584,7 @@ export default function App() {
           {tab === "log" && (
             <>
               {privateActive ? (
-                <PrivateWorkbenchV2
+                <PrivateWorkbenchV3
                   filters={filters}
                   items={visibleItems}
                   loading={loading}
@@ -582,16 +593,15 @@ export default function App() {
                   title={privatePageTitle}
                   summary={privateSummary}
                   view={privateDisplayView}
+                  error={error}
                   onPatchFilters={patchFilters}
                   onClearFilters={resetFilters}
+                  onRetry={() => void loadItems()}
                   onOpenAdvanced={() => setFiltersOpen(true)}
                   onView={setPrivateDisplayView}
                   onAdd={() => setSimpleAddOpen(true)}
-                  onSelect={setSelected}
+                  onSelect={(item) => void openItemDetail(item)}
                   onQuickUpdate={quickUpdate}
-                  onQuickCreate={quickCreateFromTable}
-                  onBatchUpdate={batchUpdate}
-                  onBatchDelete={batchDelete}
                 />
               ) : activeView === "home" && !filters.query && !filters.favorite ? (
                 <HomeDashboard
@@ -1063,6 +1073,285 @@ function PrivateWorkbenchV2({
       />
     </section>
   );
+}
+
+function PrivateWorkbenchV3({
+  filters,
+  items,
+  loading,
+  pageCount,
+  total,
+  title,
+  summary,
+  view,
+  error,
+  onPatchFilters,
+  onClearFilters,
+  onRetry,
+  onOpenAdvanced,
+  onView,
+  onAdd,
+  onSelect,
+  onQuickUpdate
+}: {
+  filters: ListFilters;
+  items: MediaItem[];
+  loading: boolean;
+  pageCount: number;
+  total: number;
+  title: string;
+  summary: PrivateSummary | null;
+  view: PrivateDisplayView;
+  error: string;
+  onPatchFilters: (patch: Partial<ListFilters>) => void;
+  onClearFilters: () => void;
+  onRetry: () => void;
+  onOpenAdvanced: () => void;
+  onView: (view: PrivateDisplayView) => void;
+  onAdd: () => void;
+  onSelect: (item: MediaItem) => void;
+  onQuickUpdate: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
+}) {
+  const summaryTotal = summary?.total ?? total;
+  const averageRating = summary?.averageRating === null || summary?.averageRating === undefined ? "-" : summary.averageRating.toFixed(1);
+  const chips: Array<{ label: string; active: boolean; patch?: Partial<ListFilters> }> = [
+    { label: "全部", active: !hasPrivateFilters(filters) },
+    { label: "神作 9+", active: filters.ratingMin === "9" && filters.favoriteLevel === "神作", patch: { ratingMin: "9", favoriteLevel: "神作" as ListFilters["favoriteLevel"] } },
+    { label: "已使用", active: filters.usedFilter === "used", patch: { usedFilter: "used" } },
+    { label: "收藏", active: filters.favoriteLevel === "收藏", patch: { favoriteLevel: "收藏" as ListFilters["favoriteLevel"] } },
+    { label: "雷片", active: filters.favoriteLevel === "雷片", patch: { favoriteLevel: "雷片" as ListFilters["favoriteLevel"] } },
+    { label: "已刪除", active: filters.mediaStatus === "已刪除", patch: { mediaStatus: "已刪除" as ListFilters["mediaStatus"] } },
+    { label: "FC2", active: filters.platform === "FC2", patch: { platform: "FC2" } },
+    { label: "JAV", active: filters.platform === "JAV", patch: { platform: "JAV" } }
+  ];
+
+  return (
+    <section className="private-workbench">
+      <div className="private-toolbar">
+        <div className="private-toolbar-title">
+          <strong>{title}</strong>
+          <span>目前 {total} 筆</span>
+          <em>{privateFilterSummary(filters)}</em>
+        </div>
+        <label className="private-search-field">
+          <Search size={16} />
+          <input value={filters.query} onChange={(event) => onPatchFilters({ query: event.target.value })} placeholder="搜尋作品代號、女優、平台、片商、標籤、心得" />
+        </label>
+        <div className="private-toolbar-actions">
+          <button className="filter-toggle advanced-filter" onClick={onOpenAdvanced}><SlidersHorizontal size={16} />進階篩選</button>
+          <button className="filter-chip-clear" onClick={onClearFilters} disabled={!hasPrivateFilters(filters)}>清除篩選</button>
+          <button className="primary" onClick={onAdd}><Plus size={16} />新增</button>
+        </div>
+        <div className="pagination-controls private-pagination">
+          <button disabled={filters.page <= 1} onClick={() => onPatchFilters({ page: filters.page - 1 })}>上一頁</button>
+          <span>{filters.page} / {pageCount}</span>
+          <button disabled={filters.page >= pageCount} onClick={() => onPatchFilters({ page: filters.page + 1 })}>下一頁</button>
+          <select value={filters.pageSize} onChange={(event) => onPatchFilters({ pageSize: Number(event.target.value), page: 1 })} aria-label="每頁筆數">
+            {[50, 100, 200].map((size) => <option key={size} value={size}>{size} / 頁</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="private-filter-panel">
+        <SummaryValue label="私密總數" value={summaryTotal.toString()} />
+        <SummaryValue label="已使用" value={String(summary?.used ?? 0)} />
+        <SummaryValue label="平均分" value={averageRating} />
+        <div className="segmented-control private-view-switch" aria-label="私密列表顯示模式">
+          <button className={view === "list" ? "active" : ""} onClick={() => onView("list")}>卡片</button>
+          <button className={view === "table" ? "active" : ""} onClick={() => onView("table")}>表格</button>
+        </div>
+      </div>
+
+      <div className="private-filter-chips" aria-label="快捷篩選">
+        {chips.map((chip) => (
+          <button key={chip.label} className={chip.active ? "active" : ""} onClick={() => chip.patch ? onPatchFilters(chip.patch) : onClearFilters()}>
+            {chip.label}
+          </button>
+        ))}
+      </div>
+
+      <FilterChips filters={filters} activeView={PRIVATE_LIBRARY_LABEL} onClear={onClearFilters} />
+
+      {error ? (
+        <PrivateErrorCard error={error} onRetry={onRetry} />
+      ) : loading ? (
+        <PrivateSkeleton />
+      ) : items.length === 0 ? (
+        <PrivateEmptyState onClear={onClearFilters} onAdd={onAdd} />
+      ) : (
+        <>
+          <PrivateMobileCards items={items} onSelect={onSelect} />
+          {view === "table" ? (
+            <PrivateDataTable items={items} onSelect={onSelect} onQuickUpdate={onQuickUpdate} />
+          ) : (
+            <PrivateCardList items={items} onSelect={onSelect} />
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function PrivateDataTable({ items, onSelect, onQuickUpdate }: { items: MediaItem[]; onSelect: (item: MediaItem) => void; onQuickUpdate: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void> }) {
+  return (
+    <div className="private-data-table-wrap">
+      <table className="private-data-table">
+        <thead>
+          <tr>
+            <th>作品代號</th>
+            <th>平台</th>
+            <th>片商</th>
+            <th>女優</th>
+            <th>評分</th>
+            <th>收藏</th>
+            <th>已使用</th>
+            <th>狀態</th>
+            <th>標籤</th>
+            <th>一句話心得</th>
+            <th>日期</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => {
+            const details = privateItemDetails(item);
+            return (
+              <tr key={item.id} onClick={() => onSelect(item)}>
+                <td className="private-code-cell">{details.code}</td>
+                <td><PrivateBadge tone="platform">{item.platform || "-"}</PrivateBadge></td>
+                <td className="private-muted-cell">{item.maker || details.studio}</td>
+                <td className="private-ellipsis" title={details.performers}>{details.performers}</td>
+                <td><PrivateRating item={item} /></td>
+                <td><PrivateBadge tone="favorite">{privateFavoriteLevel(item)}</PrivateBadge></td>
+                <td>
+                  <button className="private-used-action" onClick={(event) => { event.stopPropagation(); void onQuickUpdate(item, { used: !item.used }); }}>
+                    <PrivateUsedBadge used={item.used} />
+                  </button>
+                </td>
+                <td><PrivateBadge tone="status">{item.media_status || item.status}</PrivateBadge></td>
+                <td><PrivateTags tags={item.tags} /></td>
+                <td className="private-summary-cell" title={item.quick_note || ""}>{item.quick_note || "-"}</td>
+                <td className="private-muted-cell">{displayDate(item.watched_at || item.created_at)}</td>
+                <td>
+                  <button className="private-row-action" onClick={(event) => { event.stopPropagation(); onSelect(item); }}><Pencil size={14} />編輯 / 查看</button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PrivateMobileCards({ items, onSelect }: { items: MediaItem[]; onSelect: (item: MediaItem) => void }) {
+  return (
+    <div className="private-mobile-list">
+      {items.map((item) => <PrivateMobileCard key={item.id} item={item} onSelect={onSelect} />)}
+    </div>
+  );
+}
+
+function PrivateCardList({ items, onSelect }: { items: MediaItem[]; onSelect: (item: MediaItem) => void }) {
+  return (
+    <div className="private-card-list">
+      {items.map((item) => <PrivateMobileCard key={item.id} item={item} onSelect={onSelect} desktop />)}
+    </div>
+  );
+}
+
+function PrivateMobileCard({ item, onSelect, desktop = false }: { item: MediaItem; onSelect: (item: MediaItem) => void; desktop?: boolean }) {
+  const details = privateItemDetails(item);
+  return (
+    <article className={desktop ? "private-mobile-card private-desktop-card" : "private-mobile-card"} onClick={() => onSelect(item)}>
+      <div className="private-card-head">
+        <strong>{details.code}</strong>
+        <PrivateRating item={item} />
+      </div>
+      <div className="private-card-badges">
+        <PrivateBadge tone="favorite">{privateFavoriteLevel(item)}</PrivateBadge>
+        <PrivateUsedBadge used={item.used} />
+        <PrivateBadge tone="status">{item.media_status || item.status}</PrivateBadge>
+      </div>
+      <p>{item.platform || "-"} / {item.maker || details.studio}</p>
+      <p>{details.performers}</p>
+      {item.quick_note && <p className="private-card-note">{item.quick_note}</p>}
+      <div className="private-card-bottom">
+        <PrivateTags tags={item.tags} />
+        <span>{displayDate(item.watched_at || item.created_at)}</span>
+      </div>
+    </article>
+  );
+}
+
+function PrivateRating({ item }: { item: MediaItem }) {
+  if (!item.rating) return <span className="private-muted-cell">-</span>;
+  return <span className="private-rating"><Star size={14} fill="currentColor" />{Number(item.rating).toFixed(1)}</span>;
+}
+
+function PrivateUsedBadge({ used }: { used: boolean }) {
+  return <span className={used ? "private-used-badge used" : "private-used-badge"}>{used ? "已使用" : "未使用"}</span>;
+}
+
+function PrivateBadge({ tone, children }: { tone: "platform" | "favorite" | "status"; children: string }) {
+  return <span className={`private-badge ${tone}`}>{children || "-"}</span>;
+}
+
+function PrivateTags({ tags }: { tags: string[] }) {
+  if (tags.length === 0) return <span className="private-muted-cell">-</span>;
+  return (
+    <span className="private-tags">
+      {tags.slice(0, 3).map((tag) => <span key={tag}>#{tag}</span>)}
+      {tags.length > 3 && <span>+{tags.length - 3}</span>}
+    </span>
+  );
+}
+
+function PrivateSkeleton() {
+  return (
+    <div className="private-skeleton" aria-label="載入中">
+      {Array.from({ length: 8 }).map((_, index) => <span key={index} />)}
+    </div>
+  );
+}
+
+function PrivateErrorCard({ error, onRetry }: { error: string; onRetry: () => void }) {
+  return (
+    <div className="private-error-card">
+      <strong>私密資料載入失敗</strong>
+      <p>{error}</p>
+      <button onClick={onRetry}>重新載入</button>
+    </div>
+  );
+}
+
+function PrivateEmptyState({ onClear, onAdd }: { onClear: () => void; onAdd: () => void }) {
+  return (
+    <div className="private-empty-state">
+      <strong>目前沒有符合條件的私密資料</strong>
+      <p>可以清除篩選回到全部私密資料，或新增一筆紀錄。</p>
+      <div>
+        <button onClick={onClear}>清除篩選</button>
+        <button className="primary" onClick={onAdd}>新增一筆</button>
+      </div>
+    </div>
+  );
+}
+
+function privateFavoriteLevel(item: MediaItem) {
+  return item.favorite_level || "一般";
+}
+
+function privateFilterSummary(filters: ListFilters) {
+  const parts = ["全部"];
+  if (filters.platform) parts.push(filters.platform);
+  if (filters.favoriteLevel && filters.favoriteLevel !== "all") parts.push(filters.favoriteLevel);
+  if (filters.usedFilter === "used") parts.push("已使用");
+  if (filters.usedFilter === "unused") parts.push("未使用");
+  if (filters.mediaStatus && filters.mediaStatus !== "all") parts.push(filters.mediaStatus);
+  if (filters.tag) parts.push(`#${filters.tag}`);
+  if (filters.query) parts.push(`搜尋：${filters.query}`);
+  return parts.join(" / ");
 }
 
 function SummaryValue({ label, value }: { label: string; value: string }) {

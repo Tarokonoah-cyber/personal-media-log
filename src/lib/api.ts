@@ -24,6 +24,10 @@ export function listItems(filters: ListFilters) {
   return request<ItemListResponse>(`/api/items?${params.toString()}`);
 }
 
+export function getItem(id: string) {
+  return request<MediaItem>(`/api/items/${id}`);
+}
+
 export function createItem(input: ItemInput) {
   return request<MediaItem>("/api/items", { method: "POST", body: JSON.stringify(input) });
 }

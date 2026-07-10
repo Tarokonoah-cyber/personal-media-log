@@ -80,7 +80,7 @@ export function ItemEditor({
 
   return (
     <div className="drawer-backdrop" onClick={handleBackdropClick}>
-      <aside className={privateEditor ? "drawer private-editor" : "drawer"} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+      <aside className={privateEditor ? "drawer private-editor private-drawer" : "drawer"} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
         <header className="drawer-head">
           <div>
             <p className="eyebrow">{privateEditor ? "私密內容編輯" : "編輯紀錄"}</p>
@@ -236,7 +236,8 @@ function PrivateForm({
         <h3>私密紀錄</h3>
         <div className="form-grid nested">
           <Field label="評分（0-10）" value={form.rating} onChange={(value) => setForm({ ...form, rating: value })} inputMode="decimal" />
-          <label className="check"><input type="checkbox" checked={form.used} onChange={(event) => setForm({ ...form, used: event.target.checked })} />精選收藏</label>
+          <label className="check"><input type="checkbox" checked={form.used} onChange={(event) => setForm({ ...form, used: event.target.checked })} />已使用</label>
+          <SelectField label="狀態" value={form.media_status} options={["待觀看", "已觀看", "想重看", "已刪除"]} onChange={(value) => setForm({ ...form, media_status: value as FormState["media_status"] })} />
           <SelectField label="收藏等級" value={form.collection_level} options={collectionLevelOptions} onChange={(value) => setForm({ ...form, collection_level: value })} />
           <Field label="標籤" value={form.tags} onChange={(value) => setForm({ ...form, tags: value })} />
           <label className="wide">快速筆記<textarea value={form.quick_note} onChange={(event) => setForm({ ...form, quick_note: event.target.value })} rows={3} /></label>
@@ -325,6 +326,7 @@ function toForm(item: MediaItem) {
     mood: reflection.mood,
     rewatch_intent: reflection.rewatch_intent,
     collection_level: String(item.favorite_level || reflection.collection_level || ""),
+    media_status: item.media_status || "待觀看",
     used: item.used || privateUsedValue(metadata),
     private_code: details.code !== "-" ? details.code : "",
     private_title: privateTitle,
@@ -411,7 +413,7 @@ function toPrivateInput(form: FormState): ItemInput {
     favorite_level: favoriteLevel(form.collection_level, numberOrNull(form.rating)),
     used: form.used,
     is_private: true,
-    media_status: "已觀看",
+    media_status: form.media_status as ItemInput["media_status"],
     quick_note: emptyToNull(form.quick_note),
     long_note: emptyToNull(form.long_note),
     source_url: emptyToNull(form.source_url),

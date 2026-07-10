@@ -76,6 +76,52 @@ export function ViewSidebar({
   const libraryItems = libraryTree.filter((entry) => !safeMode || !isPrivateLibraryLabel(entry.label));
 
   if (privateMode) {
+    return (
+      <>
+        <SidebarScrim open={mobileOpen} onClose={onCloseMobile} />
+        <aside className={`${collapsed ? "database-sidebar collapsed private-sidebar" : "database-sidebar private-sidebar"} ${mobileOpen ? "mobile-open" : ""}`} aria-label="私密工作台導覽">
+          <SidebarTop
+            showText={showText}
+            collapsed={collapsed}
+            title="私密工作台"
+            subtitle={`${privateSummary?.total || 0} 筆`}
+            onToggleCollapsed={onToggleCollapsed}
+            onCloseMobile={onCloseMobile}
+          />
+
+          <NavSection title="私密" showText={showText} tone="primary">
+            <SidebarButton active={!hasPrivateSidebarFilter(filters)} title="全部" icon={<Database size={16} />} showText={showText} onClick={() => onPrivateFilter?.({})}>
+              全部
+            </SidebarButton>
+            <SidebarButton active={filters.usedFilter === "used"} title="已使用" icon={<Heart size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ usedFilter: "used" })}>
+              已使用
+            </SidebarButton>
+            <SidebarButton active={filters.usedFilter === "unused"} title="未使用" icon={<Heart size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ usedFilter: "unused" })}>
+              未使用
+            </SidebarButton>
+            <SidebarButton active={filters.platform === "FC2"} title="FC2" icon={<Clapperboard size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ platform: "FC2" })}>
+              FC2
+            </SidebarButton>
+            <SidebarButton active={filters.platform === "JAV"} title="JAV" icon={<Clapperboard size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ platform: "JAV" })}>
+              JAV
+            </SidebarButton>
+            <SidebarButton active={Boolean(filters.tag)} title="標籤" icon={<Tags size={15} />} showText={showText} onClick={() => onPrivateFilter?.({ tag: "" })}>
+              標籤
+            </SidebarButton>
+          </NavSection>
+
+          <NavSection title="工具" showText={showText} tone="tools">
+            <SidebarButton active={activeTool === "stats"} title="統計" icon={<BarChart3 size={15} />} showText={showText} onClick={() => onTool("stats")}>
+              統計
+            </SidebarButton>
+            <SidebarButton active={activeTool === "settings"} title="設定" icon={<Settings size={15} />} showText={showText} onClick={() => onTool("settings")}>
+              設定
+            </SidebarButton>
+          </NavSection>
+        </aside>
+      </>
+    );
+
     const countForLevel = (level: string) => privateSummary?.collectionCounts.find((entry) => entry.level === level)?.count;
     return (
       <>
