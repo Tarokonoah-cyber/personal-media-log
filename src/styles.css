@@ -907,6 +907,54 @@ h2 {
   padding-left: 6px;
 }
 
+.private-view-switch {
+  flex: 0 0 auto;
+}
+
+.private-view-switch button {
+  min-height: 25px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.private-workbench .compact-list.force-list {
+  display: grid;
+  gap: 8px;
+  border-top: 0;
+}
+
+.private-workbench .compact-list.force-list .compact-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent),
+    color-mix(in srgb, var(--panel) 88%, #05070b);
+}
+
+.private-workbench .compact-list.force-list .compact-row:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+  background:
+    linear-gradient(180deg, rgba(96, 165, 250, 0.08), transparent),
+    color-mix(in srgb, var(--panel) 92%, #05070b);
+}
+
+.private-workbench .compact-list.force-list .compact-cover {
+  display: none;
+}
+
+.private-workbench .compact-list.force-list .compact-title strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: 0;
+}
+
+.private-workbench .compact-list.force-list .compact-actions {
+  gap: 5px;
+}
+
 .search-field {
   min-height: 34px;
   flex: 1;

@@ -59,7 +59,12 @@ export async function listItems(env: Env, params: ItemListParams) {
   const listStmt = env.MEDIA_LOG_DB
     .prepare(`SELECT ${listItemColumns} FROM items ${whereSql} ${orderSql} LIMIT ? OFFSET ?`)
     .bind(...bind, pageSize, offset);
-  const summaryPromise = params.privateOnly ? getPrivateSummary(env, whereSql, bind) : Promise.resolve(undefined);
+  const summaryPromise = params.privateOnly
+    ? getPrivateSummary(env, whereSql, bind).catch((error) => {
+      console.error("Private summary query failed", error);
+      return undefined;
+    })
+    : Promise.resolve(undefined);
   const [countResult, listResult, privateSummary] = await Promise.all([
     countStmt.first<{ count: number }>(),
     listStmt.all<Row>(),
@@ -276,6 +281,9 @@ function buildItemWhere(params: ItemListParams) {
 
 async function getPrivateSummary(env: Env, whereSql: string, bind: unknown[]): Promise<PrivateSummary> {
   const usedSql = "items.used = 1";
+  const collectionWhereSql = whereSql
+    ? `${whereSql} AND items.favorite_level IS NOT NULL AND items.favorite_level != ''`
+    : "WHERE items.favorite_level IS NOT NULL AND items.favorite_level != ''";
   const totalsStmt = env.MEDIA_LOG_DB.prepare(`
     SELECT
       COUNT(*) AS total,
@@ -285,8 +293,7 @@ async function getPrivateSummary(env: Env, whereSql: string, bind: unknown[]): P
   `).bind(...bind);
   const collectionStmt = env.MEDIA_LOG_DB.prepare(`
     SELECT items.favorite_level AS level, COUNT(*) AS count
-    FROM items ${whereSql}
-    WHERE items.favorite_level IS NOT NULL AND items.favorite_level != ''
+    FROM items ${collectionWhereSql}
     GROUP BY items.favorite_level
     ORDER BY CASE items.favorite_level
       WHEN '神作' THEN 1

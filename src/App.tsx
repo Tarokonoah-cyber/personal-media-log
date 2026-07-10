@@ -56,6 +56,7 @@ const defaultFilters: ListFilters = {
 
 type Tab = "log" | "organizer" | "stats" | "data" | "settings";
 type DisplayView = "table" | "list" | "poster" | "calendar";
+type PrivateDisplayView = "list" | "table";
 type DisplayDensity = "comfortable" | "standard" | "compact";
 const displayViews: DisplayView[] = ["table", "list", "poster", "calendar"];
 const displayDensities: DisplayDensity[] = ["comfortable", "standard", "compact"];
@@ -64,6 +65,7 @@ const quickStatusViews = ["home", "watching", "plan_to_watch", "completed"];
 export default function App() {
   const [tab, setTab] = useState<Tab>("log");
   const [displayView, setDisplayView] = useState<DisplayView>(() => (localStorage.getItem("displayView") as DisplayView) || "table");
+  const [privateDisplayView, setPrivateDisplayView] = useState<PrivateDisplayView>(() => localStorage.getItem("privateDisplayView") === "table" ? "table" : "list");
   const [displayDensity, setDisplayDensity] = useState<DisplayDensity>(() => (localStorage.getItem("displayDensity") as DisplayDensity) || "standard");
   const [safeMode, setSafeMode] = useState(() => localStorage.getItem("safeMode") !== "false");
   const [quickText, setQuickText] = useState("");
@@ -100,7 +102,7 @@ export default function App() {
   const privateActive = privateView && includePrivate;
   const privateRecommendedActive = activeView === PRIVATE_RECOMMENDED_LABEL && includePrivate;
   const privatePageTitle = privateRecommendedActive ? PRIVATE_RECOMMENDED_LABEL : PRIVATE_LIBRARY_LABEL;
-  const currentDisplayView = privateActive ? "table" : displayView;
+  const currentDisplayView = privateActive ? privateDisplayView : displayView;
   const effectiveSidebarCollapsed = privateActive ? !privateSidebarExpanded : sidebarCollapsed;
 
   useEffect(() => {
@@ -119,6 +121,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("displayView", displayView);
   }, [displayView]);
+
+  useEffect(() => {
+    localStorage.setItem("privateDisplayView", privateDisplayView);
+  }, [privateDisplayView]);
 
   useEffect(() => {
     localStorage.setItem("displayDensity", displayDensity);
@@ -575,9 +581,11 @@ export default function App() {
                   total={total}
                   title={privatePageTitle}
                   summary={privateSummary}
+                  view={privateDisplayView}
                   onPatchFilters={patchFilters}
                   onClearFilters={resetFilters}
                   onOpenAdvanced={() => setFiltersOpen(true)}
+                  onView={setPrivateDisplayView}
                   onAdd={() => setSimpleAddOpen(true)}
                   onSelect={setSelected}
                   onQuickUpdate={quickUpdate}
@@ -927,9 +935,11 @@ function PrivateWorkbenchV2({
   total,
   title,
   summary,
+  view,
   onPatchFilters,
   onClearFilters,
   onOpenAdvanced,
+  onView,
   onAdd,
   onSelect,
   onQuickUpdate,
@@ -944,9 +954,11 @@ function PrivateWorkbenchV2({
   total: number;
   title: string;
   summary: PrivateSummary | null;
+  view: PrivateDisplayView;
   onPatchFilters: (patch: Partial<ListFilters>) => void;
   onClearFilters: () => void;
   onOpenAdvanced: () => void;
+  onView: (view: PrivateDisplayView) => void;
   onAdd: () => void;
   onSelect: (item: MediaItem) => void;
   onQuickUpdate: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
@@ -1008,6 +1020,10 @@ function PrivateWorkbenchV2({
         </label>
 
         <div className="private-filter-actions">
+          <div className="segmented-control private-view-switch" aria-label="私密列表顯示模式">
+            <button className={view === "list" ? "active" : ""} onClick={() => onView("list")}>卡片</button>
+            <button className={view === "table" ? "active" : ""} onClick={() => onView("table")}>表格</button>
+          </div>
           <button className="filter-toggle advanced-filter" onClick={onOpenAdvanced}><SlidersHorizontal size={16} />進階</button>
           <button className="filter-chip-clear" onClick={onClearFilters} disabled={!hasPrivateFilters(filters)}>清除</button>
           <button className="primary" onClick={onAdd}><Plus size={16} />新增</button>
@@ -1033,7 +1049,7 @@ function PrivateWorkbenchV2({
 
       <ItemList
         items={items}
-        view="table"
+        view={view}
         columnScope={PRIVATE_LIBRARY_LABEL}
         privateMode
         density="compact"
