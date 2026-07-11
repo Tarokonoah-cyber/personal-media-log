@@ -1,4 +1,4 @@
-import { Bookmark, Check, Columns3, Home, Menu, Moon, Plus, Search, SlidersHorizontal, Star, Sun, Trash2 } from "lucide-react";
+import { Bookmark, Check, CircleSlash2, Columns3, Home, Menu, Moon, Plus, Save, Search, SlidersHorizontal, Star, Sun, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { FilterSheet } from "./components/FilterSheet";
 import { HomeDashboard } from "./components/HomeDashboard";
@@ -12,9 +12,11 @@ import { SmartOrganizer } from "./components/SmartOrganizer";
 import { StatsPanel } from "./components/StatsPanel";
 import { Toast } from "./components/Toast";
 import { ViewSidebar } from "./components/ViewSidebar";
-import { applyMetadata, createItem, deleteItem, getItem, getPrivateFacets, listItems, parseSmartAdd, searchMetadata, updateItem } from "./lib/api";
+import { PrivateQualityCenter } from "./components/PrivateQualityCenter";
+import { applyMetadata, createItem, deleteItem, getItem, getPrivateFacets, listItems, parseSmartAdd, quickUpdateItem as quickUpdateItemApi, searchMetadata, updateItem } from "./lib/api";
 import { mergePrivateFilters } from "./lib/privateFilters";
-import { collectionLevelLabels, normalizeCollectionLevel } from "../shared/privateModel";
+import { collectionLevelLabels, collectionLevels, normalizeCollectionLevel } from "../shared/privateModel";
+import { createSavedView, readSavedViews, savedViewSignature, writeSavedViews, type SavedPrivateView } from "./lib/savedViews";
 import { toItemInput } from "./lib/itemTransforms";
 import { isPrivateItem, isPrivateLibraryLabel, isPrivateMarker, privateItemDetails, PRIVATE_LIBRARY_LABEL, PRIVATE_RECOMMENDED_LABEL, PRIVATE_RECOMMENDED_TAG } from "./lib/privacy";
 import { parseQuickEntry } from "./lib/quickParse";
@@ -63,7 +65,7 @@ const defaultFilters: ListFilters = {
   pageSize: 100
 };
 
-type Tab = "log" | "organizer" | "stats" | "data" | "settings";
+type Tab = "log" | "organizer" | "stats" | "data" | "settings" | "quality";
 type DisplayView = "table" | "list" | "poster" | "calendar";
 type PrivateDisplayView = "table" | "list";
 type DisplayDensity = "comfortable" | "standard" | "compact";
@@ -445,6 +447,27 @@ export default function App() {
     await refreshVisibleData();
   }
 
+  async function quickPrivateUpdate(item: MediaItem, field: "collection_level" | "rating" | "used", value: unknown) {
+    const previous = item;
+    const optimistic = { ...item, [field]: value } as MediaItem;
+    setItems((current) => current.map((entry) => entry.id === item.id ? optimistic : entry));
+    try {
+      const updated = await quickUpdateItemApi(item.id, field, value);
+      setItems((current) => current.map((entry) => entry.id === item.id ? updated : entry));
+      setToast("已更新");
+      try {
+        setPrivateFacets(await getPrivateFacets(privateFacetFilters));
+        await loadItems();
+      } catch (refreshError) {
+        setError(refreshError instanceof Error ? refreshError.message : "資料已更新，但重新整理失敗");
+      }
+    } catch (err) {
+      setItems((current) => current.map((entry) => entry.id === item.id ? previous : entry));
+      setError(err instanceof Error ? err.message : "快速更新失敗");
+      throw err;
+    }
+  }
+
   async function quickCreateFromTable(input: ItemInput) {
     await createItem(withPrivatePageDefaults(input, privateRecommendedActive));
     setToast("已新增");
@@ -593,10 +616,10 @@ export default function App() {
     setSidebarOpen(false);
   }
 
-  function selectTool(nextTab: "organizer" | "stats" | "data" | "settings") {
+  function selectTool(nextTab: "organizer" | "stats" | "data" | "settings" | "quality") {
     if (nextTab === "organizer") setOrganizerPrivateMode(includePrivate);
     setTab(nextTab);
-    setActiveView(nextTab);
+    setActiveView(nextTab === "quality" ? PRIVATE_LIBRARY_LABEL : nextTab);
     setActiveCategory("");
     setSidebarOpen(false);
   }
@@ -676,7 +699,7 @@ export default function App() {
         <ViewSidebar
           activeView={activeView}
           displayView={displayView}
-          activeTool={tab === "organizer" || tab === "stats" || tab === "data" || tab === "settings" ? tab : null}
+          activeTool={tab === "organizer" || tab === "stats" || tab === "data" || tab === "settings" || tab === "quality" ? tab : null}
           summaryItems={summaryItems}
           inboxTotal={inboxTotal}
           tags={sidebarTags}
@@ -720,6 +743,8 @@ export default function App() {
                   onOpenAdvanced={() => setFiltersOpen(true)}
                   onAdd={() => setSimpleAddOpen(true)}
                   onSelect={(item) => void openItemDetail(item)}
+                  onQuickUpdate={quickPrivateUpdate}
+                  onApplyFilters={(next) => setFilters({ ...defaultFilters, ...next, page: 1 })}
                 />
               ) : activeView === "home" && !filters.query && !filters.favorite ? (
                 <HomeDashboard
@@ -826,6 +851,13 @@ export default function App() {
           )}
           {tab === "stats" && <StatsPanel includePrivate={false} />}
           {tab === "data" && <ImportExport safeMode={safeMode} onImported={refreshVisibleData} />}
+          {tab === "quality" && privateActive && (
+            <PrivateQualityCenter onOpenItem={(id) => {
+              const item = items.find((entry) => entry.id === id);
+              if (item) void openItemDetail(item);
+              else void getItem(id).then(setSelected).catch((err) => setError(err instanceof Error ? err.message : "載入資料失敗"));
+            }} />
+          )}
           {tab === "settings" && (
             <SettingsPanel
               dark={dark}
@@ -1206,7 +1238,9 @@ function PrivateWorkbenchV3({
   onRetry,
   onOpenAdvanced,
   onAdd,
-  onSelect
+  onSelect,
+  onQuickUpdate,
+  onApplyFilters
 }: {
   filters: ListFilters;
   items: MediaItem[];
@@ -1220,10 +1254,17 @@ function PrivateWorkbenchV3({
   onOpenAdvanced: () => void;
   onAdd: () => void;
   onSelect: (item: MediaItem) => void;
+  onQuickUpdate: (item: MediaItem, field: "collection_level" | "rating" | "used", value: unknown) => Promise<void>;
+  onApplyFilters: (filters: Partial<ListFilters>) => void;
 }) {
   const [searchDraft, setSearchDraft] = useState(filters.query);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [columnPreferences, setColumnPreferences] = useState<PrivateTablePreferences>(() => readPrivateTablePreferences());
+  const [savedViews, setSavedViews] = useState<SavedPrivateView<PrivateTablePreferences>[]>(() => readSavedViews<PrivateTablePreferences>());
+  const [savedViewsOpen, setSavedViewsOpen] = useState(false);
+  const [savedViewName, setSavedViewName] = useState("");
+  const [activeSavedView, setActiveSavedView] = useState<string | null>(null);
+  const [savedViewError, setSavedViewError] = useState("");
   const visibleColumns = useMemo(
     () => columnPreferences.order.filter((id) => columnPreferences.visible[id]).map((id) => privateColumnMap[id]),
     [columnPreferences]
@@ -1260,6 +1301,37 @@ function PrivateWorkbenchV3({
     setColumnPreferences(defaultPrivateTablePreferences());
   }
 
+  function persistViews(next: SavedPrivateView<PrivateTablePreferences>[]) {
+    setSavedViews(next); writeSavedViews(next);
+  }
+
+  function addSavedView() {
+    try {
+      const view = createSavedView(savedViewName, filters, columnPreferences, savedViews);
+      persistViews([...savedViews, view]); setSavedViewName(""); setActiveSavedView(view.id); setSavedViewError("");
+    } catch (err) { setSavedViewError(err instanceof Error ? err.message : "無法儲存檢視"); }
+  }
+
+  function applySavedView(view: SavedPrivateView<PrivateTablePreferences>) {
+    const preferences = normalizePrivateTablePreferences(view.tablePreferences);
+    setColumnPreferences(preferences); onApplyFilters({ ...view.filters, page: 1, pageSize: preferences.pageSize }); setSearchDraft(String(view.filters.query || "")); setActiveSavedView(view.id); setSavedViewsOpen(false);
+  }
+
+  function updateSavedView(view: SavedPrivateView<PrivateTablePreferences>) {
+    const now = new Date().toISOString();
+    persistViews(savedViews.map((entry) => entry.id === view.id ? { ...entry, filters: { ...filters, page: 1 }, tablePreferences: columnPreferences, updatedAt: now } : entry));
+    setActiveSavedView(view.id);
+  }
+
+  function renameSavedView(view: SavedPrivateView<PrivateTablePreferences>) {
+    const name = window.prompt("新的檢視名稱", view.name)?.trim();
+    if (!name || (savedViews.some((entry) => entry.id !== view.id && entry.name.toLocaleLowerCase() === name.toLocaleLowerCase()))) { if (name) setSavedViewError("已有同名檢視"); return; }
+    persistViews(savedViews.map((entry) => entry.id === view.id ? { ...entry, name, updatedAt: new Date().toISOString() } : entry));
+  }
+
+  const activeView = savedViews.find((view) => view.id === activeSavedView);
+  const savedViewDirty = activeView ? savedViewSignature(filters, columnPreferences) !== savedViewSignature(activeView.filters, activeView.tablePreferences) : false;
+
   return (
     <section className="private-workbench">
       <div className="private-toolbar">
@@ -1284,6 +1356,15 @@ function PrivateWorkbenchV3({
                 <button className="filter-chip-clear" onClick={resetColumns}>重設欄位</button>
               </div>
             )}
+          </div>
+          <div className="private-columns-menu private-saved-views">
+            <button className="filter-toggle" onClick={() => setSavedViewsOpen((value) => !value)} aria-haspopup="dialog" aria-expanded={savedViewsOpen}><Save size={16}/>{activeView ? `${activeView.name}${savedViewDirty ? " *" : ""}` : "儲存檢視"}</button>
+            {savedViewsOpen && <div className="private-columns-popover private-saved-views-popover" role="dialog" aria-label="儲存檢視管理">
+              <strong>{activeView ? `${activeView.name}${savedViewDirty ? "（已有未儲存變更）" : ""}` : "儲存目前檢視"}</strong>
+              <div className="saved-view-create"><input value={savedViewName} onChange={(event) => setSavedViewName(event.target.value)} placeholder="檢視名稱"/><button onClick={addSavedView}>新增</button></div>
+              {savedViewError && <em role="alert">{savedViewError}</em>}
+              {savedViews.map((view) => <div className="saved-view-row" key={view.id}><button onClick={() => applySavedView(view)}>{view.name}</button><button title="覆蓋更新" onClick={() => updateSavedView(view)}>更新</button><button title="重新命名" onClick={() => renameSavedView(view)}>改名</button><button title="刪除" onClick={() => { if (window.confirm(`刪除檢視「${view.name}」？`)) { persistViews(savedViews.filter((entry) => entry.id !== view.id)); if (activeSavedView === view.id) setActiveSavedView(null); } }}>刪除</button></div>)}
+            </div>}
           </div>
           <button className="primary" onClick={onAdd}><Plus size={16} />新增</button>
         </div>
@@ -1313,6 +1394,7 @@ function PrivateWorkbenchV3({
               preferences={columnPreferences}
               onPreferencesChange={setColumnPreferences}
               onSelect={onSelect}
+              onQuickUpdate={onQuickUpdate}
             />
           </>
         )}
@@ -1330,15 +1412,21 @@ function PrivateDataTable({
   columns,
   preferences,
   onPreferencesChange,
-  onSelect
+  onSelect,
+  onQuickUpdate
 }: {
   items: MediaItem[];
   columns: PrivateColumnDefinition[];
   preferences: PrivateTablePreferences;
   onPreferencesChange: (preferences: PrivateTablePreferences | ((current: PrivateTablePreferences) => PrivateTablePreferences)) => void;
   onSelect: (item: MediaItem) => void;
+  onQuickUpdate: (item: MediaItem, field: "collection_level" | "rating" | "used", value: unknown) => Promise<void>;
 }) {
   const [dragColumn, setDragColumn] = useState<PrivateColumnId | null>(null);
+  const [editing, setEditing] = useState<{ itemId: string; column: "favorite" | "rating" } | null>(null);
+  const [quickPending, setQuickPending] = useState<string | null>(null);
+  const [quickError, setQuickError] = useState("");
+  const quickTrigger = useRef<HTMLButtonElement | null>(null);
   const totalWidth = columns.reduce((sum, column) => sum + preferences.widths[column.id], 0);
 
   function updateWidth(column: PrivateColumnDefinition, width: number) {
@@ -1378,6 +1466,23 @@ function PrivateDataTable({
     setDragColumn(null);
   }
 
+  useEffect(() => {
+    if (!editing) return;
+    const close = () => setEditing(null);
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") close(); };
+    const onPointer = (event: MouseEvent) => { if (!(event.target as HTMLElement).closest(".private-quick-editor,[data-quick-trigger]")) close(); };
+    document.addEventListener("keydown", onKey); document.addEventListener("mousedown", onPointer);
+    return () => { document.removeEventListener("keydown", onKey); document.removeEventListener("mousedown", onPointer); window.setTimeout(() => quickTrigger.current?.focus(), 0); };
+  }, [editing]);
+
+  async function commitQuick(item: MediaItem, field: "collection_level" | "rating" | "used", value: unknown) {
+    const key = `${item.id}:${field}`; if (quickPending) return;
+    setQuickPending(key); setQuickError("");
+    try { await onQuickUpdate(item, field, value); setEditing(null); }
+    catch (err) { setQuickError(err instanceof Error ? err.message : "快速更新失敗"); }
+    finally { setQuickPending(null); }
+  }
+
   return (
     <div className="private-data-table-wrap">
       <table className="private-data-table private-dense-table" style={{ "--private-table-width": `${Math.max(totalWidth, 760)}px` } as CSSProperties}>
@@ -1407,7 +1512,7 @@ function PrivateDataTable({
               <tr key={item.id} onClick={() => onSelect(item)}>
                 {columns.map((column) => (
                   <td key={column.id} className={column.id === "title" ? "private-sticky-column" : undefined}>
-                    <PrivateTableCell column={column.id} item={item} />
+                    <PrivateTableCell column={column.id} item={item} editing={editing?.itemId === item.id && editing.column === column.id} pending={quickPending === `${item.id}:${column.id === "favorite" ? "collection_level" : column.id}`} error={quickError} onOpen={(button) => { quickTrigger.current = button; setQuickError(""); setEditing({ itemId: item.id, column: column.id as "favorite" | "rating" }); }} onCommit={(field, value) => void commitQuick(item, field, value)} />
                   </td>
                 ))}
               </tr>
@@ -1419,7 +1524,7 @@ function PrivateDataTable({
   );
 }
 
-function PrivateTableCell({ column, item }: { column: PrivateColumnId; item: MediaItem }) {
+function PrivateTableCell({ column, item, editing, pending, error, onOpen, onCommit }: { column: PrivateColumnId; item: MediaItem; editing: boolean; pending: boolean; error: string; onOpen: (button: HTMLButtonElement) => void; onCommit: (field: "collection_level" | "rating" | "used", value: unknown) => void }) {
   const details = privateItemDetails(item);
   if (column === "title") {
     const titleText = privateDisplayTitle(details.title, details.code);
@@ -1438,13 +1543,17 @@ function PrivateTableCell({ column, item }: { column: PrivateColumnId; item: Med
       </span>
     );
   }
-  if (column === "rating") return <PrivateRating item={item} />;
-  if (column === "favorite") return <PrivateFavoriteMark level={privateFavoriteLevel(item)} />;
-  if (column === "used") return <PrivateUsedBadge used={item.used} />;
+  if (column === "rating") return <span className="private-quick-cell"><button data-quick-trigger aria-haspopup="menu" aria-expanded={editing} disabled={pending} onClick={(event) => { event.stopPropagation(); onOpen(event.currentTarget); }}><PrivateRating item={item} /></button>{editing && <PrivateQuickEditor error={error} options={[{ value: null, label: "未評分" }, ...Array.from({ length: 10 }, (_, index) => ({ value: index + 1, label: `${index + 1}.0` }))]} onSelect={(value) => onCommit("rating", value)} />}</span>;
+  if (column === "favorite") return <span className="private-quick-cell"><button data-quick-trigger aria-haspopup="menu" aria-expanded={editing} disabled={pending} onClick={(event) => { event.stopPropagation(); onOpen(event.currentTarget); }}><PrivateFavoriteMark level={privateFavoriteLevel(item)} /></button>{editing && <PrivateQuickEditor error={error} options={collectionLevels.map((value) => ({ value, label: collectionLevelLabels[value] }))} onSelect={(value) => onCommit("collection_level", value)} />}</span>;
+  if (column === "used") return <button className="private-used-quick" data-quick-trigger disabled={pending} aria-label={item.used ? "切換為未閱" : "切換為已閱"} onClick={(event) => { event.stopPropagation(); onCommit("used", !item.used); }}><PrivateUsedBadge used={item.used} /></button>;
   if (column === "actress") return <span className="private-ellipsis" title={details.performers}>{details.performers || "-"}</span>;
   if (column === "tags") return <PrivateTags tags={item.tags} />;
   if (column === "source") return <PrivateSource item={item} />;
   return <span className="private-summary-cell" title={item.quick_note || ""}>{item.quick_note || "-"}</span>;
+}
+
+function PrivateQuickEditor({ options, error, onSelect }: { options: Array<{ value: unknown; label: string }>; error: string; onSelect: (value: unknown) => void }) {
+  return <div className="private-quick-editor" role="menu" onClick={(event) => event.stopPropagation()}>{options.map((option) => <button key={String(option.value)} role="menuitem" onClick={() => onSelect(option.value)}>{option.label}</button>)}{error && <em role="alert">{error}</em>}</div>;
 }
 
 function estimatePrivateColumnWidth(column: PrivateColumnId, items: MediaItem[]) {
@@ -1517,14 +1626,15 @@ function PrivateUsedBadge({ used }: { used: boolean }) {
 
 function PrivateFavoriteMark({ level }: { level: string }) {
   const normalized = level === "已刪" || level === "已刪除" || level === "淘汰" ? "淘汰" : level;
+  if (normalized === "未分類") return <span className="private-favorite-unset" aria-label="收藏：未分類">—</span>;
   const icon = normalized === "神作"
     ? <Star size={14} fill="currentColor" />
     : normalized === "淘汰" || normalized === "雷片"
-      ? <Trash2 size={14} />
-      : <Bookmark size={14} fill={normalized === "收藏" ? "currentColor" : "none"} />;
+      ? <CircleSlash2 size={14} />
+      : <Bookmark size={14} />;
   return (
     <span className={`private-favorite-mark ${privateBadgeClass(normalized)}`} title={`收藏：${normalized}`} aria-label={`收藏：${normalized}`}>
-      {icon}
+      {icon}<span>{normalized}</span>
     </span>
   );
 }
@@ -1836,6 +1946,7 @@ function simpleDraftToInput(draft: { code: string; title: string; rating: string
       watched_at: draft.watched_at || null,
       rating,
       favorite_level: rating !== null && rating >= 9 ? "神作" : "一般",
+      collection_level: "unset",
       media_status: "已觀看",
       tags,
       metadata_json: JSON.stringify({
@@ -1994,6 +2105,8 @@ function emptyItem(): Partial<MediaItem> {
     rewatch_score: null,
     favorite: false,
     favorite_level: "一般",
+    collection_level: "unset",
+    normalized_code: null,
     used: false,
     is_private: false,
     status: "raw",

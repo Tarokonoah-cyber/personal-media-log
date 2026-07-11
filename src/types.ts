@@ -78,6 +78,17 @@ export interface PrivateFacetSearchResponse {
   items: PrivateFacetItem[];
 }
 
+export type PrivateIssueType = "duplicate_code" | "unknown_platform" | "missing_title" | "missing_people" | "missing_tags" | "unrated" | "unset_collection" | "invalid_collection" | "invalid_code";
+export interface PrivateQualitySummaryItem { type: PrivateIssueType; label: string; count: number; }
+export interface PrivateQualityIssue {
+  item_id: string; code: string; title: string; platform: string | null; collection_level: string;
+  original_value: string; suggestion: string; issue_key: string;
+}
+export interface PrivateQualityResponse {
+  summary?: PrivateQualitySummaryItem[]; ignoredCount?: number; issueType?: PrivateIssueType; label?: string;
+  page?: number; pageSize?: number; total?: number; issues?: PrivateQualityIssue[];
+}
+
 export interface PrivateFacets {
   source: PrivateFacetItem[];
   maker: PrivateFacetItem[];

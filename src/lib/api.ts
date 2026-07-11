@@ -1,4 +1,4 @@
-import type { BackupJob, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, PrivateFacetSearchResponse, PrivateFacets, SmartAddResponse, StatsResponse, TmdbSearchResponse } from "../types";
+import type { BackupJob, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, PrivateFacetSearchResponse, PrivateFacets, PrivateIssueType, PrivateQualityResponse, SmartAddResponse, StatsResponse, TmdbSearchResponse } from "../types";
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -48,12 +48,30 @@ export function searchPrivateFacet(facet: "actress" | "tag" | "studio", query = 
   return request<PrivateFacetSearchResponse>(`/api/private/facets?${params}`, { signal });
 }
 
+export function getPrivateQuality(issueType?: PrivateIssueType, page = 1, pageSize = 50, ignored = false) {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize), ignored: String(ignored) });
+  if (issueType) params.set("issueType", issueType);
+  return request<PrivateQualityResponse>(`/api/private/quality?${params}`);
+}
+
+export function ignorePrivateQualityIssue(itemId: string, issueType: PrivateIssueType, issueKey: string) {
+  return request<{ id: string }>("/api/private/quality/ignores", { method: "POST", body: JSON.stringify({ itemId, issueType, issueKey }) });
+}
+
+export function unignorePrivateQualityIssue(itemId: string, issueType: PrivateIssueType, issueKey: string) {
+  return request<void>("/api/private/quality/ignores", { method: "DELETE", body: JSON.stringify({ itemId, issueType, issueKey }) });
+}
+
 export function createItem(input: ItemInput) {
   return request<MediaItem>("/api/items", { method: "POST", body: JSON.stringify(input) });
 }
 
 export function updateItem(id: string, input: ItemInput) {
   return request<MediaItem>(`/api/items/${id}`, { method: "PUT", body: JSON.stringify(input) });
+}
+
+export function quickUpdateItem(id: string, field: "collection_level" | "rating" | "used", value: unknown) {
+  return request<MediaItem>(`/api/items/${id}/quick`, { method: "PATCH", body: JSON.stringify({ field, value }) });
 }
 
 export function deleteItem(id: string) {

@@ -2,7 +2,7 @@ import { HttpError } from "./http";
 import { inboxWhereSql } from "./organization";
 import { hasPrivateSignalValues, isPrivateMarker as isPrivateMarkerValue, privateItemWhereSql, publicItemWhereSql } from "./privacy";
 import { newId, nowIso } from "./ids";
-import { isCollectionLevel, normalizeCollectionLevel, normalizeWorkCode } from "../../shared/privateModel";
+import { isCollectionLevel, normalizeCollectionLevel, normalizePlatform as normalizePrivatePlatform, normalizeWorkCode, validateQuickEdit } from "../../shared/privateModel";
 import type { Actor, Env, FavoriteLevel, ItemInput, ItemListParams, ItemRecord, ItemStatus, MediaStatus, WatchStatus, PrivateFacets, PrivateSummary } from "./types";
 
 type Row = Record<string, unknown>;
@@ -1123,8 +1123,11 @@ function normalizeInput(input: ItemInput): NormalizedInput {
   const code = normalizedCode || cleanString(input.code);
   const metadata = parseMetadata(input.metadata_json);
   const parsed = parseCode(code || rawTitle);
-  const platform = normalizePlatform(cleanString(input.platform), parsed);
-  const maker = normalizeMaker(cleanString(input.maker) || metadataString(metadata, ["maker", "studio"]) || (input.is_private ? cleanString(input.platform) : null), parsed);
+  const makerValue = cleanString(input.maker) || metadataString(metadata, ["maker", "studio"]) || (input.is_private ? cleanString(input.platform) : null);
+  const platformValue = cleanString(input.platform);
+  const privatePlatform = normalizePrivatePlatform({ code, title: rawTitle, platform: platformValue, maker: makerValue });
+  const platform = input.is_private ? privatePlatform : normalizePlatform(platformValue, parsed);
+  const maker = normalizeMaker(makerValue, parsed);
   const series = cleanString(input.series) || metadataString(metadata, ["series"]) || parsed.series;
   const year = nullableNumber(input.year ?? input.release_year ?? metadataNumber(metadata, ["year", "releaseYear"]));
   const favoriteLevel = normalizeFavoriteLevel(input.favorite_level || metadataString(metadata, ["favorite_level", "collection_level"]) || reflectionString(metadata, "collection_level"), input.favorite, input.rating);
@@ -1175,6 +1178,25 @@ function normalizeInput(input: ItemInput): NormalizedInput {
     ...normalized,
     search_text: buildSearchText(normalized)
   };
+}
+
+export async function quickUpdateItem(env: Env, actor: Actor, id: string, field: string, value: unknown) {
+  await getItem(env, id);
+  const validated = validateQuickEdit(field, value);
+  if (!validated) throw new HttpError(400, "Invalid quick update field or value");
+  const timestamp = nowIso();
+  let statement: D1PreparedStatement;
+  if (validated.field === "collection_level") {
+    const legacy = validated.value === "masterpiece" ? "神作" : validated.value === "discard" ? "已刪" : "一般";
+    statement = env.MEDIA_LOG_DB.prepare("UPDATE items SET collection_level = ?, favorite_level = ?, favorite = ?, updated_at = ? WHERE id = ?")
+      .bind(validated.value, legacy, validated.value === "normal" || validated.value === "masterpiece" ? 1 : 0, timestamp, id);
+  } else if (validated.field === "rating") {
+    statement = env.MEDIA_LOG_DB.prepare("UPDATE items SET rating = ?, updated_at = ? WHERE id = ?").bind(validated.value, timestamp, id);
+  } else {
+    statement = env.MEDIA_LOG_DB.prepare("UPDATE items SET used = ?, updated_at = ? WHERE id = ?").bind(validated.value ? 1 : 0, timestamp, id);
+  }
+  await env.MEDIA_LOG_DB.batch([statement, audit(env, actor, "quick_update", "item", id, { field: validated.field })]);
+  return getItem(env, id);
 }
 
 async function assertUniqueNormalizedCode(env: Env, normalizedCode: string | null, currentId?: string, inputCode?: unknown) {

@@ -1,9 +1,10 @@
 import { createBackup, listBackups, restoreBackup } from "../_lib/backup";
 import { error, handleError, json, noContent, notFound, readJson, requireAccess } from "../_lib/http";
 import { parseCsv, parseJsonItems, toCsv } from "../_lib/importExport";
-import { createItem, exportItems, getItem, getPrivateFacetsForFilters, getStats, importItems, isLikelyDuplicate, listItems, searchPrivateFacet, softDeleteItem, updateItem } from "../_lib/items";
+import { createItem, exportItems, getItem, getPrivateFacetsForFilters, getStats, importItems, isLikelyDuplicate, listItems, quickUpdateItem, searchPrivateFacet, softDeleteItem, updateItem } from "../_lib/items";
 import { parseSmartAdd } from "../_lib/smartAdd";
 import { applyTmdbMetadata, searchTmdb } from "../_lib/tmdb";
+import { getPrivateQuality, ignorePrivateIssue, isPrivateIssueType, unignorePrivateIssue } from "../_lib/privateQuality";
 import type { Env, FavoriteLevel, ItemInput, ItemListParams, ItemStatus, MediaStatus, WatchStatus } from "../_lib/types";
 import type { CollectionLevel } from "../../shared/privateModel";
 
@@ -29,6 +30,10 @@ export const onRequest: PagesFunction<Env, "path"> = async (context) => {
           return noContent();
         }
       }
+      if (method === "PATCH" && path.length === 3 && path[2] === "quick") {
+        const body = await readJson<{ field?: string; value?: unknown }>(context.request);
+        return json(await quickUpdateItem(context.env, actor, path[1], body.field || "", body.value), { headers: { "cache-control": "private, no-store" } });
+      }
     }
 
     if (method === "GET" && path.length === 1 && path[0] === "stats") {
@@ -43,6 +48,23 @@ export const onRequest: PagesFunction<Env, "path"> = async (context) => {
       return json({ facet, items: await searchPrivateFacet(context.env, facet, optional(url.searchParams.get("q")) || "", limit) }, {
         headers: { "cache-control": "private, no-store" }
       });
+    }
+
+    if (path[0] === "private" && path[1] === "quality") {
+      const issueType = url.searchParams.get("issueType");
+      if (method === "GET" && path.length === 2) {
+        if (issueType && !isPrivateIssueType(issueType)) return error(400, "Invalid issue type");
+        return json(await getPrivateQuality(context.env, isPrivateIssueType(issueType) ? issueType : undefined, optionalNumber(url.searchParams.get("page")) || 1, optionalNumber(url.searchParams.get("pageSize")) || 50, url.searchParams.get("ignored") === "true"), { headers: { "cache-control": "private, no-store" } });
+      }
+      if (path[2] === "ignores") {
+        const body = await readJson<{ itemId?: string; issueType?: string; issueKey?: string }>(context.request);
+        if (!isPrivateIssueType(body.issueType)) return error(400, "Invalid issue type");
+        if (method === "POST") return json(await ignorePrivateIssue(context.env, actor, body.itemId || "", body.issueType, body.issueKey || ""), { status: 201 });
+        if (method === "DELETE") {
+          await unignorePrivateIssue(context.env, body.itemId || "", body.issueType, body.issueKey || "");
+          return noContent();
+        }
+      }
     }
 
     if (path[0] === "smart-add" && method === "POST" && path[1] === "parse") {

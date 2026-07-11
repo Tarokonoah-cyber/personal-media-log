@@ -8,7 +8,7 @@ import type { ListFilters, MediaItem, PrivateFacets, PrivateSummary } from "../t
 import { HomeDashboard } from "./HomeDashboard";
 
 type DisplayView = "table" | "list" | "poster" | "calendar";
-type ToolTab = "organizer" | "stats" | "data" | "settings";
+type ToolTab = "organizer" | "stats" | "data" | "settings" | "quality";
 
 const mainItems = [
   { id: "home", label: "首頁", icon: HomeIcon },
@@ -69,7 +69,6 @@ export function ViewSidebar({
   const showText = !collapsed || mobileOpen;
   const libraryItems = libraryTree.filter((entry) => !safeMode || !isPrivateLibraryLabel(entry.label));
   const [platformOpen, setPlatformOpen] = useState(true);
-  const [javOpen, setJavOpen] = useState(true);
   const [favoriteOpen, setFavoriteOpen] = useState(true);
   const [actressOpen, setActressOpen] = useState(true);
   const [actressQuery, setActressQuery] = useState("");
@@ -80,7 +79,6 @@ export function ViewSidebar({
   const closeMobileRef = useRef(onCloseMobile);
   closeMobileRef.current = onCloseMobile;
   const platformFilters = filterValues(filters.platformFilters);
-  const makerFilters = filterValues(filters.makerFilters);
   const favoriteFilters = filterValues(filters.favoriteLevelFilters);
   const personFilters = filterValues(filters.personFilters);
   const actressItems = useMemo(() => actressResults.length ? actressResults : privateFacets?.actress || [], [actressResults, privateFacets?.actress]);
@@ -136,12 +134,6 @@ export function ViewSidebar({
     applyPrivateFilter({ [key]: next.join(","), ...(key === "platformFilters" ? { platform: "" } : {}) });
   };
 
-  const patchJavMaker = (maker: string) => {
-    const platforms = platformFilters.includes("JAV") ? platformFilters : [...platformFilters, "JAV"];
-    const makers = makerFilters.includes(maker) ? makerFilters.filter((entry) => entry !== maker) : [...makerFilters, maker];
-    applyPrivateFilter({ platformFilters: platforms.join(","), makerFilters: makers.join(","), platform: "", maker: "" });
-  };
-
   const clearPrivateFilters = () => applyPrivateFilter(clearPrivateSidebarFilters(filters));
 
   if (privateMode) {
@@ -165,27 +157,14 @@ export function ViewSidebar({
           </NavSection>
 
           <PrivateNavSection title="平台" open={platformOpen} showText={showText} onToggle={() => setPlatformOpen((value) => !value)}>
-            <PrivateFilterButton label="FC2" count={facetCount(privateFacets?.source, "FC2")} active={platformFilters.includes("FC2")} showText={showText} icon={<Clapperboard size={15} />} onClick={() => patchMulti("platformFilters", "FC2")} />
-            <div className="private-nav-tree">
-              <div className="private-nav-tree-row">
-                <button className="private-nav-expand" onClick={() => setJavOpen((value) => !value)} aria-label={javOpen ? "收合 JAV 片商" : "展開 JAV 片商"}>
-                  {javOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                </button>
-                <PrivateFilterButton label="JAV" count={facetCount(privateFacets?.source, "JAV")} active={platformFilters.includes("JAV")} showText={showText} icon={<Clapperboard size={15} />} onClick={() => patchMulti("platformFilters", "JAV")} />
-              </div>
-              {javOpen && showText && (
-                <div className="private-nav-children">
-                  {(privateFacets?.javMaker || []).map((maker) => (
-                    <PrivateFilterButton key={maker.value} label={maker.value} count={maker.count} active={makerFilters.includes(maker.value)} showText={showText} onClick={() => patchJavMaker(maker.value)} />
-                  ))}
-                </div>
-              )}
-            </div>
-            {facetCount(privateFacets?.source, "其他") > 0 && <PrivateFilterButton label="其他" count={facetCount(privateFacets?.source, "其他")} active={platformFilters.includes("其他")} showText={showText} icon={<Clapperboard size={15} />} onClick={() => patchMulti("platformFilters", "其他")} />}
+            {["FC2", "JAV"].map((platform) => (
+              <PrivateFilterButton key={platform} label={platform} count={facetCount(privateFacets?.source, platform)} active={platformFilters.includes(platform)} showText={showText} icon={<Clapperboard size={15} />} onClick={() => patchMulti("platformFilters", platform)} />
+            ))}
           </PrivateNavSection>
 
           <PrivateNavSection title="收藏" open={favoriteOpen} showText={showText} onToggle={() => setFavoriteOpen((value) => !value)}>
             {[
+              { label: "未分類", value: "unset" },
               { label: "神作", value: "masterpiece" },
               { label: "一般", value: "normal" },
               { label: "淘汰", value: "discard" }
@@ -207,6 +186,9 @@ export function ViewSidebar({
           </PrivateNavSection>
 
           <NavSection title="工具" showText={showText} tone="tools">
+            <SidebarButton active={activeTool === "quality"} title="資料整理" icon={<Sparkles size={15} />} showText={showText} onClick={() => onTool("quality")}>
+              資料整理
+            </SidebarButton>
             <SidebarButton active={activeTool === "stats"} title="統計" icon={<BarChart3 size={15} />} showText={showText} onClick={() => onTool("stats")}>
               統計
             </SidebarButton>
