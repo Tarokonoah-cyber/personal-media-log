@@ -1,6 +1,8 @@
 import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, Database, Film, Folder, Hash, Heart, Settings, Sparkles, Tv, X } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isPrivateLibraryLabel } from "../lib/privacy";
+import { searchPrivateFacet } from "../lib/api";
+import { clearPrivateSidebarFilters } from "../lib/privateFilters";
 import { libraryTree } from "../lib/taxonomy";
 import type { ListFilters, MediaItem, PrivateFacets, PrivateSummary } from "../types";
 import { HomeDashboard } from "./HomeDashboard";
@@ -71,53 +73,82 @@ export function ViewSidebar({
   const [favoriteOpen, setFavoriteOpen] = useState(true);
   const [actressOpen, setActressOpen] = useState(true);
   const [actressQuery, setActressQuery] = useState("");
+  const [actressResults, setActressResults] = useState(privateFacets?.actress || []);
+  const [actressLoading, setActressLoading] = useState(false);
+  const [actressError, setActressError] = useState("");
+  const actressRequestId = useRef(0);
+  const closeMobileRef = useRef(onCloseMobile);
+  closeMobileRef.current = onCloseMobile;
   const platformFilters = filterValues(filters.platformFilters);
   const makerFilters = filterValues(filters.makerFilters);
   const favoriteFilters = filterValues(filters.favoriteLevelFilters);
   const personFilters = filterValues(filters.personFilters);
-  const actressItems = useMemo(() => {
-    const query = actressQuery.trim().toLowerCase();
-    const items = privateFacets?.actress || [];
-    return query ? items.filter((item) => item.value.toLowerCase().includes(query)) : items;
-  }, [actressQuery, privateFacets?.actress]);
+  const actressItems = useMemo(() => actressResults.length ? actressResults : privateFacets?.actress || [], [actressResults, privateFacets?.actress]);
+
+  useEffect(() => {
+    if (!privateMode) return;
+    const requestId = ++actressRequestId.current;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setActressLoading(true);
+      setActressError("");
+      void searchPrivateFacet("actress", actressQuery, 30, controller.signal)
+        .then((result) => {
+          if (requestId === actressRequestId.current) setActressResults(result.items);
+        })
+        .catch((error) => {
+          if (controller.signal.aborted || requestId !== actressRequestId.current) return;
+          setActressError(error instanceof Error ? error.message : "女優搜尋失敗");
+        })
+        .finally(() => {
+          if (requestId === actressRequestId.current) setActressLoading(false);
+        });
+    }, 300);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [actressQuery, privateMode]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeMobileRef.current();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      (document.querySelector('[aria-label="開啟導覽"]') as HTMLElement | null)?.focus();
+    };
+  }, [mobileOpen]);
+
+  const applyPrivateFilter = (patch: Partial<ListFilters>) => {
+    onPrivateFilter?.(patch);
+    if (mobileOpen) onCloseMobile();
+  };
 
   const patchMulti = (key: "platformFilters" | "makerFilters" | "favoriteLevelFilters" | "personFilters", value: string) => {
     const current = filterValues(filters[key]);
     const next = current.includes(value) ? current.filter((entry) => entry !== value) : [...current, value];
-    onPrivateFilter?.({ [key]: next.join(","), ...(key === "platformFilters" ? { platform: "" } : {}) });
+    applyPrivateFilter({ [key]: next.join(","), ...(key === "platformFilters" ? { platform: "" } : {}) });
   };
 
   const patchJavMaker = (maker: string) => {
     const platforms = platformFilters.includes("JAV") ? platformFilters : [...platformFilters, "JAV"];
     const makers = makerFilters.includes(maker) ? makerFilters.filter((entry) => entry !== maker) : [...makerFilters, maker];
-    onPrivateFilter?.({ platformFilters: platforms.join(","), makerFilters: makers.join(","), platform: "", maker: "" });
+    applyPrivateFilter({ platformFilters: platforms.join(","), makerFilters: makers.join(","), platform: "", maker: "" });
   };
 
-  const clearPrivateFilters = () => onPrivateFilter?.({
-    query: "",
-    platformFilters: "",
-    makerFilters: "",
-    favoriteLevelFilters: "",
-    personFilters: "",
-    missingPeople: false,
-    platform: "",
-    maker: "",
-    person: "",
-    tag: "",
-    ratingMin: "",
-    ratingMax: "",
-    unrated: false,
-    usedFilter: "all",
-    hasNote: "all",
-    hasCover: "all",
-    page: 1
-  });
+  const clearPrivateFilters = () => applyPrivateFilter(clearPrivateSidebarFilters(filters));
 
   if (privateMode) {
     return (
       <>
         <SidebarScrim open={mobileOpen} onClose={onCloseMobile} />
-        <aside className={`${collapsed ? "database-sidebar collapsed private-sidebar" : "database-sidebar private-sidebar"} ${mobileOpen ? "mobile-open" : ""}`} aria-label="私密工作台導覽">
+        <aside id="private-sidebar" className={`${collapsed ? "database-sidebar collapsed private-sidebar" : "database-sidebar private-sidebar"} ${mobileOpen ? "mobile-open" : ""}`} aria-label="私密工作台導覽" role={mobileOpen ? "dialog" : undefined} aria-modal={mobileOpen || undefined}>
           <SidebarTop
             showText={showText}
             collapsed={collapsed}
@@ -155,24 +186,24 @@ export function ViewSidebar({
 
           <PrivateNavSection title="收藏" open={favoriteOpen} showText={showText} onToggle={() => setFavoriteOpen((value) => !value)}>
             {[
-              { label: "神作", value: "神作" },
-              { label: "一般", value: "一般" },
-              { label: "刪除", value: "已刪" }
+              { label: "神作", value: "masterpiece" },
+              { label: "一般", value: "normal" },
+              { label: "淘汰", value: "discard" }
             ].map((entry) => (
               <PrivateFilterButton key={entry.value} label={entry.label} count={facetCount(privateFacets?.favoriteLevel, entry.value)} active={favoriteFilters.includes(entry.value)} showText={showText} icon={<Heart size={15} />} onClick={() => patchMulti("favoriteLevelFilters", entry.value)} />
             ))}
           </PrivateNavSection>
 
           <PrivateNavSection title="女優" open={actressOpen} showText={showText} onToggle={() => setActressOpen((value) => !value)}>
-            {showText && <input className="private-nav-search" value={actressQuery} onChange={(event) => setActressQuery(event.target.value)} placeholder="搜尋女優" />}
+            {showText && <input className="private-nav-search" value={actressQuery} onChange={(event) => setActressQuery(event.target.value)} placeholder="搜尋女優" aria-label="搜尋女優" />}
             <div className="private-nav-actress-list">
-              {actressItems.length === 0 ? (
+              {actressLoading ? (showText && <em>搜尋中...</em>) : actressError ? (showText && <em role="alert">{actressError}</em>) : actressItems.length === 0 ? (
                 showText && <em>沒有女優資料</em>
               ) : actressItems.map((actress) => (
                 <PrivateFilterButton key={actress.value} label={actress.value} count={actress.count} active={personFilters.includes(actress.value)} showText={showText} onClick={() => patchMulti("personFilters", actress.value)} />
               ))}
             </div>
-            <PrivateFilterButton label="未填女優" count={0} active={Boolean(filters.missingPeople)} showText={showText} onClick={() => onPrivateFilter?.({ missingPeople: !filters.missingPeople })} />
+            <PrivateFilterButton label="未填女優" count={0} active={Boolean(filters.missingPeople)} showText={showText} onClick={() => applyPrivateFilter({ missingPeople: !filters.missingPeople })} />
           </PrivateNavSection>
 
           <NavSection title="工具" showText={showText} tone="tools">
@@ -281,7 +312,7 @@ function SidebarTop({
           {extra}
         </div>
       )}
-      <button className="row-icon desktop-collapse" onClick={onToggleCollapsed} title={collapsed ? "展開選單" : "收合選單"}>
+      <button className="row-icon desktop-collapse" onClick={onToggleCollapsed} title={collapsed ? "展開選單" : "收合選單"} aria-label={collapsed ? "展開選單" : "收合選單"} aria-expanded={!collapsed} aria-controls="private-sidebar">
         {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
       </button>
       <button className="row-icon mobile-close" onClick={onCloseMobile} title="關閉選單"><X size={16} /></button>
@@ -337,7 +368,7 @@ function PrivateFilterButton({
   onClick: () => void;
 }) {
   return (
-    <button className={active ? "active private-nav-filter" : "private-nav-filter"} onClick={onClick} title={`${label} ${count}`}>
+    <button className={active ? "active private-nav-filter" : "private-nav-filter"} onClick={onClick} title={`${label} ${count}`} aria-pressed={active}>
       {icon || <span className="private-nav-dot" />}
       {showText && (
         <>

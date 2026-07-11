@@ -1,10 +1,11 @@
 import { createBackup, listBackups, restoreBackup } from "../_lib/backup";
 import { error, handleError, json, noContent, notFound, readJson, requireAccess } from "../_lib/http";
 import { parseCsv, parseJsonItems, toCsv } from "../_lib/importExport";
-import { createItem, exportItems, getItem, getStats, importItems, isLikelyDuplicate, listItems, softDeleteItem, updateItem } from "../_lib/items";
+import { createItem, exportItems, getItem, getPrivateFacetsForFilters, getStats, importItems, isLikelyDuplicate, listItems, searchPrivateFacet, softDeleteItem, updateItem } from "../_lib/items";
 import { parseSmartAdd } from "../_lib/smartAdd";
 import { applyTmdbMetadata, searchTmdb } from "../_lib/tmdb";
 import type { Env, FavoriteLevel, ItemInput, ItemListParams, ItemStatus, MediaStatus, WatchStatus } from "../_lib/types";
+import type { CollectionLevel } from "../../shared/privateModel";
 
 export const onRequest: PagesFunction<Env, "path"> = async (context) => {
   try {
@@ -32,6 +33,16 @@ export const onRequest: PagesFunction<Env, "path"> = async (context) => {
 
     if (method === "GET" && path.length === 1 && path[0] === "stats") {
       return json(await getStats(context.env, url.searchParams.get("includePrivate") === "true"));
+    }
+
+    if (method === "GET" && path[0] === "private" && path[1] === "facets") {
+      const facet = url.searchParams.get("facet");
+      if (!facet) return json(await getPrivateFacetsForFilters(context.env, getListParams(url)), { headers: { "cache-control": "private, no-store" } });
+      if (facet !== "actress" && facet !== "tag" && facet !== "studio") return error(400, "Invalid facet type");
+      const limit = Math.min(50, Math.max(1, optionalNumber(url.searchParams.get("limit")) || 30));
+      return json({ facet, items: await searchPrivateFacet(context.env, facet, optional(url.searchParams.get("q")) || "", limit) }, {
+        headers: { "cache-control": "private, no-store" }
+      });
     }
 
     if (path[0] === "smart-add" && method === "POST" && path[1] === "parse") {
@@ -199,7 +210,7 @@ function getListParams(url: URL): ItemListParams {
     includeFacets: url.searchParams.get("includeFacets") === "true",
     platformFilters: csvValues(url.searchParams.get("platformFilters")),
     makerFilters: csvValues(url.searchParams.get("makerFilters")),
-    favoriteLevelFilters: csvValues(url.searchParams.get("favoriteLevelFilters")).filter(isFavoriteLevelFilter) as FavoriteLevel[],
+    favoriteLevelFilters: csvValues(url.searchParams.get("favoriteLevelFilters")).filter(isCollectionLevelFilter) as CollectionLevel[],
     personFilters: csvValues(url.searchParams.get("personFilters")),
     missingPeople: url.searchParams.get("missingPeople") === "true",
     hasNote: isTriState(url.searchParams.get("hasNote")) ? url.searchParams.get("hasNote") as "all" | "yes" | "no" : "all",
@@ -263,6 +274,10 @@ function isTriState(value: string | null): value is "all" | "yes" | "no" {
 
 function isFavoriteLevelFilter(value: string | null): value is FavoriteLevel | "all" {
   return value === "all" || value === "神作" || value === "收藏" || value === "一般" || value === "雷片" || value === "已刪";
+}
+
+function isCollectionLevelFilter(value: string | null): value is CollectionLevel {
+  return value === "unset" || value === "masterpiece" || value === "normal" || value === "discard";
 }
 
 function isMediaStatusFilter(value: string | null): value is MediaStatus | "all" {

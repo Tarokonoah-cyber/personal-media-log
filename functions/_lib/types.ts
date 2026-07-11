@@ -16,6 +16,8 @@ export interface Actor {
 
 export type ItemStatus = "raw" | "partial" | "complete" | "archived" | "deleted";
 export type WatchStatus = "plan_to_watch" | "watching" | "completed" | "paused" | "dropped" | "rewatching";
+import type { CollectionLevel } from "../../shared/privateModel";
+
 export type FavoriteLevel = "神作" | "收藏" | "一般" | "雷片" | "已刪";
 export type MediaStatus = "待觀看" | "已觀看" | "想重看" | "已刪除";
 
@@ -39,6 +41,8 @@ export interface ItemInput {
   rewatch_score?: number | null;
   favorite?: boolean;
   favorite_level?: FavoriteLevel;
+  collection_level?: CollectionLevel;
+  normalized_code?: string | null;
   used?: boolean;
   is_private?: boolean;
   status?: ItemStatus;
@@ -82,7 +86,7 @@ export interface ItemListParams {
   includeFacets?: boolean;
   platformFilters?: string[];
   makerFilters?: string[];
-  favoriteLevelFilters?: string[];
+  favoriteLevelFilters?: CollectionLevel[];
   personFilters?: string[];
   missingPeople?: boolean;
   hasNote?: "all" | "yes" | "no";
@@ -120,6 +124,7 @@ export interface PrivateSummary {
 
 export interface PrivateFacetItem {
   value: string;
+  label?: string;
   count: number;
 }
 

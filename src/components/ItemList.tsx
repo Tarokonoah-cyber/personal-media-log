@@ -771,7 +771,7 @@ function privateColumnDefs({ onQuickUpdate }: { onQuickUpdate?: (item: MediaItem
     { id: "actress", label: "女優", colClassName: "private-performer-col", cellClassName: "private-text-cell", render: (item) => <span title={privateItemDetails(item).performers}>{privateItemDetails(item).performers}</span> },
     { id: "rating", label: "評分", colClassName: "private-rating-col", render: (item) => <RatingValue item={item} /> },
     { id: "favorite_level", label: "收藏", colClassName: "private-collection-col", render: (item) => <ReflectionBadge value={item.favorite_level || getItemReflection(item).collection_level} /> },
-    { id: "used", label: "已使用", colClassName: "private-used-col", cellClassName: "private-used-cell", render: (item) => <PrivateUsedToggle item={item} onQuickUpdate={onQuickUpdate} /> },
+    { id: "used", label: "已閱", colClassName: "private-used-col", cellClassName: "private-used-cell", render: (item) => <PrivateUsedToggle item={item} onQuickUpdate={onQuickUpdate} /> },
     { id: "media_status", label: "狀態", colClassName: "private-status-col", render: (item) => <span className="status-pill">{item.media_status}</span> },
     { id: "tags", label: "標籤", colClassName: "private-tags-col", render: (item) => <Tags tags={item.tags} limit={4} /> },
     { id: "summary", label: "一句話心得", colClassName: "private-summary-col", cellClassName: "private-text-cell", render: (item) => <span title={item.quick_note || ""}>{item.quick_note || "-"}</span> },
@@ -812,7 +812,7 @@ function privateColumnDefs({ onQuickUpdate }: { onQuickUpdate?: (item: MediaItem
     },
     { id: "year", label: "年分", colClassName: "private-year-col", cellClassName: "muted-cell private-year-cell", render: (item) => privateItemDetails(item).releaseYear },
     { id: "rating", label: "評分", colClassName: "private-rating-col", render: (item) => <RatingValue item={item} /> },
-    { id: "used", label: "精選", colClassName: "private-used-col", cellClassName: "private-used-cell", render: (item) => <PrivateUsedToggle item={item} onQuickUpdate={onQuickUpdate} /> },
+    { id: "used", label: "已閱", colClassName: "private-used-col", cellClassName: "private-used-cell", render: (item) => <PrivateUsedToggle item={item} onQuickUpdate={onQuickUpdate} /> },
     { id: "collection_level", label: "收藏", colClassName: "private-collection-col", render: (item) => <ReflectionBadge value={getItemReflection(item).collection_level} /> },
     { id: "tags", label: "標籤", colClassName: "private-tags-col", render: (item) => <Tags tags={item.tags} limit={4} /> }
   ];
@@ -833,7 +833,7 @@ function customColumnDef(column: CustomColumn): ColumnDef {
 function PrivateUsedToggle({ item, onQuickUpdate }: { item: MediaItem; onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void> }) {
   const used = item.used || privateUsedValue(item.metadata_json);
   return (
-    <label className="private-used-toggle" onClick={(event) => event.stopPropagation()} title={used ? "精選收藏" : "非精選"}>
+    <label className="private-used-toggle" onClick={(event) => event.stopPropagation()} title={used ? "已閱" : "未閱"}>
       <input
         type="checkbox"
         checked={used}
@@ -842,7 +842,7 @@ function PrivateUsedToggle({ item, onQuickUpdate }: { item: MediaItem; onQuickUp
           void onQuickUpdate?.(item, { used: event.target.checked, metadata_json: mergePrivateUsedMetadata(item.metadata_json, event.target.checked) });
         }}
       />
-      <span>{used ? "精選" : "非精選"}</span>
+      <span>{used ? "已閱" : "未閱"}</span>
     </label>
   );
 }

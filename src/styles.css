@@ -8265,7 +8265,7 @@ h2 {
   color: #9f1239;
 }
 
-.private-favorite-mark.刪除,
+.private-favorite-mark.淘汰,
 .private-favorite-mark.雷片 {
   border-color: #d1d5db;
   background: #e5e7eb;
@@ -8347,7 +8347,7 @@ h2 {
   }
 }
 
-/* Final private workbench overrides: keep these last so old private-table rules do not win. */
+/* Final private workbench overrides. */
 .private-workbench .private-toolbar {
   grid-template-columns: minmax(260px, 1fr) auto auto;
   gap: 8px;
@@ -8685,4 +8685,77 @@ h2 {
     right: auto;
     left: 0;
   }
+}
+
+@media (min-width: 820px) {
+  .database-layout.private-layout.sidebar-collapsed {
+    grid-template-columns: 60px minmax(0, 1fr);
+  }
+
+  .private-sidebar.collapsed {
+    width: 60px;
+    padding-inline: 8px;
+    overflow-x: visible;
+    box-sizing: border-box;
+  }
+
+  .private-sidebar.collapsed .sidebar-group,
+  .private-sidebar.collapsed .private-nav-section-body {
+    width: 42px;
+    justify-items: center;
+  }
+
+  .private-sidebar.collapsed .sidebar-group button,
+  .private-sidebar.collapsed .private-nav-filter {
+    width: 40px !important;
+    min-width: 40px;
+    padding: 0 !important;
+    justify-content: center !important;
+  }
+}
+
+.private-drawer .collection-level-control,
+.private-drawer .private-viewed-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.private-drawer .collection-level-control legend,
+.private-drawer .private-viewed-status legend {
+  width: 100%;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.private-drawer .collection-level-control label,
+.private-drawer .private-viewed-status label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.private-drawer .collection-level-control label.active,
+.private-drawer .private-viewed-status label:has(input:checked) {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--text);
+}
+
+.private-drawer .collection-level-control input,
+.private-drawer .private-viewed-status input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
 }

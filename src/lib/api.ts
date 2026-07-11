@@ -1,4 +1,4 @@
-import type { BackupJob, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, SmartAddResponse, StatsResponse, TmdbSearchResponse } from "../types";
+import type { BackupJob, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, PrivateFacetSearchResponse, PrivateFacets, SmartAddResponse, StatsResponse, TmdbSearchResponse } from "../types";
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -9,7 +9,14 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     }
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => ({ error: response.statusText }));
+    const body = await response.json().catch(() => ({ error: response.statusText })) as {
+      error?: string;
+      details?: { inputCode?: string; normalizedCode?: string; existing?: { code?: string; title?: string } };
+    };
+    if (response.status === 409 && body.details?.normalizedCode) {
+      const existing = body.details.existing;
+      throw new Error(`${body.error || "作品代號衝突"}：輸入「${body.details.inputCode || "-"}」，正規化為「${body.details.normalizedCode}」；既有「${existing?.code || "-"}」${existing?.title ? `（${existing.title}）` : ""}`);
+    }
     throw new Error(body.error || response.statusText);
   }
   if (response.status === 204) return undefined as T;
@@ -26,6 +33,19 @@ export function listItems(filters: ListFilters) {
 
 export function getItem(id: string) {
   return request<MediaItem>(`/api/items/${id}`);
+}
+
+export function getPrivateFacets(filters: ListFilters) {
+  const params = new URLSearchParams();
+  Object.entries({ ...filters, page: 1, pageSize: 1, privateOnly: true, includePrivate: true, includeFacets: false }).forEach(([key, value]) => {
+    if (value !== "" && value !== false && value !== null && value !== undefined) params.set(key, String(value));
+  });
+  return request<PrivateFacets>(`/api/private/facets?${params}`);
+}
+
+export function searchPrivateFacet(facet: "actress" | "tag" | "studio", query = "", limit = 30, signal?: AbortSignal) {
+  const params = new URLSearchParams({ facet, q: query.trim(), limit: String(Math.min(50, Math.max(1, limit))) });
+  return request<PrivateFacetSearchResponse>(`/api/private/facets?${params}`, { signal });
 }
 
 export function createItem(input: ItemInput) {

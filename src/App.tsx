@@ -12,7 +12,9 @@ import { SmartOrganizer } from "./components/SmartOrganizer";
 import { StatsPanel } from "./components/StatsPanel";
 import { Toast } from "./components/Toast";
 import { ViewSidebar } from "./components/ViewSidebar";
-import { applyMetadata, createItem, deleteItem, getItem, listItems, parseSmartAdd, searchMetadata, updateItem } from "./lib/api";
+import { applyMetadata, createItem, deleteItem, getItem, getPrivateFacets, listItems, parseSmartAdd, searchMetadata, updateItem } from "./lib/api";
+import { mergePrivateFilters } from "./lib/privateFilters";
+import { collectionLevelLabels, normalizeCollectionLevel } from "../shared/privateModel";
 import { toItemInput } from "./lib/itemTransforms";
 import { isPrivateItem, isPrivateLibraryLabel, isPrivateMarker, privateItemDetails, PRIVATE_LIBRARY_LABEL, PRIVATE_RECOMMENDED_LABEL, PRIVATE_RECOMMENDED_TAG } from "./lib/privacy";
 import { parseQuickEntry } from "./lib/quickParse";
@@ -93,7 +95,7 @@ const privateColumnDefinitions: PrivateColumnDefinition[] = [
   { id: "title", label: "作品代號 / 標題", width: 520, minWidth: 320, maxWidth: 900, required: true },
   { id: "rating", label: "評分", width: 78, minWidth: 64, maxWidth: 120 },
   { id: "favorite", label: "收藏", width: 68, minWidth: 56, maxWidth: 110 },
-  { id: "used", label: "已使用", width: 56, minWidth: 50, maxWidth: 90 },
+  { id: "used", label: "已閱", width: 56, minWidth: 50, maxWidth: 90 },
   { id: "actress", label: "女優", width: 180, minWidth: 120, maxWidth: 360 },
   { id: "tags", label: "標籤", width: 220, minWidth: 140, maxWidth: 420 },
   { id: "source", label: "來源", width: 140, minWidth: 100, maxWidth: 260, defaultHidden: true },
@@ -176,11 +178,14 @@ export default function App() {
   const [toast, setToast] = useState("");
   const [error, setError] = useState("");
   const loadRequestId = useRef(0);
+  const facetRequestId = useRef(0);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [columnManagerOpen, setColumnManagerOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebarCollapsed") === "true");
-  const [privateSidebarExpanded, setPrivateSidebarExpanded] = useState(false);
+  const [privateSidebarCollapsed, setPrivateSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem("private-sidebar-collapsed-v1") === "true"; } catch { return false; }
+  });
   const [organizerPrivateMode, setOrganizerPrivateMode] = useState(false);
   const [dark, setDark] = useState(() => localStorage.getItem("theme") !== "light");
   const privateView = isPrivateWorkspaceView(activeView);
@@ -189,7 +194,7 @@ export default function App() {
   const privateRecommendedActive = activeView === PRIVATE_RECOMMENDED_LABEL && includePrivate;
   const privatePageTitle = privateRecommendedActive ? PRIVATE_RECOMMENDED_LABEL : PRIVATE_LIBRARY_LABEL;
   const currentDisplayView = privateActive ? "table" : displayView;
-  const effectiveSidebarCollapsed = privateActive ? !privateSidebarExpanded : sidebarCollapsed;
+  const effectiveSidebarCollapsed = privateActive ? privateSidebarCollapsed : sidebarCollapsed;
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -201,8 +206,8 @@ export default function App() {
   }, [sidebarCollapsed]);
 
   useEffect(() => {
-    if (!privateActive) setPrivateSidebarExpanded(false);
-  }, [privateActive]);
+    try { localStorage.setItem("private-sidebar-collapsed-v1", String(privateSidebarCollapsed)); } catch { /* use in-memory preference */ }
+  }, [privateSidebarCollapsed]);
 
   useEffect(() => {
     if (!privateActive) return;
@@ -250,18 +255,35 @@ export default function App() {
     if (["plan_to_watch", "watching", "completed", "paused", "dropped", "rewatching"].includes(activeView)) return scopedItems;
     return scopedItems;
   }, [activeCategory, activeView, includePrivate, items, libraryTypes]);
+  const privateFacetFilters = useMemo<ListFilters>(() => ({
+    ...defaultFilters,
+    query: filters.query,
+    platformFilters: filters.platformFilters,
+    makerFilters: filters.makerFilters,
+    favoriteLevelFilters: filters.favoriteLevelFilters,
+    personFilters: filters.personFilters,
+    missingPeople: filters.missingPeople,
+    ratingMin: filters.ratingMin,
+    ratingMax: filters.ratingMax,
+    unrated: filters.unrated,
+    usedFilter: filters.usedFilter,
+    tag: filters.tag,
+    hasNote: filters.hasNote,
+    hasCover: filters.hasCover,
+    page: 1,
+    pageSize: 1
+  }), [filters.query, filters.platformFilters, filters.makerFilters, filters.favoriteLevelFilters, filters.personFilters, filters.missingPeople, filters.ratingMin, filters.ratingMax, filters.unrated, filters.usedFilter, filters.tag, filters.hasNote, filters.hasCover]);
 
   async function loadItems() {
     const requestId = ++loadRequestId.current;
     setLoading(true);
     setError("");
     try {
-      const result = await listItems({ ...filters, includePrivate, privateOnly: includePrivate, includeFacets: includePrivate });
+      const result = await listItems({ ...filters, includePrivate, privateOnly: includePrivate, includeFacets: false });
       if (requestId !== loadRequestId.current) return;
       setItems(result.items);
       setTotal(result.total);
       setPrivateSummary(result.privateSummary || null);
-      setPrivateFacets(result.privateFacets || null);
     } catch (err) {
       if (requestId !== loadRequestId.current) return;
       setError(err instanceof Error ? err.message : "讀取紀錄失敗");
@@ -269,6 +291,21 @@ export default function App() {
       if (requestId === loadRequestId.current) setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!privateActive) return;
+    const requestId = ++facetRequestId.current;
+    const timer = window.setTimeout(() => {
+      void getPrivateFacets(privateFacetFilters)
+        .then((facets) => {
+          if (requestId === facetRequestId.current) setPrivateFacets(facets);
+        })
+        .catch((facetError) => {
+          if (requestId === facetRequestId.current) console.error("Private facets request failed", facetError);
+        });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [privateActive, privateFacetFilters]);
 
   async function loadSummary() {
     try {
@@ -493,12 +530,7 @@ export default function App() {
     setTab("log");
     setActiveView(recommendedPage ? PRIVATE_RECOMMENDED_LABEL : PRIVATE_LIBRARY_LABEL);
     setActiveCategory("");
-    setFilters({
-      ...defaultFilters,
-      excludeTag: "",
-      ...patch,
-      page: 1
-    });
+    setFilters((current) => mergePrivateFilters(current, patch));
     setSidebarOpen(false);
   }
 
@@ -581,14 +613,13 @@ export default function App() {
     setActiveView("home");
     setActiveCategory("");
     setFilters(defaultFilters);
-    setPrivateSidebarExpanded(false);
     setSidebarOpen(false);
   }
 
   return (
     <div className="app-shell">
       <header className={privateActive ? "topbar private-shell-topbar" : "topbar"}>
-        <button className="icon-button mobile-sidebar-button" onClick={() => setSidebarOpen(true)} title="開啟導覽"><Menu size={18} /></button>
+        <button className="icon-button mobile-sidebar-button" onClick={() => setSidebarOpen(true)} title="開啟導覽" aria-label="開啟導覽" aria-expanded={sidebarOpen} aria-controls="private-sidebar"><Menu size={18} /></button>
         {privateActive ? (
           <div className="private-shell-main">
             <button className="filter-toggle private-return-home" onClick={returnHome}>
@@ -641,7 +672,7 @@ export default function App() {
         />
       )}
 
-      <main className={effectiveSidebarCollapsed ? "database-layout sidebar-collapsed" : "database-layout"}>
+      <main className={`${privateActive ? "database-layout private-layout" : "database-layout"}${effectiveSidebarCollapsed ? " sidebar-collapsed" : ""}`}>
         <ViewSidebar
           activeView={activeView}
           displayView={displayView}
@@ -658,7 +689,7 @@ export default function App() {
           mobileOpen={sidebarOpen}
           onToggleCollapsed={() => {
             if (privateActive) {
-              setPrivateSidebarExpanded((value) => !value);
+              setPrivateSidebarCollapsed((value) => !value);
               return;
             }
             setSidebarCollapsed((value) => !value);
@@ -925,8 +956,8 @@ function PrivateWorkbench({
         </div>
         <div className="private-summary-grid" aria-label="私密摘要">
           <Metric label="總筆數" value={summaryTotal.toString()} />
-          <Metric label="精選" value={used.toString()} />
-          <Metric label="非精選" value={unused.toString()} />
+          <Metric label="已閱" value={used.toString()} />
+          <Metric label="未閱" value={unused.toString()} />
           <Metric label="平均分" value={summary?.averageRating === null || summary?.averageRating === undefined ? "-" : summary.averageRating.toFixed(1)} />
         </div>
       </header>
@@ -961,11 +992,11 @@ function PrivateWorkbench({
           </span>
         </label>
         <label>
-          精選狀態
+          閱覽狀態
           <select value={filters.usedFilter} onChange={(event) => onPatchFilters({ usedFilter: event.target.value as ListFilters["usedFilter"] })}>
             <option value="all">全部</option>
-            <option value="used">精選收藏</option>
-            <option value="unused">非精選</option>
+            <option value="used">已閱</option>
+            <option value="unused">未閱</option>
           </select>
         </label>
         <label>
@@ -1069,7 +1100,7 @@ function PrivateWorkbenchV2({
   const averageRating = summary?.averageRating === null || summary?.averageRating === undefined ? "-" : summary.averageRating.toFixed(1);
   const quickFilters: Array<{ label: string; patch: Partial<ListFilters> }> = [
     { label: "9+", patch: { ratingMin: "9", ratingMax: "", favoriteLevel: "all", unrated: false } },
-    { label: "已使用", patch: { usedFilter: "used" } },
+    { label: "已閱", patch: { usedFilter: "used" } },
     { label: "收藏", patch: { favoriteLevel: "收藏" } },
     { label: "雷片", patch: { favoriteLevel: "雷片" } },
     { label: "FC2", patch: { platform: "FC2" } },
@@ -1090,8 +1121,8 @@ function PrivateWorkbenchV2({
           <summary>摘要</summary>
           <div className="private-summary-inline" aria-label="私密摘要">
             <SummaryValue label="總數" value={summaryTotal.toString()} />
-            <SummaryValue label="精選" value={used.toString()} />
-            <SummaryValue label="非精選" value={unused.toString()} />
+            <SummaryValue label="已閱" value={used.toString()} />
+            <SummaryValue label="未閱" value={unused.toString()} />
             <SummaryValue label="平均分" value={averageRating} />
             <div className="private-collection-inline" aria-label="收藏分布">
               {summary?.collectionCounts.length ? (
@@ -1264,12 +1295,6 @@ function PrivateWorkbenchV3({
             {[50, 100, 200].map((size) => <option key={size} value={size}>{size} / 頁</option>)}
           </select>
         </div>
-      </div>
-
-      <FilterChips filters={filters} activeView={PRIVATE_LIBRARY_LABEL} onClear={onClearFilters} />
-      <div className="private-count-line">
-        <span>目前 {total} 筆</span>
-        <em>{privateFilterSummary(filters)}</em>
       </div>
 
       <div className="private-list-region">
@@ -1484,17 +1509,17 @@ function PrivateRating({ item }: { item: MediaItem }) {
 
 function PrivateUsedBadge({ used }: { used: boolean }) {
   return (
-    <span className={used ? "private-used-icon used" : "private-used-icon"} title={used ? "已使用" : "未使用"} aria-label={used ? "已使用" : "未使用"}>
+    <span className={used ? "private-used-icon used" : "private-used-icon"} title={used ? "已閱" : "未閱"} aria-label={used ? "已閱" : "未閱"}>
       {used ? <Check size={14} strokeWidth={3} /> : <span aria-hidden="true">-</span>}
     </span>
   );
 }
 
 function PrivateFavoriteMark({ level }: { level: string }) {
-  const normalized = level === "已刪" || level === "已刪除" ? "刪除" : level;
+  const normalized = level === "已刪" || level === "已刪除" || level === "淘汰" ? "淘汰" : level;
   const icon = normalized === "神作"
     ? <Star size={14} fill="currentColor" />
-    : normalized === "刪除" || normalized === "雷片"
+    : normalized === "淘汰" || normalized === "雷片"
       ? <Trash2 size={14} />
       : <Bookmark size={14} fill={normalized === "收藏" ? "currentColor" : "none"} />;
   return (
@@ -1564,7 +1589,7 @@ function PrivateEmptyState({ onClear, onAdd }: { onClear: () => void; onAdd: () 
 }
 
 function privateFavoriteLevel(item: MediaItem) {
-  return item.favorite_level || "一般";
+  return collectionLevelLabels[normalizeCollectionLevel(item.collection_level ?? item.favorite_level)];
 }
 
 function privateDisplayTitle(title: string, code: string) {
@@ -1587,8 +1612,8 @@ function privateFilterSummary(filters: ListFilters) {
   if (filters.favoriteLevelFilters) parts.push(`收藏 ${filterValues(filters.favoriteLevelFilters).join("、")}`);
   if (filters.favoriteLevel && filters.favoriteLevel !== "all") parts.push(filters.favoriteLevel);
   if (filters.personFilters) parts.push(`女優 ${filterValues(filters.personFilters).join("、")}`);
-  if (filters.usedFilter === "used") parts.push("已使用");
-  if (filters.usedFilter === "unused") parts.push("未使用");
+  if (filters.usedFilter === "used") parts.push("已閱");
+  if (filters.usedFilter === "unused") parts.push("未閱");
   if (filters.mediaStatus && filters.mediaStatus !== "all") parts.push(filters.mediaStatus);
   if (filters.tag) parts.push(`#${filters.tag}`);
   if (filters.query) parts.push(`搜尋：${filters.query}`);
@@ -1675,8 +1700,8 @@ function activeFilterChips(filters: ListFilters, activeView: string) {
   if (filters.highRated) chips.push("高分");
   if (filters.ratingMin || filters.ratingMax) chips.push(`評分：${filters.ratingMin || "不限"} ~ ${filters.ratingMax || "不限"}`);
   if (filters.unrated) chips.push("尚未評分");
-  if (filters.usedFilter === "used") chips.push("已使用");
-  if (filters.usedFilter === "unused") chips.push("未使用");
+  if (filters.usedFilter === "used") chips.push("已閱");
+  if (filters.usedFilter === "unused") chips.push("未閱");
   if (filters.favoriteLevel && filters.favoriteLevel !== "all") chips.push(`收藏等級：${filters.favoriteLevel}`);
   if (filters.favoriteLevelFilters?.trim()) chips.push(`收藏：${filterValues(filters.favoriteLevelFilters).join("、")}`);
   if (filters.mediaStatus && filters.mediaStatus !== "all") chips.push(`狀態：${filters.mediaStatus}`);

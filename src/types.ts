@@ -1,5 +1,7 @@
 export type ItemStatus = "raw" | "partial" | "complete" | "archived" | "deleted";
 export type WatchStatus = "plan_to_watch" | "watching" | "completed" | "paused" | "dropped" | "rewatching";
+import type { CollectionLevel } from "../shared/privateModel";
+
 export type FavoriteLevel = "神作" | "收藏" | "一般" | "雷片" | "已刪";
 export type MediaStatus = "待觀看" | "已觀看" | "想重看" | "已刪除";
 
@@ -24,6 +26,8 @@ export interface MediaItem {
   rewatch_score: number | null;
   favorite: boolean;
   favorite_level: FavoriteLevel;
+  collection_level: CollectionLevel;
+  normalized_code: string | null;
   used: boolean;
   is_private: boolean;
   status: ItemStatus;
@@ -65,7 +69,13 @@ export interface PrivateSummary {
 
 export interface PrivateFacetItem {
   value: string;
+  label?: string;
   count: number;
+}
+
+export interface PrivateFacetSearchResponse {
+  facet: "actress" | "tag" | "studio";
+  items: PrivateFacetItem[];
 }
 
 export interface PrivateFacets {

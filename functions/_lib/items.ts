@@ -2,6 +2,7 @@ import { HttpError } from "./http";
 import { inboxWhereSql } from "./organization";
 import { hasPrivateSignalValues, isPrivateMarker as isPrivateMarkerValue, privateItemWhereSql, publicItemWhereSql } from "./privacy";
 import { newId, nowIso } from "./ids";
+import { isCollectionLevel, normalizeCollectionLevel, normalizeWorkCode } from "../../shared/privateModel";
 import type { Actor, Env, FavoriteLevel, ItemInput, ItemListParams, ItemRecord, ItemStatus, MediaStatus, WatchStatus, PrivateFacets, PrivateSummary } from "./types";
 
 type Row = Record<string, unknown>;
@@ -28,6 +29,8 @@ const itemColumns = [
   "rewatch_score",
   "favorite",
   "favorite_level",
+  "collection_level",
+  "normalized_code",
   "used",
   "is_private",
   "status",
@@ -184,7 +187,7 @@ function buildItemWhere(params: ItemListParams) {
     bind.push(...params.makerFilters);
   }
   if (params.favoriteLevelFilters?.length) {
-    where.push(`items.favorite_level IN (${params.favoriteLevelFilters.map(() => "?").join(", ")})`);
+    where.push(`items.collection_level IN (${params.favoriteLevelFilters.map(() => "?").join(", ")})`);
     bind.push(...params.favoriteLevelFilters);
   }
   if (params.personFilters?.length) {
@@ -334,8 +337,8 @@ function buildItemWhere(params: ItemListParams) {
 async function getPrivateSummary(env: Env, whereSql: string, bind: unknown[]): Promise<PrivateSummary> {
   const usedSql = "items.used = 1";
   const collectionWhereSql = whereSql
-    ? `${whereSql} AND items.favorite_level IS NOT NULL AND items.favorite_level != ''`
-    : "WHERE items.favorite_level IS NOT NULL AND items.favorite_level != ''";
+    ? `${whereSql} AND items.collection_level IS NOT NULL`
+    : "WHERE items.collection_level IS NOT NULL";
   const totalsStmt = env.MEDIA_LOG_DB.prepare(`
     SELECT
       COUNT(*) AS total,
@@ -344,16 +347,14 @@ async function getPrivateSummary(env: Env, whereSql: string, bind: unknown[]): P
     FROM items ${whereSql}
   `).bind(...bind);
   const collectionStmt = env.MEDIA_LOG_DB.prepare(`
-    SELECT items.favorite_level AS level, COUNT(*) AS count
+    SELECT items.collection_level AS level, COUNT(*) AS count
     FROM items ${collectionWhereSql}
-    GROUP BY items.favorite_level
-    ORDER BY CASE items.favorite_level
-      WHEN '神作' THEN 1
-      WHEN '收藏' THEN 2
-      WHEN '一般' THEN 3
-      WHEN '雷片' THEN 4
-      WHEN '已刪' THEN 5
-      ELSE 6
+    GROUP BY items.collection_level
+    ORDER BY CASE items.collection_level
+      WHEN 'masterpiece' THEN 1
+      WHEN 'normal' THEN 2
+      WHEN 'discard' THEN 3
+      ELSE 4
     END
   `).bind(...bind);
   const [totals, collections] = await Promise.all([
@@ -374,7 +375,7 @@ async function getPrivateSummary(env: Env, whereSql: string, bind: unknown[]): P
   };
 }
 
-async function getPrivateFacets(env: Env, whereSql: string, bind: unknown[]): Promise<PrivateFacets> {
+export async function getPrivateFacets(env: Env, whereSql = "WHERE items.is_private = 1", bind: unknown[] = []): Promise<PrivateFacets> {
   const bindAll = (...extra: unknown[]) => [...bind, ...extra];
   const facetRows = (rows: Array<{ value: string | null; count: number }>) =>
     rows
@@ -466,30 +467,28 @@ async function getPrivateFacets(env: Env, whereSql: string, bind: unknown[]): Pr
   `).bind(...bindAll(...bind, ...bind, ...bind, ...bind));
 
   const favoriteStmt = env.MEDIA_LOG_DB.prepare(`
-    SELECT items.favorite_level AS value, COUNT(*) AS count
+    SELECT items.collection_level AS value, COUNT(*) AS count
     FROM items ${whereSql}
     WHERE_PLACEHOLDER
   `.replace(
     "WHERE_PLACEHOLDER",
     whereSql
-      ? "AND items.favorite_level IN ('神作', '收藏', '一般', '雷片', '已刪')"
-      : "WHERE items.favorite_level IN ('神作', '收藏', '一般', '雷片', '已刪')"
+      ? "AND items.collection_level IN ('unset', 'masterpiece', 'normal', 'discard')"
+      : "WHERE items.collection_level IN ('unset', 'masterpiece', 'normal', 'discard')"
   ) + `
-    GROUP BY items.favorite_level
-    ORDER BY CASE items.favorite_level
-      WHEN '神作' THEN 1
-      WHEN '收藏' THEN 2
-      WHEN '一般' THEN 3
-      WHEN '雷片' THEN 4
-      WHEN '已刪' THEN 5
-      ELSE 6
+    GROUP BY items.collection_level
+    ORDER BY CASE items.collection_level
+      WHEN 'masterpiece' THEN 1
+      WHEN 'normal' THEN 2
+      WHEN 'discard' THEN 3
+      ELSE 4
     END
   `).bind(...bind);
 
   const usedStmt = env.MEDIA_LOG_DB.prepare(`
-    SELECT '已使用' AS value, SUM(CASE WHEN items.used = 1 THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
+    SELECT '已閱' AS value, SUM(CASE WHEN items.used = 1 THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
     UNION ALL
-    SELECT '未使用' AS value, SUM(CASE WHEN items.used = 0 THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
+    SELECT '未閱' AS value, SUM(CASE WHEN items.used = 0 THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
   `).bind(...bindAll(...bind));
 
   const statusStmt = env.MEDIA_LOG_DB.prepare(`
@@ -533,6 +532,56 @@ async function getPrivateFacets(env: Env, whereSql: string, bind: unknown[]): Pr
   };
 }
 
+export async function getPrivateFacetsForFilters(env: Env, params: ItemListParams) {
+  const { whereSql, bind } = buildItemWhere({ ...params, privateOnly: true, includePrivate: true, includeFacets: false });
+  return getPrivateFacets(env, whereSql, bind);
+}
+
+export async function searchPrivateFacet(env: Env, facet: "actress" | "tag" | "studio", query: string, limit: number) {
+  const safeLimit = Math.min(50, Math.max(1, limit));
+  const normalizedQuery = query.trim().toLowerCase();
+  const like = `%${normalizedQuery.replace(/[\\%_]/g, "\\$&")}%`;
+  if (facet === "actress") {
+    const result = await env.MEDIA_LOG_DB.prepare(`
+      SELECT people.name AS value, COUNT(DISTINCT item_people.item_id) AS count
+      FROM people
+      JOIN item_people ON item_people.person_id = people.id
+      JOIN items ON items.id = item_people.item_id
+      WHERE items.is_private = 1 AND items.status != 'deleted'
+        AND (? = '' OR lower(trim(people.name)) LIKE ? ESCAPE '\\')
+      GROUP BY people.id, people.name
+      ORDER BY count DESC, value COLLATE NOCASE
+      LIMIT ?
+    `).bind(normalizedQuery, like, safeLimit).all<{ value: string; count: number }>();
+    return (result.results || []).map((row) => ({ value: row.value, label: row.value, count: Number(row.count) }));
+  }
+  if (facet === "tag") {
+    const result = await env.MEDIA_LOG_DB.prepare(`
+      SELECT tags.name AS value, COUNT(DISTINCT item_tags.item_id) AS count
+      FROM tags
+      JOIN item_tags ON item_tags.tag_id = tags.id
+      JOIN items ON items.id = item_tags.item_id
+      WHERE items.is_private = 1 AND items.status != 'deleted'
+        AND (? = '' OR lower(trim(tags.name)) LIKE ? ESCAPE '\\')
+      GROUP BY tags.id, tags.name
+      ORDER BY count DESC, value COLLATE NOCASE
+      LIMIT ?
+    `).bind(normalizedQuery, like, safeLimit).all<{ value: string; count: number }>();
+    return (result.results || []).map((row) => ({ value: row.value, label: row.value, count: Number(row.count) }));
+  }
+  const result = await env.MEDIA_LOG_DB.prepare(`
+    SELECT items.maker AS value, COUNT(*) AS count
+    FROM items
+    WHERE items.is_private = 1 AND items.status != 'deleted'
+      AND items.maker IS NOT NULL AND trim(items.maker) != ''
+      AND (? = '' OR lower(trim(items.maker)) LIKE ? ESCAPE '\\')
+    GROUP BY items.maker
+    ORDER BY count DESC, value COLLATE NOCASE
+    LIMIT ?
+  `).bind(normalizedQuery, like, safeLimit).all<{ value: string; count: number }>();
+  return (result.results || []).map((row) => ({ value: row.value, label: row.value, count: Number(row.count) }));
+}
+
 function listOrderSql(params: ItemListParams) {
   if (params.mediaStatus === "待觀看") return "ORDER BY datetime(coalesce(planned_at, created_at)) DESC, id DESC";
   if (params.mediaStatus === "已觀看" || params.mediaStatus === "想重看") return "ORDER BY datetime(coalesce(watched_at, updated_at, created_at)) DESC, id DESC";
@@ -560,10 +609,12 @@ export async function getItem(env: Env, id: string) {
 export async function createItem(env: Env, actor: Actor, input: ItemInput) {
   const rawTitle = cleanString(input.raw_title);
   if (!rawTitle) throw new HttpError(400, "raw_title is required");
+  if (input.collection_level !== undefined && !isCollectionLevel(input.collection_level)) throw new HttpError(400, "Invalid collection_level");
 
   const id = newId("item");
   const timestamp = nowIso();
   const normalized = normalizeInput(input);
+  await assertUniqueNormalizedCode(env, normalized.normalized_code, undefined, input.code);
   const status = normalized.status || "raw";
 
   await env.MEDIA_LOG_DB.batch([
@@ -571,9 +622,9 @@ export async function createItem(env: Env, actor: Actor, input: ItemInput) {
       .prepare(`INSERT INTO items (
         id, raw_title, official_title, original_title, code, type, category, platform, maker, series,
         release_year, year, watched_at, started_at, completed_at, planned_at, rating, rewatch_score,
-        favorite, favorite_level, used, is_private, status, media_status, quick_note, long_note,
+        favorite, favorite_level, collection_level, normalized_code, used, is_private, status, media_status, quick_note, long_note,
         source_url, cover_url, metadata_json, progress_json, search_text, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(
         id,
         rawTitle,
@@ -595,6 +646,8 @@ export async function createItem(env: Env, actor: Actor, input: ItemInput) {
         normalized.rewatch_score,
         normalized.favorite ? 1 : 0,
         normalized.favorite_level,
+        normalized.collection_level,
+        normalized.normalized_code,
         normalized.used ? 1 : 0,
         normalized.is_private ? 1 : 0,
         status,
@@ -620,7 +673,9 @@ export async function updateItem(env: Env, actor: Actor, id: string, input: Item
   await getItem(env, id);
   const rawTitle = cleanString(input.raw_title);
   if (!rawTitle) throw new HttpError(400, "raw_title is required");
+  if (input.collection_level !== undefined && !isCollectionLevel(input.collection_level)) throw new HttpError(400, "Invalid collection_level");
   const normalized = normalizeInput(input);
+  await assertUniqueNormalizedCode(env, normalized.normalized_code, id, input.code);
   const status = normalized.status || inferStatus(normalized);
 
   await env.MEDIA_LOG_DB.batch([
@@ -629,7 +684,7 @@ export async function updateItem(env: Env, actor: Actor, id: string, input: Item
         raw_title = ?, official_title = ?, original_title = ?, code = ?, type = ?,
         category = ?, platform = ?, maker = ?, series = ?, release_year = ?, year = ?, watched_at = ?, started_at = ?,
         completed_at = ?, planned_at = ?, rating = ?, rewatch_score = ?, favorite = ?,
-        favorite_level = ?, used = ?, is_private = ?, status = ?, media_status = ?,
+        favorite_level = ?, collection_level = ?, normalized_code = ?, used = ?, is_private = ?, status = ?, media_status = ?,
         quick_note = ?, long_note = ?, source_url = ?, cover_url = ?,
         metadata_json = ?, progress_json = ?, search_text = ?, updated_at = ?
         WHERE id = ?`)
@@ -653,6 +708,8 @@ export async function updateItem(env: Env, actor: Actor, id: string, input: Item
         normalized.rewatch_score,
         normalized.favorite ? 1 : 0,
         normalized.favorite_level,
+        normalized.collection_level,
+        normalized.normalized_code,
         normalized.used ? 1 : 0,
         normalized.is_private ? 1 : 0,
         status,
@@ -679,9 +736,9 @@ function insertItemStatement(env: Env, id: string, timestamp: string, normalized
     .prepare(`INSERT INTO items (
       id, raw_title, official_title, original_title, code, type, category, platform, maker, series,
       release_year, year, watched_at, started_at, completed_at, planned_at, rating, rewatch_score,
-      favorite, favorite_level, used, is_private, status, media_status, quick_note, long_note,
+      favorite, favorite_level, collection_level, normalized_code, used, is_private, status, media_status, quick_note, long_note,
       source_url, cover_url, metadata_json, progress_json, search_text, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(
       id,
       normalized.raw_title,
@@ -703,6 +760,8 @@ function insertItemStatement(env: Env, id: string, timestamp: string, normalized
       normalized.rewatch_score,
       normalized.favorite ? 1 : 0,
       normalized.favorite_level,
+      normalized.collection_level,
+      normalized.normalized_code,
       normalized.used ? 1 : 0,
       normalized.is_private ? 1 : 0,
       normalized.status,
@@ -723,7 +782,7 @@ export async function softDeleteItem(env: Env, actor: Actor, id: string) {
   await getItem(env, id);
   await env.MEDIA_LOG_DB.batch([
     env.MEDIA_LOG_DB
-      .prepare("UPDATE items SET status = 'deleted', media_status = '已刪除', favorite_level = '已刪', deleted_at = ?, updated_at = ? WHERE id = ?")
+      .prepare("UPDATE items SET status = 'deleted', media_status = '已刪除', favorite_level = '已刪', collection_level = 'discard', deleted_at = ?, updated_at = ? WHERE id = ?")
       .bind(nowIso(), nowIso(), id),
     audit(env, actor, "soft_delete", "item", id, {})
   ]);
@@ -995,6 +1054,8 @@ async function hydrateItems(env: Env, rows: Row[]): Promise<ItemRecord[]> {
     rewatch_score: nullableNumber(row.rewatch_score),
     favorite: Boolean(row.favorite),
     favorite_level: normalizeFavoriteLevel(nullableString(row.favorite_level), Boolean(row.favorite), row.rating),
+    collection_level: normalizeCollectionLevel(row.collection_level ?? row.favorite_level ?? row.favorite),
+    normalized_code: nullableString(row.normalized_code) || normalizeWorkCode(row.code) || null,
     used: Boolean(row.used),
     is_private: Boolean(row.is_private),
     status: String(row.status || "raw") as ItemStatus,
@@ -1058,7 +1119,8 @@ function appendRelationStatements(env: Env, statements: D1PreparedStatement[], i
 
 function normalizeInput(input: ItemInput): NormalizedInput {
   const rawTitle = cleanString(input.raw_title) || "";
-  const code = cleanString(input.code);
+  const normalizedCode = normalizeWorkCode(input.code);
+  const code = normalizedCode || cleanString(input.code);
   const metadata = parseMetadata(input.metadata_json);
   const parsed = parseCode(code || rawTitle);
   const platform = normalizePlatform(cleanString(input.platform), parsed);
@@ -1066,6 +1128,7 @@ function normalizeInput(input: ItemInput): NormalizedInput {
   const series = cleanString(input.series) || metadataString(metadata, ["series"]) || parsed.series;
   const year = nullableNumber(input.year ?? input.release_year ?? metadataNumber(metadata, ["year", "releaseYear"]));
   const favoriteLevel = normalizeFavoriteLevel(input.favorite_level || metadataString(metadata, ["favorite_level", "collection_level"]) || reflectionString(metadata, "collection_level"), input.favorite, input.rating);
+  const collectionLevel = normalizeCollectionLevel(input.collection_level ?? input.favorite_level ?? input.favorite);
   const used = input.used ?? metadataBool(metadata, ["used", "is_used", "viewed"]);
   const mediaStatus = normalizeMediaStatus(input.media_status, input.status, input.progress_json);
   const quickNote = cleanString(input.quick_note);
@@ -1092,6 +1155,8 @@ function normalizeInput(input: ItemInput): NormalizedInput {
     rewatch_score: clampNumber(input.rewatch_score, 0, 10),
     favorite: Boolean(input.favorite),
     favorite_level: favoriteLevel,
+    collection_level: collectionLevel,
+    normalized_code: normalizedCode || null,
     used: Boolean(used),
     is_private: Boolean(input.is_private) || hasPrivateSignal(input),
     status: input.status || "raw",
@@ -1110,6 +1175,26 @@ function normalizeInput(input: ItemInput): NormalizedInput {
     ...normalized,
     search_text: buildSearchText(normalized)
   };
+}
+
+async function assertUniqueNormalizedCode(env: Env, normalizedCode: string | null, currentId?: string, inputCode?: unknown) {
+  if (!normalizedCode) return;
+  const existing = await env.MEDIA_LOG_DB.prepare(`
+    SELECT id, code, raw_title, official_title
+    FROM items
+    WHERE normalized_code = ? AND status != 'deleted' ${currentId ? "AND id != ?" : ""}
+    LIMIT 1
+  `).bind(normalizedCode, ...(currentId ? [currentId] : [])).first<Row>();
+  if (!existing) return;
+  throw new HttpError(409, "作品代號已存在", {
+    inputCode: typeof inputCode === "string" ? inputCode : "",
+    normalizedCode,
+    existing: {
+      id: String(existing.id),
+      code: nullableString(existing.code),
+      title: nullableString(existing.official_title) || String(existing.raw_title || "")
+    }
+  });
 }
 
 function hasPrivateSignal(input: ItemInput) {

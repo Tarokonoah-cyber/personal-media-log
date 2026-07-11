@@ -5,6 +5,7 @@ import { collectionLevelOptions, getReflectionFromMetadata, mergeReflectionMetad
 import { classifyItem, libraryTree } from "../lib/taxonomy";
 import { getWatchProgress, getWatchStatus, isSeriesLike, updateWatchProgress, watchStatuses } from "../lib/watch";
 import type { ItemInput, MediaItem, WatchStatus } from "../types";
+import { collectionLevelLabels, collectionLevels, normalizeCollectionLevel, type CollectionLevel } from "../../shared/privateModel";
 
 const platformOptions = ["Netflix", "Disney+", "Prime Video", "Apple TV+", "HBO Max", "YouTube", "Crunchyroll", "電影院", "DVD / BD", "其他"];
 
@@ -236,9 +237,13 @@ function PrivateForm({
         <h3>私密紀錄</h3>
         <div className="form-grid nested">
           <Field label="評分（0-10）" value={form.rating} onChange={(value) => setForm({ ...form, rating: value })} inputMode="decimal" />
-          <label className="check"><input type="checkbox" checked={form.used} onChange={(event) => setForm({ ...form, used: event.target.checked })} />已使用</label>
+          <fieldset className="private-viewed-status">
+            <legend>閱覽狀態</legend>
+            <label><input type="radio" name="viewed-status" checked={!form.used} onChange={() => setForm({ ...form, used: false })} />未閱</label>
+            <label><input type="radio" name="viewed-status" checked={form.used} onChange={() => setForm({ ...form, used: true })} />已閱</label>
+          </fieldset>
           <SelectField label="狀態" value={form.media_status} options={["待觀看", "已觀看", "想重看", "已刪除"]} onChange={(value) => setForm({ ...form, media_status: value as FormState["media_status"] })} />
-          <SelectField label="收藏等級" value={form.collection_level} options={collectionLevelOptions} onChange={(value) => setForm({ ...form, collection_level: value })} />
+          <CollectionLevelField value={normalizeCollectionLevel(form.collection_level)} onChange={(value) => setForm({ ...form, collection_level: value })} />
           <Field label="標籤" value={form.tags} onChange={(value) => setForm({ ...form, tags: value })} />
           <label className="wide">快速筆記<textarea value={form.quick_note} onChange={(event) => setForm({ ...form, quick_note: event.target.value })} rows={3} /></label>
           <label className="wide">完整心得<textarea value={form.long_note} onChange={(event) => setForm({ ...form, long_note: event.target.value })} rows={6} /></label>
@@ -254,6 +259,20 @@ function Field({ label, value, onChange, required, type = "text", inputMode }: {
       {label}
       <input value={value} onChange={(event) => onChange(event.target.value)} required={required} type={type} inputMode={inputMode} />
     </label>
+  );
+}
+
+export function CollectionLevelField({ value, onChange }: { value: CollectionLevel; onChange: (value: CollectionLevel) => void }) {
+  return (
+    <fieldset className="collection-level-control">
+      <legend>收藏等級</legend>
+      {collectionLevels.map((level) => (
+        <label key={level} className={value === level ? "active" : ""}>
+          <input type="radio" name="collection-level" value={level} checked={value === level} onChange={() => onChange(level)} />
+          <span>{collectionLevelLabels[level]}</span>
+        </label>
+      ))}
+    </fieldset>
   );
 }
 
@@ -325,7 +344,7 @@ function toForm(item: MediaItem) {
     collections: item.collections.join(", "),
     mood: reflection.mood,
     rewatch_intent: reflection.rewatch_intent,
-    collection_level: String(item.favorite_level || reflection.collection_level || ""),
+    collection_level: isPrivate ? normalizeCollectionLevel(item.collection_level ?? item.favorite_level ?? reflection.collection_level) : String(item.favorite_level || reflection.collection_level || ""),
     media_status: item.media_status || "待觀看",
     used: item.used || privateUsedValue(metadata),
     private_code: details.code !== "-" ? details.code : "",
@@ -411,6 +430,7 @@ function toPrivateInput(form: FormState): ItemInput {
     rewatch_score: null,
     favorite: false,
     favorite_level: favoriteLevel(form.collection_level, numberOrNull(form.rating)),
+    collection_level: normalizeCollectionLevel(form.collection_level),
     used: form.used,
     is_private: true,
     media_status: form.media_status as ItemInput["media_status"],
