@@ -1331,6 +1331,8 @@ function PrivateWorkbenchV3({
 
   const activeView = savedViews.find((view) => view.id === activeSavedView);
   const savedViewDirty = activeView ? savedViewSignature(filters, columnPreferences) !== savedViewSignature(activeView.filters, activeView.tablePreferences) : false;
+  const visibleStart = total === 0 || items.length === 0 ? 0 : (filters.page - 1) * filters.pageSize + 1;
+  const visibleEnd = items.length === 0 ? 0 : Math.min(total, (filters.page - 1) * filters.pageSize + items.length);
 
   return (
     <section className="private-workbench">
@@ -1341,7 +1343,7 @@ function PrivateWorkbenchV3({
         </label>
         <div className="private-toolbar-actions">
           <button className="filter-toggle advanced-filter" onClick={onOpenAdvanced}><SlidersHorizontal size={16} />進階篩選</button>
-          <button className="filter-chip-clear" onClick={onClearFilters} disabled={!hasPrivateFilters(filters)}>清除篩選</button>
+          {hasPrivateFilters(filters) && <button className="filter-chip-clear" onClick={onClearFilters}>清除篩選</button>}
           <div className="private-columns-menu">
             <button className="filter-toggle column-toggle" onClick={() => setColumnsOpen((value) => !value)}><Columns3 size={16} />欄位</button>
             {columnsOpen && (
@@ -1368,14 +1370,6 @@ function PrivateWorkbenchV3({
           </div>
           <button className="primary" onClick={onAdd}><Plus size={16} />新增</button>
         </div>
-        <div className="pagination-controls private-pagination">
-          <button disabled={filters.page <= 1} onClick={() => onPatchFilters({ page: filters.page - 1 })}>上一頁</button>
-          <span>{filters.page} / {pageCount}</span>
-          <button disabled={filters.page >= pageCount} onClick={() => onPatchFilters({ page: filters.page + 1 })}>下一頁</button>
-          <select value={filters.pageSize} onChange={(event) => updatePageSize(Number(event.target.value))} aria-label="每頁筆數">
-            {[50, 100, 200].map((size) => <option key={size} value={size}>{size} / 頁</option>)}
-          </select>
-        </div>
       </div>
 
       <div className="private-list-region">
@@ -1398,6 +1392,17 @@ function PrivateWorkbenchV3({
             />
           </>
         )}
+        <div className="private-table-footer">
+          <span>顯示 {visibleStart}-{visibleEnd} / {total}</span>
+          <div className="pagination-controls private-pagination" aria-label="分頁">
+            <button disabled={filters.page <= 1} onClick={() => onPatchFilters({ page: filters.page - 1 })}>上一頁</button>
+            <span>{filters.page} / {pageCount}</span>
+            <button disabled={filters.page >= pageCount} onClick={() => onPatchFilters({ page: filters.page + 1 })}>下一頁</button>
+            <select value={filters.pageSize} onChange={(event) => updatePageSize(Number(event.target.value))} aria-label="每頁筆數">
+              {[50, 100, 200].map((size) => <option key={size} value={size}>{size} / 頁</option>)}
+            </select>
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -1428,6 +1433,7 @@ function PrivateDataTable({
   const [quickError, setQuickError] = useState("");
   const quickTrigger = useRef<HTMLButtonElement | null>(null);
   const totalWidth = columns.reduce((sum, column) => sum + preferences.widths[column.id], 0);
+  const nonTitleWidth = columns.reduce((sum, column) => sum + (column.id === "title" ? 0 : preferences.widths[column.id]), 0);
 
   function updateWidth(column: PrivateColumnDefinition, width: number) {
     onPreferencesChange((current) => normalizePrivateTablePreferences({
@@ -1487,7 +1493,16 @@ function PrivateDataTable({
     <div className="private-data-table-wrap">
       <table className="private-data-table private-dense-table" style={{ "--private-table-width": `${Math.max(totalWidth, 760)}px` } as CSSProperties}>
         <colgroup>
-          {columns.map((column) => <col key={column.id} style={{ width: preferences.widths[column.id] }} />)}
+          {columns.map((column) => (
+            <col
+              key={column.id}
+              style={{
+                width: column.id === "title"
+                  ? `max(${preferences.widths[column.id]}px, calc(100% - ${nonTitleWidth}px))`
+                  : preferences.widths[column.id]
+              }}
+            />
+          ))}
         </colgroup>
         <thead>
           <tr>

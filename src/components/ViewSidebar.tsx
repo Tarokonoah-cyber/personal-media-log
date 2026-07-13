@@ -145,7 +145,7 @@ export function ViewSidebar({
             showText={showText}
             collapsed={collapsed}
             title="私密工作台"
-            subtitle={`${privateSummary?.total || 0} 筆`}
+            subtitle={`${privateSummary?.total || 0} 筆作品`}
             onToggleCollapsed={onToggleCollapsed}
             onCloseMobile={onCloseMobile}
           />
