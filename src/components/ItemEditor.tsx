@@ -1,5 +1,7 @@
 import { Save, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { TagEditor } from "./TagEditor";
+import { fieldsToPrivateStatus, privateStatusLabels, privateStatusOptions, privateStatusToFields, type PrivateUiStatus } from "../lib/privateStatus";
 import { isPrivateItem, PRIVATE_LIBRARY_LABEL, privateItemDetails } from "../lib/privacy";
 import { collectionLevelOptions, getReflectionFromMetadata, mergeReflectionMetadata, moodOptions, rewatchIntentOptions } from "../lib/reflection";
 import { classifyItem, libraryTree } from "../lib/taxonomy";
@@ -12,12 +14,14 @@ const platformOptions = ["Netflix", "Disney+", "Prime Video", "Apple TV+", "HBO 
 export function ItemEditor({
   item,
   privateMode = false,
+  knownTags = [],
   onClose,
   onSave,
   onDelete
 }: {
   item: MediaItem;
   privateMode?: boolean;
+  knownTags?: string[];
   onClose: () => void;
   onSave: (input: ItemInput) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -93,9 +97,9 @@ export function ItemEditor({
         {error && <div className="notice danger">{error}</div>}
 
         {privateEditor ? (
-          <PrivateForm form={form} setForm={setForm} />
+          <PrivateForm form={form} setForm={setForm} knownTags={knownTags} />
         ) : (
-          <GeneralForm form={form} setForm={setForm} seriesLike={seriesLike} metadataOpen={metadataOpen} setMetadataOpen={setMetadataOpen} />
+          <GeneralForm form={form} setForm={setForm} seriesLike={seriesLike} metadataOpen={metadataOpen} setMetadataOpen={setMetadataOpen} knownTags={knownTags} />
         )}
 
         <footer className="drawer-actions">
@@ -112,13 +116,15 @@ function GeneralForm({
   setForm,
   seriesLike,
   metadataOpen,
-  setMetadataOpen
+  setMetadataOpen,
+  knownTags
 }: {
   form: FormState;
   setForm: (form: FormState) => void;
   seriesLike: boolean;
   metadataOpen: boolean;
   setMetadataOpen: (open: boolean | ((open: boolean) => boolean)) => void;
+  knownTags: string[];
 }) {
   return (
     <div className="form-stack">
@@ -191,7 +197,7 @@ function GeneralForm({
           <SelectField label="重看" value={form.rewatch_intent} options={rewatchIntentOptions} onChange={(value) => setForm({ ...form, rewatch_intent: value })} />
           <SelectField label="收藏等級" value={form.collection_level} options={collectionLevelOptions} onChange={(value) => setForm({ ...form, collection_level: value })} />
           <label className="check"><input type="checkbox" checked={form.favorite} onChange={(event) => setForm({ ...form, favorite: event.target.checked })} />星標收藏</label>
-          <Field label="標籤" value={form.tags} onChange={(value) => setForm({ ...form, tags: value })} />
+          <TagEditor tags={form.tags} knownTags={knownTags} onChange={(tags) => setForm({ ...form, tags })} />
           <label className="wide">快速筆記<textarea value={form.quick_note} onChange={(event) => setForm({ ...form, quick_note: event.target.value })} rows={3} /></label>
           <label className="wide">長筆記<textarea value={form.long_note} onChange={(event) => setForm({ ...form, long_note: event.target.value })} rows={6} /></label>
         </div>
@@ -213,10 +219,12 @@ function GeneralForm({
 
 function PrivateForm({
   form,
-  setForm
+  setForm,
+  knownTags
 }: {
   form: FormState;
   setForm: (form: FormState) => void;
+  knownTags: string[];
 }) {
   return (
     <div className="form-stack private-form-grid">
@@ -237,19 +245,28 @@ function PrivateForm({
         <h3>私密紀錄</h3>
         <div className="form-grid nested">
           <Field label="評分（0-10）" value={form.rating} onChange={(value) => setForm({ ...form, rating: value })} inputMode="decimal" />
-          <fieldset className="private-viewed-status">
-            <legend>閱覽狀態</legend>
-            <label><input type="radio" name="viewed-status" checked={!form.used} onChange={() => setForm({ ...form, used: false })} />未閱</label>
-            <label><input type="radio" name="viewed-status" checked={form.used} onChange={() => setForm({ ...form, used: true })} />已閱</label>
-          </fieldset>
-          <SelectField label="狀態" value={form.media_status} options={["待觀看", "已觀看", "想重看", "已刪除"]} onChange={(value) => setForm({ ...form, media_status: value as FormState["media_status"] })} />
+          <PrivateStatusField value={form.private_status} onChange={(private_status) => setForm({ ...form, private_status, ...privateStatusToFields(private_status) })} />
           <CollectionLevelField value={normalizeCollectionLevel(form.collection_level)} onChange={(value) => setForm({ ...form, collection_level: value })} />
-          <Field label="標籤" value={form.tags} onChange={(value) => setForm({ ...form, tags: value })} />
+          <TagEditor tags={form.tags} knownTags={knownTags} onChange={(tags) => setForm({ ...form, tags })} />
           <label className="wide">快速筆記<textarea value={form.quick_note} onChange={(event) => setForm({ ...form, quick_note: event.target.value })} rows={3} /></label>
           <label className="wide">完整心得<textarea value={form.long_note} onChange={(event) => setForm({ ...form, long_note: event.target.value })} rows={6} /></label>
         </div>
       </section>
     </div>
+  );
+}
+
+function PrivateStatusField({ value, onChange }: { value: PrivateUiStatus; onChange: (value: PrivateUiStatus) => void }) {
+  return (
+    <fieldset className="private-status-control">
+      <legend>狀態</legend>
+      {privateStatusOptions.map((status) => (
+        <label key={status} className={value === status ? "active" : ""}>
+          <input type="radio" name="private-status" value={status} checked={value === status} onChange={() => onChange(status)} />
+          <span>{privateStatusLabels[status]}</span>
+        </label>
+      ))}
+    </fieldset>
   );
 }
 
@@ -310,6 +327,8 @@ function toForm(item: MediaItem) {
   const privateTitle = details.title === "-" ? "" : details.title;
   const privateType = details.type === PRIVATE_LIBRARY_LABEL ? "" : details.type;
   const isPrivate = item.is_private || isPrivateItem(item);
+  const mediaStatus = item.media_status || "待觀看";
+  const used = item.used || privateUsedValue(metadata);
   return {
     raw_title: item.raw_title,
     official_title: item.official_title || "",
@@ -339,14 +358,15 @@ function toForm(item: MediaItem) {
     source_url: item.source_url || "",
     cover_url: item.cover_url || "",
     metadata_json: item.metadata_json || "",
-    tags: item.tags.join(", "),
+    tags: item.tags,
     people: item.people.join(", "),
     collections: item.collections.join(", "),
     mood: reflection.mood,
     rewatch_intent: reflection.rewatch_intent,
     collection_level: isPrivate ? normalizeCollectionLevel(item.collection_level ?? item.favorite_level ?? reflection.collection_level) : String(item.favorite_level || reflection.collection_level || ""),
-    media_status: item.media_status || "待觀看",
-    used: item.used || privateUsedValue(metadata),
+    media_status: mediaStatus,
+    used,
+    private_status: fieldsToPrivateStatus({ used, media_status: mediaStatus }),
     private_code: details.code !== "-" ? details.code : "",
     private_title: privateTitle,
     private_performers: details.performers !== "-" ? details.performers : metadataList(metadata, ["actresses", "performers", "cast", "actors"]),
@@ -385,7 +405,7 @@ function toInput(form: FormState): ItemInput {
     source_url: emptyToNull(form.source_url),
     cover_url: emptyToNull(form.cover_url),
     metadata_json: metadataToString(metadata),
-    tags: splitList(form.tags),
+    tags: form.tags,
     people: splitList(form.people),
     collections: splitList(form.collections),
     ...progressPatch
@@ -408,7 +428,8 @@ function toPrivateInput(form: FormState): ItemInput {
     type: privateType
   });
   const metadataWithReflection = mergeReflectionMetadata(JSON.stringify(metadata), privateReflectionInput(form));
-  const metadataWithUsed = mergePrivateUsedMetadata(JSON.stringify(metadataWithReflection), form.used);
+  const statusFields = privateStatusToFields(form.private_status);
+  const metadataWithUsed = mergePrivateUsedMetadata(JSON.stringify(metadataWithReflection), statusFields.used);
 
   return {
     raw_title: title || code || form.raw_title,
@@ -431,15 +452,15 @@ function toPrivateInput(form: FormState): ItemInput {
     favorite: false,
     favorite_level: favoriteLevel(form.collection_level, numberOrNull(form.rating)),
     collection_level: normalizeCollectionLevel(form.collection_level),
-    used: form.used,
+    used: statusFields.used,
     is_private: true,
-    media_status: form.media_status as ItemInput["media_status"],
+    media_status: statusFields.media_status,
     quick_note: emptyToNull(form.quick_note),
     long_note: emptyToNull(form.long_note),
     source_url: emptyToNull(form.source_url),
     cover_url: emptyToNull(form.cover_url),
     metadata_json: metadataToString(metadataWithUsed),
-    tags: splitList(form.tags),
+    tags: form.tags,
     people: performers,
     collections: splitList(form.collections),
     ...privateProgressInput()

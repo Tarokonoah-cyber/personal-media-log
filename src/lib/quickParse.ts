@@ -53,10 +53,12 @@ function parsePrivateQuickEntry(input: string): ItemInput {
     code: code || null,
     type: PRIVATE_LIBRARY_LABEL,
     is_private: true,
-    watched_at: watchedAt,
+    watched_at: watchedAt || formatDate(new Date()),
     rating,
+    used: true,
+    media_status: "已觀看",
     quick_note: null,
-    metadata_json: JSON.stringify(metadata),
+    metadata_json: JSON.stringify({ ...metadata, used: true }),
     tags,
     status: "raw"
   };

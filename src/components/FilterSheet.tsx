@@ -60,7 +60,7 @@ function PrivateFilters({ filters, onChange }: { filters: ListFilters; onChange:
         <Field label="系列 / 番號前綴" value={filters.series} onChange={(value) => onChange({ series: value })} placeholder="SSIS / IPZZ / FC2PPV" />
         <Field label="評分下限" value={filters.ratingMin} inputMode="decimal" onChange={(value) => onChange({ ratingMin: value, unrated: false })} />
         <Field label="評分上限" value={filters.ratingMax} inputMode="decimal" onChange={(value) => onChange({ ratingMax: value, unrated: false })} />
-        <Select label="閱覽狀態" value={filters.usedFilter} options={["all", "used", "unused"]} labels={{ all: "全部", used: "已閱", unused: "未閱" }} onChange={(value) => onChange({ usedFilter: value as ListFilters["usedFilter"] })} />
+        <Select label="狀態" value={filters.usedFilter} options={["all", "used", "unused"]} labels={{ all: "全部", used: "完成", unused: "待處理" }} onChange={(value) => onChange({ usedFilter: value as ListFilters["usedFilter"] })} />
         <OptionSelect label="狀態" value={filters.mediaStatus || "all"} options={mediaStatuses} allLabel="全部" onChange={(value) => onChange({ mediaStatus: value as ListFilters["mediaStatus"] })} />
         <Field label="年份" value={filters.year} inputMode="numeric" onChange={(value) => onChange({ year: value })} />
         <OptionSelect label="標籤" value={filters.tag} options={tags} onChange={(value) => onChange({ tag: value })} />

@@ -10,6 +10,7 @@ import { MetadataLookupModal } from "./components/MetadataLookupModal";
 import { QuickCapture } from "./components/QuickCapture";
 import { SmartOrganizer } from "./components/SmartOrganizer";
 import { StatsPanel } from "./components/StatsPanel";
+import { TagEditor } from "./components/TagEditor";
 import { Toast } from "./components/Toast";
 import { ViewSidebar } from "./components/ViewSidebar";
 import { PrivateQualityCenter } from "./components/PrivateQualityCenter";
@@ -18,9 +19,11 @@ import { mergePrivateFilters } from "./lib/privateFilters";
 import { collectionLevelLabels, collectionLevels, normalizeCollectionLevel } from "../shared/privateModel";
 import { createSavedView, readSavedViews, savedViewSignature, writeSavedViews, type SavedPrivateView } from "./lib/savedViews";
 import { toItemInput } from "./lib/itemTransforms";
-import { isPrivateItem, isPrivateLibraryLabel, isPrivateMarker, privateItemDetails, PRIVATE_LIBRARY_LABEL, PRIVATE_RECOMMENDED_LABEL, PRIVATE_RECOMMENDED_TAG } from "./lib/privacy";
+import { privateStatusLabels, privateStatusOptions, privateStatusToFields, type PrivateUiStatus } from "./lib/privateStatus";
+import { isPrivateItem, isPrivateLibraryLabel, privateItemDetails, PRIVATE_LIBRARY_LABEL, PRIVATE_RECOMMENDED_LABEL, PRIVATE_RECOMMENDED_TAG } from "./lib/privacy";
 import { parseQuickEntry } from "./lib/quickParse";
 import { collectionLevelOptions } from "./lib/reflection";
+import { normalizeTags } from "./lib/tags";
 import { classifyItem, libraryTree } from "./lib/taxonomy";
 import { getWatchStatus, updateWatchProgress } from "./lib/watch";
 import type { ItemInput, ListFilters, MediaItem, PrivateFacets, PrivateSummary, SmartAddResponse, TmdbCandidate } from "./types";
@@ -97,7 +100,7 @@ const privateColumnDefinitions: PrivateColumnDefinition[] = [
   { id: "title", label: "作品代號 / 標題", width: 520, minWidth: 320, maxWidth: 900, required: true },
   { id: "rating", label: "評分", width: 78, minWidth: 64, maxWidth: 120 },
   { id: "favorite", label: "收藏", width: 68, minWidth: 56, maxWidth: 110 },
-  { id: "used", label: "已閱", width: 56, minWidth: 50, maxWidth: 90 },
+  { id: "used", label: "狀態", width: 64, minWidth: 58, maxWidth: 100 },
   { id: "actress", label: "女優", width: 180, minWidth: 120, maxWidth: 360 },
   { id: "tags", label: "標籤", width: 220, minWidth: 140, maxWidth: 420 },
   { id: "source", label: "來源", width: 140, minWidth: 100, maxWidth: 260, defaultHidden: true },
@@ -249,6 +252,11 @@ export default function App() {
     if (!includePrivate) return knownTags;
     return Array.from(new Set(items.flatMap((item) => item.tags))).sort((a, b) => a.localeCompare(b, "zh-Hant"));
   }, [includePrivate, items, knownTags]);
+  const tagSuggestions = useMemo(() => normalizeTags([
+    ...knownTags,
+    ...items.flatMap((item) => item.tags),
+    ...(privateFacets?.tags || []).map((tag) => tag.value)
+  ]).sort((a, b) => a.localeCompare(b, "zh-Hant")), [items, knownTags, privateFacets?.tags]);
   const libraryTypes = useMemo(() => new Set<string>(libraryTree.map((entry) => entry.label)), []);
   const visibleItems = useMemo(() => {
     const scopedItems = includePrivate ? items : items.filter((item) => !isPrivateItem(item));
@@ -685,6 +693,7 @@ export default function App() {
         <SmartAddPreview
           preview={smartPreview}
           draft={smartDraft}
+          knownTags={tagSuggestions}
           loading={loading}
           onChange={updateSmartDraft}
           onCancel={() => {
@@ -876,12 +885,13 @@ export default function App() {
       {simpleAddOpen && (
         <SimpleAddModal
           privateMode={includePrivate}
+          knownTags={tagSuggestions}
           loading={loading}
           onClose={() => setSimpleAddOpen(false)}
           onSubmit={submitSimpleAdd}
         />
       )}
-      {selected && <ItemEditor item={selected} privateMode={privateActive} onClose={() => setSelected(null)} onSave={saveItem} onDelete={removeItem} />}
+      {selected && <ItemEditor item={selected} privateMode={privateActive} knownTags={tagSuggestions} onClose={() => setSelected(null)} onSave={saveItem} onDelete={removeItem} />}
       {metadataTarget && (
         <MetadataLookupModal
           item={metadataTarget}
@@ -988,8 +998,8 @@ function PrivateWorkbench({
         </div>
         <div className="private-summary-grid" aria-label="私密摘要">
           <Metric label="總筆數" value={summaryTotal.toString()} />
-          <Metric label="已閱" value={used.toString()} />
-          <Metric label="未閱" value={unused.toString()} />
+          <Metric label="完成" value={used.toString()} />
+          <Metric label="待處理" value={unused.toString()} />
           <Metric label="平均分" value={summary?.averageRating === null || summary?.averageRating === undefined ? "-" : summary.averageRating.toFixed(1)} />
         </div>
       </header>
@@ -1024,11 +1034,11 @@ function PrivateWorkbench({
           </span>
         </label>
         <label>
-          閱覽狀態
+          狀態
           <select value={filters.usedFilter} onChange={(event) => onPatchFilters({ usedFilter: event.target.value as ListFilters["usedFilter"] })}>
             <option value="all">全部</option>
-            <option value="used">已閱</option>
-            <option value="unused">未閱</option>
+            <option value="used">完成</option>
+            <option value="unused">待處理</option>
           </select>
         </label>
         <label>
@@ -1132,7 +1142,7 @@ function PrivateWorkbenchV2({
   const averageRating = summary?.averageRating === null || summary?.averageRating === undefined ? "-" : summary.averageRating.toFixed(1);
   const quickFilters: Array<{ label: string; patch: Partial<ListFilters> }> = [
     { label: "9+", patch: { ratingMin: "9", ratingMax: "", favoriteLevel: "all", unrated: false } },
-    { label: "已閱", patch: { usedFilter: "used" } },
+    { label: "完成", patch: { usedFilter: "used" } },
     { label: "收藏", patch: { favoriteLevel: "收藏" } },
     { label: "雷片", patch: { favoriteLevel: "雷片" } },
     { label: "FC2", patch: { platform: "FC2" } },
@@ -1153,8 +1163,8 @@ function PrivateWorkbenchV2({
           <summary>摘要</summary>
           <div className="private-summary-inline" aria-label="私密摘要">
             <SummaryValue label="總數" value={summaryTotal.toString()} />
-            <SummaryValue label="已閱" value={used.toString()} />
-            <SummaryValue label="未閱" value={unused.toString()} />
+            <SummaryValue label="完成" value={used.toString()} />
+            <SummaryValue label="待處理" value={unused.toString()} />
             <SummaryValue label="平均分" value={averageRating} />
             <div className="private-collection-inline" aria-label="收藏分布">
               {summary?.collectionCounts.length ? (
@@ -1560,7 +1570,7 @@ function PrivateTableCell({ column, item, editing, pending, error, onOpen, onCom
   }
   if (column === "rating") return <span className="private-quick-cell"><button data-quick-trigger aria-haspopup="menu" aria-expanded={editing} disabled={pending} onClick={(event) => { event.stopPropagation(); onOpen(event.currentTarget); }}><PrivateRating item={item} /></button>{editing && <PrivateQuickEditor error={error} options={[{ value: null, label: "未評分" }, ...Array.from({ length: 10 }, (_, index) => ({ value: index + 1, label: `${index + 1}.0` }))]} onSelect={(value) => onCommit("rating", value)} />}</span>;
   if (column === "favorite") return <span className="private-quick-cell"><button data-quick-trigger aria-haspopup="menu" aria-expanded={editing} disabled={pending} onClick={(event) => { event.stopPropagation(); onOpen(event.currentTarget); }}><PrivateFavoriteMark level={privateFavoriteLevel(item)} /></button>{editing && <PrivateQuickEditor error={error} options={collectionLevels.map((value) => ({ value, label: collectionLevelLabels[value] }))} onSelect={(value) => onCommit("collection_level", value)} />}</span>;
-  if (column === "used") return <button className="private-used-quick" data-quick-trigger disabled={pending} aria-label={item.used ? "切換為未閱" : "切換為已閱"} onClick={(event) => { event.stopPropagation(); onCommit("used", !item.used); }}><PrivateUsedBadge used={item.used} /></button>;
+  if (column === "used") return <button className="private-used-quick" data-quick-trigger disabled={pending} aria-label={item.used ? "切換為待處理" : "切換為完成"} onClick={(event) => { event.stopPropagation(); onCommit("used", !item.used); }}><PrivateUsedBadge used={item.used} /></button>;
   if (column === "actress") return <span className="private-ellipsis" title={details.performers}>{details.performers || "-"}</span>;
   if (column === "tags") return <PrivateTags tags={item.tags} />;
   if (column === "source") return <PrivateSource item={item} />;
@@ -1633,7 +1643,7 @@ function PrivateRating({ item }: { item: MediaItem }) {
 
 function PrivateUsedBadge({ used }: { used: boolean }) {
   return (
-    <span className={used ? "private-used-icon used" : "private-used-icon"} title={used ? "已閱" : "未閱"} aria-label={used ? "已閱" : "未閱"}>
+    <span className={used ? "private-used-icon used" : "private-used-icon"} title={used ? "完成" : "待處理"} aria-label={used ? "完成" : "待處理"}>
       {used ? <Check size={14} strokeWidth={3} /> : <span aria-hidden="true">-</span>}
     </span>
   );
@@ -1737,8 +1747,8 @@ function privateFilterSummary(filters: ListFilters) {
   if (filters.favoriteLevelFilters) parts.push(`收藏 ${filterValues(filters.favoriteLevelFilters).join("、")}`);
   if (filters.favoriteLevel && filters.favoriteLevel !== "all") parts.push(filters.favoriteLevel);
   if (filters.personFilters) parts.push(`女優 ${filterValues(filters.personFilters).join("、")}`);
-  if (filters.usedFilter === "used") parts.push("已閱");
-  if (filters.usedFilter === "unused") parts.push("未閱");
+  if (filters.usedFilter === "used") parts.push("完成");
+  if (filters.usedFilter === "unused") parts.push("待處理");
   if (filters.mediaStatus && filters.mediaStatus !== "all") parts.push(filters.mediaStatus);
   if (filters.tag) parts.push(`#${filters.tag}`);
   if (filters.query) parts.push(`搜尋：${filters.query}`);
@@ -1825,8 +1835,8 @@ function activeFilterChips(filters: ListFilters, activeView: string) {
   if (filters.highRated) chips.push("高分");
   if (filters.ratingMin || filters.ratingMax) chips.push(`評分：${filters.ratingMin || "不限"} ~ ${filters.ratingMax || "不限"}`);
   if (filters.unrated) chips.push("尚未評分");
-  if (filters.usedFilter === "used") chips.push("已閱");
-  if (filters.usedFilter === "unused") chips.push("未閱");
+  if (filters.usedFilter === "used") chips.push("完成");
+  if (filters.usedFilter === "unused") chips.push("待處理");
   if (filters.favoriteLevel && filters.favoriteLevel !== "all") chips.push(`收藏等級：${filters.favoriteLevel}`);
   if (filters.favoriteLevelFilters?.trim()) chips.push(`收藏：${filterValues(filters.favoriteLevelFilters).join("、")}`);
   if (filters.mediaStatus && filters.mediaStatus !== "all") chips.push(`狀態：${filters.mediaStatus}`);
@@ -1866,11 +1876,13 @@ function densityLabel(density: string) {
 
 function SimpleAddModal({
   privateMode,
+  knownTags = [],
   loading,
   onClose,
   onSubmit
 }: {
   privateMode: boolean;
+  knownTags?: string[];
   loading: boolean;
   onClose: () => void;
   onSubmit: (input: ItemInput) => Promise<void>;
@@ -1879,8 +1891,9 @@ function SimpleAddModal({
     code: "",
     title: "",
     rating: "",
-    tags: "",
-    watched_at: todayDate()
+    tags: [] as string[],
+    watched_at: todayDate(),
+    private_status: "done" as PrivateUiStatus
   });
   const canSubmit = privateMode ? Boolean(draft.code.trim() || draft.title.trim()) : Boolean(draft.title.trim());
 
@@ -1911,8 +1924,16 @@ function SimpleAddModal({
           {privateMode && <Field label="番號" value={draft.code} onChange={(value) => patch({ code: value })} />}
           <Field label={privateMode ? "片名" : "標題"} value={draft.title} onChange={(value) => patch({ title: value })} required={!privateMode} />
           <Field label="評分" value={draft.rating} onChange={(value) => patch({ rating: value })} inputMode="decimal" />
-          <Field label="標籤" value={draft.tags} onChange={(value) => patch({ tags: value })} />
-          <Field label="觀看日" value={draft.watched_at} onChange={(value) => patch({ watched_at: value })} type="date" />
+          {privateMode && (
+            <label>
+              狀態
+              <select value={draft.private_status} onChange={(event) => patch({ private_status: event.target.value as PrivateUiStatus })}>
+                {privateStatusOptions.map((status) => <option key={status} value={status}>{privateStatusLabels[status]}</option>)}
+              </select>
+            </label>
+          )}
+          <TagEditor tags={draft.tags} knownTags={knownTags} onChange={(tags) => patch({ tags })} />
+          <Field label={privateMode ? "紀錄日" : "觀看日"} value={draft.watched_at} onChange={(value) => patch({ watched_at: value })} type="date" />
         </div>
         <footer className="simple-add-actions">
           <button onClick={onClose}>取消</button>
@@ -1946,12 +1967,13 @@ function Field({
   );
 }
 
-function simpleDraftToInput(draft: { code: string; title: string; rating: string; tags: string; watched_at: string }, privateMode: boolean): ItemInput {
+function simpleDraftToInput(draft: { code: string; title: string; rating: string; tags: string[]; watched_at: string; private_status: PrivateUiStatus }, privateMode: boolean): ItemInput {
   const code = draft.code.trim();
   const title = draft.title.trim();
-  const tags = splitTags(draft.tags);
+  const tags = normalizeTags(draft.tags);
   const rating = numberOrNull(draft.rating);
   if (privateMode) {
+    const statusFields = privateStatusToFields(draft.private_status);
     return {
       raw_title: title || code,
       official_title: title || null,
@@ -1962,11 +1984,13 @@ function simpleDraftToInput(draft: { code: string; title: string; rating: string
       rating,
       favorite_level: rating !== null && rating >= 9 ? "神作" : "一般",
       collection_level: "unset",
-      media_status: "已觀看",
+      used: statusFields.used,
+      media_status: statusFields.media_status,
       tags,
       metadata_json: JSON.stringify({
         ...(code ? { code } : {}),
-        ...(title ? { title } : {})
+        ...(title ? { title } : {}),
+        ...(statusFields.used ? { used: true } : {})
       }),
       status: "raw"
     };
@@ -1997,6 +2021,7 @@ function numberOrNull(value: string) {
 function SmartAddPreview({
   preview,
   draft,
+  knownTags = [],
   loading,
   onChange,
   onCancel,
@@ -2004,6 +2029,7 @@ function SmartAddPreview({
 }: {
   preview: SmartAddResponse;
   draft: ItemInput;
+  knownTags?: string[];
   loading: boolean;
   onChange: (patch: Partial<ItemInput>) => void;
   onCancel: () => void;
@@ -2037,10 +2063,7 @@ function SmartAddPreview({
           日期
           <input type="date" value={draft.watched_at || ""} onChange={(event) => onChange({ watched_at: event.target.value || null })} />
         </label>
-        <label className="wide">
-          標籤
-          <input value={(draft.tags || []).join(", ")} onChange={(event) => onChange({ tags: splitTags(event.target.value) })} placeholder="MLB, 棒球, 藍鳥" />
-        </label>
+        <TagEditor className="wide" tags={draft.tags || []} knownTags={knownTags} onChange={(tags) => onChange({ tags })} placeholder="MLB, 棒球, 藍鳥" />
       </div>
       <div className="smart-preview-actions">
         <button onClick={onCancel}>取消</button>
@@ -2048,10 +2071,6 @@ function SmartAddPreview({
       </div>
     </section>
   );
-}
-
-function splitTags(value: string) {
-  return Array.from(new Set(value.split(/[,，#]/).map((tag) => tag.trim()).filter(Boolean).filter((tag) => !isPrivateMarker(tag))));
 }
 
 function SettingsPanel({

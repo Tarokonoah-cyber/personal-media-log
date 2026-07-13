@@ -2195,6 +2195,62 @@ h2 {
   gap: 10px;
 }
 
+.tag-editor {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.tag-editor > span:first-child {
+  color: var(--muted);
+}
+
+.tag-editor-box {
+  min-width: 0;
+  min-height: 42px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--field);
+}
+
+.tag-editor-box input {
+  flex: 1 1 120px;
+  min-width: 90px;
+  border: 0;
+  padding: 5px;
+  background: transparent;
+}
+
+.tag-chip,
+.tag-suggestions button {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--panel-soft);
+  font-size: 12px;
+}
+
+.tag-chip {
+  color: var(--text);
+}
+
+.tag-suggestions {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
 .simple-add-actions {
   justify-content: flex-end;
 }
@@ -8759,7 +8815,7 @@ h2 {
 }
 
 .private-drawer .collection-level-control,
-.private-drawer .private-viewed-status {
+.private-drawer .private-status-control {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
@@ -8770,7 +8826,7 @@ h2 {
 }
 
 .private-drawer .collection-level-control legend,
-.private-drawer .private-viewed-status legend {
+.private-drawer .private-status-control legend {
   width: 100%;
   margin-bottom: 4px;
   color: var(--muted);
@@ -8778,7 +8834,7 @@ h2 {
 }
 
 .private-drawer .collection-level-control label,
-.private-drawer .private-viewed-status label {
+.private-drawer .private-status-control label {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -8791,14 +8847,14 @@ h2 {
 }
 
 .private-drawer .collection-level-control label.active,
-.private-drawer .private-viewed-status label:has(input:checked) {
+.private-drawer .private-status-control label.active {
   border-color: #2563eb;
   background: rgba(37, 99, 235, 0.1);
   color: var(--text);
 }
 
 .private-drawer .collection-level-control input,
-.private-drawer .private-viewed-status input {
+.private-drawer .private-status-control input {
   width: 14px;
   height: 14px;
   margin: 0;
