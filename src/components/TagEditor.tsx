@@ -8,6 +8,7 @@ export function TagEditor({
   knownTags = [],
   onChange,
   placeholder = "輸入後按 Enter",
+  maxSuggestions = 16,
   className = ""
 }: {
   label?: string;
@@ -15,6 +16,7 @@ export function TagEditor({
   knownTags?: string[];
   onChange: (tags: string[]) => void;
   placeholder?: string;
+  maxSuggestions?: number;
   className?: string;
 }) {
   const [draft, setDraft] = useState("");
@@ -25,8 +27,8 @@ export function TagEditor({
     return normalizeTags(knownTags)
       .filter((tag) => !existing.has(tag.toLocaleLowerCase()))
       .filter((tag) => !query || tag.toLocaleLowerCase().includes(query))
-      .slice(0, 8);
-  }, [draft, knownTags, normalizedTags]);
+      .slice(0, maxSuggestions);
+  }, [draft, knownTags, maxSuggestions, normalizedTags]);
 
   function commit(value = draft) {
     const next = addTags(normalizedTags, value);

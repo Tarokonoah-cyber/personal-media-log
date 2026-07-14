@@ -9,6 +9,12 @@ describe("saved private views", () => {
     const view = createSavedView("常用", filters, { order: ["title"] }, []);
     expect(view.schemaVersion).toBe(1); expect(view.filters.page).toBe(1); expect(view.name).toBe("常用");
   });
+  it("persists current display-name sorting", () => {
+    const view = createSavedView("名稱排序", { ...filters, sort: "displayName", order: "asc" }, { order: ["title"] }, []);
+    expect(view.filters.sort).toBe("displayName");
+    expect(view.filters.order).toBe("asc");
+    expect(view.sorting).toEqual({ field: "displayName", direction: "asc" });
+  });
   it("rejects blank and duplicate names", () => {
     expect(() => createSavedView(" ", filters, {}, [])).toThrow("不可為空");
     const existing = [createSavedView("常用", filters, {}, [])];

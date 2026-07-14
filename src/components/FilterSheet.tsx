@@ -1,8 +1,8 @@
 import { SlidersHorizontal, X } from "lucide-react";
+import { PRIVATE_TAG_PRESETS } from "../lib/tagPresets";
 import type { ListFilters } from "../types";
 
 const mediaStatuses = ["待觀看", "已觀看", "想重看", "已刪除"] as const;
-const tags = ["高顏值", "素人感", "劇情好", "畫質差", "有碼", "無碼", "雷"] as const;
 
 export function FilterSheet({
   open,
@@ -63,7 +63,7 @@ function PrivateFilters({ filters, onChange }: { filters: ListFilters; onChange:
         <Select label="狀態" value={filters.usedFilter} options={["all", "used", "unused"]} labels={{ all: "全部", used: "完成", unused: "待處理" }} onChange={(value) => onChange({ usedFilter: value as ListFilters["usedFilter"] })} />
         <OptionSelect label="狀態" value={filters.mediaStatus || "all"} options={mediaStatuses} allLabel="全部" onChange={(value) => onChange({ mediaStatus: value as ListFilters["mediaStatus"] })} />
         <Field label="年份" value={filters.year} inputMode="numeric" onChange={(value) => onChange({ year: value })} />
-        <OptionSelect label="標籤" value={filters.tag} options={tags} onChange={(value) => onChange({ tag: value })} />
+        <OptionSelect label="標籤" value={filters.tag} options={PRIVATE_TAG_PRESETS} onChange={(value) => onChange({ tag: value })} />
         <Select label="心得" value={filters.hasNote || "all"} options={["all", "yes", "no"]} labels={{ all: "全部", yes: "有心得", no: "無心得" }} onChange={(value) => onChange({ hasNote: value as ListFilters["hasNote"] })} />
         <Select label="封面" value={filters.hasCover || "all"} options={["all", "yes", "no"]} labels={{ all: "全部", yes: "有封面", no: "無封面" }} onChange={(value) => onChange({ hasCover: value as ListFilters["hasCover"] })} />
         <label className="check"><input type="checkbox" checked={Boolean(filters.unrated)} onChange={(event) => onChange({ unrated: event.target.checked, ratingMin: "", ratingMax: "" })} />未評分</label>

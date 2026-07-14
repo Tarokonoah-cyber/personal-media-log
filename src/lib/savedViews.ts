@@ -23,7 +23,16 @@ export function createSavedView<TPreferences>(name: string, filters: ListFilters
   if (!cleanName) throw new Error("檢視名稱不可為空");
   if (existing.some((view) => view.name.toLocaleLowerCase() === cleanName.toLocaleLowerCase())) throw new Error("已有同名檢視");
   const now = new Date().toISOString();
-  return { schemaVersion: 1 as const, id: crypto.randomUUID(), name: cleanName, createdAt: now, updatedAt: now, filters: { ...filters, page: 1 }, sorting: { field: "updated_at", direction: "desc" as const }, tablePreferences };
+  return {
+    schemaVersion: 1 as const,
+    id: crypto.randomUUID(),
+    name: cleanName,
+    createdAt: now,
+    updatedAt: now,
+    filters: { ...filters, page: 1 },
+    sorting: { field: filters.sort || "updated_at", direction: filters.order === "asc" ? "asc" as const : "desc" as const },
+    tablePreferences
+  };
 }
 
 export function savedViewSignature(filters: Partial<ListFilters>, tablePreferences: unknown) {

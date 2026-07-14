@@ -215,6 +215,8 @@ function getPath(path?: string | string[]) {
 
 function getListParams(url: URL): ItemListParams {
   const status = url.searchParams.get("status");
+  const sort = url.searchParams.get("sort");
+  const order = url.searchParams.get("order");
   return {
     query: optional(url.searchParams.get("query")),
     status: isStatusFilter(status) ? status : "all",
@@ -256,6 +258,8 @@ function getListParams(url: URL): ItemListParams {
     viewedTo: optional(url.searchParams.get("viewedTo")),
     updatedFrom: optional(url.searchParams.get("updatedFrom")),
     updatedTo: optional(url.searchParams.get("updatedTo")),
+    sort: sort === "displayName" ? "displayName" : undefined,
+    order: isSortOrder(order) ? order as "asc" | "desc" : undefined,
     page: optionalNumber(url.searchParams.get("page")) || 1,
     pageSize: optionalNumber(url.searchParams.get("pageSize")) || 50
   };
@@ -304,4 +308,8 @@ function isCollectionLevelFilter(value: string | null): value is CollectionLevel
 
 function isMediaStatusFilter(value: string | null): value is MediaStatus | "all" {
   return value === "all" || value === "待觀看" || value === "已觀看" || value === "想重看" || value === "已刪除";
+}
+
+function isSortOrder(value: string | null): value is "asc" | "desc" {
+  return value === "asc" || value === "desc";
 }

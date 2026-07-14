@@ -1,4 +1,4 @@
-import { Bookmark, Check, CircleSlash2, Columns3, Home, Menu, Moon, Plus, Save, Search, SlidersHorizontal, Star, Sun, Trash2 } from "lucide-react";
+﻿import { Bookmark, Check, CircleSlash2, Columns3, Home, Menu, Moon, Plus, Save, Search, SlidersHorizontal, Star, Sun, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { FilterSheet } from "./components/FilterSheet";
 import { HomeDashboard } from "./components/HomeDashboard";
@@ -23,6 +23,7 @@ import { privateStatusLabels, privateStatusOptions, privateStatusToFields, type 
 import { isPrivateItem, isPrivateLibraryLabel, privateItemDetails, PRIVATE_LIBRARY_LABEL, PRIVATE_RECOMMENDED_LABEL, PRIVATE_RECOMMENDED_TAG } from "./lib/privacy";
 import { parseQuickEntry } from "./lib/quickParse";
 import { collectionLevelOptions } from "./lib/reflection";
+import { tagPresetsForScope } from "./lib/tagPresets";
 import { normalizeTags } from "./lib/tags";
 import { classifyItem, libraryTree } from "./lib/taxonomy";
 import { getWatchStatus, updateWatchProgress } from "./lib/watch";
@@ -64,6 +65,8 @@ const defaultFilters: ListFilters = {
   watchedTo: "",
   updatedFrom: "",
   updatedTo: "",
+  sort: "",
+  order: "",
   page: 1,
   pageSize: 100
 };
@@ -118,7 +121,6 @@ function defaultPrivateTablePreferences(): PrivateTablePreferences {
     pageSize: 100
   };
 }
-
 function normalizePrivateTablePreferences(value?: Partial<PrivateTablePreferences> | null): PrivateTablePreferences {
   const defaults = defaultPrivateTablePreferences();
   const order = [...(value?.order || []).filter((id): id is PrivateColumnId => privateColumnIds.includes(id as PrivateColumnId)), ...privateColumnIds.filter((id) => !(value?.order || []).includes(id))];
@@ -179,10 +181,13 @@ export default function App() {
   const [smartDraft, setSmartDraft] = useState<ItemInput | null>(null);
   const [simpleAddOpen, setSimpleAddOpen] = useState(false);
   const [smartLoading, setSmartLoading] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState("");
   const [error, setError] = useState("");
   const loadRequestId = useRef(0);
+  const loadScopeRef = useRef("");
   const facetRequestId = useRef(0);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [columnManagerOpen, setColumnManagerOpen] = useState(false);
@@ -200,6 +205,7 @@ export default function App() {
   const privatePageTitle = privateRecommendedActive ? PRIVATE_RECOMMENDED_LABEL : PRIVATE_LIBRARY_LABEL;
   const currentDisplayView = privateActive ? "table" : displayView;
   const effectiveSidebarCollapsed = privateActive ? privateSidebarCollapsed : sidebarCollapsed;
+  const loading = initialLoading || refreshing || actionLoading;
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -252,11 +258,15 @@ export default function App() {
     if (!includePrivate) return knownTags;
     return Array.from(new Set(items.flatMap((item) => item.tags))).sort((a, b) => a.localeCompare(b, "zh-Hant"));
   }, [includePrivate, items, knownTags]);
-  const tagSuggestions = useMemo(() => normalizeTags([
-    ...knownTags,
-    ...items.flatMap((item) => item.tags),
-    ...(privateFacets?.tags || []).map((tag) => tag.value)
-  ]).sort((a, b) => a.localeCompare(b, "zh-Hant")), [items, knownTags, privateFacets?.tags]);
+  const publicTagSuggestions = useMemo(() => normalizeTags([...tagPresetsForScope("public"), ...knownTags]).sort((a, b) => a.localeCompare(b, "zh-Hant")), [knownTags]);
+  const privateTagSuggestions = useMemo(() => {
+    const privateFacetTags = (privateFacets?.tags || []).flatMap((tag) => Array.from({ length: Math.max(1, Math.min(10, tag.count)) }, () => tag.value));
+    return normalizeTags([
+      ...privateFacetTags,
+      ...items.filter(isPrivateItem).flatMap((item) => item.tags),
+      ...tagPresetsForScope("private")
+    ]).slice(0, 20);
+  }, [items, privateFacets?.tags]);
   const libraryTypes = useMemo(() => new Set<string>(libraryTree.map((entry) => entry.label)), []);
   const visibleItems = useMemo(() => {
     const scopedItems = includePrivate ? items : items.filter((item) => !isPrivateItem(item));
@@ -286,7 +296,10 @@ export default function App() {
 
   async function loadItems() {
     const requestId = ++loadRequestId.current;
-    setLoading(true);
+    const loadScope = includePrivate ? "private" : "public";
+    const hasExistingRows = loadScopeRef.current === loadScope && items.length > 0;
+    setInitialLoading(!hasExistingRows);
+    setRefreshing(hasExistingRows);
     setError("");
     try {
       const result = await listItems({ ...filters, includePrivate, privateOnly: includePrivate, includeFacets: false });
@@ -294,11 +307,15 @@ export default function App() {
       setItems(result.items);
       setTotal(result.total);
       setPrivateSummary(result.privateSummary || null);
+      loadScopeRef.current = loadScope;
     } catch (err) {
       if (requestId !== loadRequestId.current) return;
       setError(err instanceof Error ? err.message : "讀取紀錄失敗");
     } finally {
-      if (requestId === loadRequestId.current) setLoading(false);
+      if (requestId === loadRequestId.current) {
+        setInitialLoading(false);
+        setRefreshing(false);
+      }
     }
   }
 
@@ -337,7 +354,7 @@ export default function App() {
   async function submitQuick() {
     const parsed = parseQuickEntry(quickText, { privateMode: includePrivate });
     if (!parsed.raw_title.trim()) return;
-    setLoading(true);
+    setActionLoading(true);
     try {
       await createItem(includePrivate ? withPrivatePageDefaults(parsed, privateRecommendedActive) : {
         ...parsed,
@@ -353,12 +370,12 @@ export default function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "新增紀錄失敗");
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   }
 
   async function submitSimpleAdd(input: ItemInput) {
-    setLoading(true);
+    setActionLoading(true);
     try {
       const nextInput = withPrivatePageDefaults(input, privateRecommendedActive);
       await createItem(nextInput);
@@ -372,7 +389,7 @@ export default function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "新增紀錄失敗");
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   }
 
@@ -393,7 +410,7 @@ export default function App() {
 
   async function confirmSmartAdd() {
     if (!smartDraft?.raw_title.trim()) return;
-    setLoading(true);
+    setActionLoading(true);
     try {
       await createItem(smartDraft);
       setQuickText("");
@@ -408,7 +425,7 @@ export default function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "智慧新增失敗");
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   }
 
@@ -485,7 +502,7 @@ export default function App() {
 
   async function batchUpdate(targets: MediaItem[], patch: Partial<ItemInput> | ((item: MediaItem) => Partial<ItemInput>)) {
     if (targets.length === 0) return;
-    setLoading(true);
+    setActionLoading(true);
     try {
       await Promise.all(targets.map((item) => updateItem(item.id, { ...toItemInput(item), ...(typeof patch === "function" ? patch(item) : patch) })));
       setToast(`已更新 ${targets.length} 筆`);
@@ -493,14 +510,14 @@ export default function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "批次更新失敗");
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   }
 
   async function batchDelete(targets: MediaItem[]) {
     if (targets.length === 0) return;
     if (!window.confirm(`確定要刪除 ${targets.length} 筆紀錄嗎？`)) return;
-    setLoading(true);
+    setActionLoading(true);
     try {
       await Promise.all(targets.map((item) => deleteItem(item.id)));
       setSelected(null);
@@ -509,7 +526,7 @@ export default function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "批次刪除失敗");
     } finally {
-      setLoading(false);
+      setActionLoading(false);
     }
   }
 
@@ -693,7 +710,7 @@ export default function App() {
         <SmartAddPreview
           preview={smartPreview}
           draft={smartDraft}
-          knownTags={tagSuggestions}
+          knownTags={privateActive ? privateTagSuggestions : publicTagSuggestions}
           loading={loading}
           onChange={updateSmartDraft}
           onCancel={() => {
@@ -742,7 +759,8 @@ export default function App() {
                 <PrivateWorkbenchV3
                   filters={filters}
                   items={visibleItems}
-                  loading={loading}
+                  loading={initialLoading}
+                  refreshing={refreshing}
                   pageCount={pageCount}
                   total={total}
                   error={error}
@@ -885,13 +903,13 @@ export default function App() {
       {simpleAddOpen && (
         <SimpleAddModal
           privateMode={includePrivate}
-          knownTags={tagSuggestions}
+          knownTags={includePrivate ? privateTagSuggestions : publicTagSuggestions}
           loading={loading}
           onClose={() => setSimpleAddOpen(false)}
           onSubmit={submitSimpleAdd}
         />
       )}
-      {selected && <ItemEditor item={selected} privateMode={privateActive} knownTags={tagSuggestions} onClose={() => setSelected(null)} onSave={saveItem} onDelete={removeItem} />}
+      {selected && <ItemEditor item={selected} privateMode={privateActive} knownTags={privateActive || isPrivateItem(selected) ? privateTagSuggestions : publicTagSuggestions} onClose={() => setSelected(null)} onSave={saveItem} onDelete={removeItem} />}
       {metadataTarget && (
         <MetadataLookupModal
           item={metadataTarget}
@@ -1240,6 +1258,7 @@ function PrivateWorkbenchV3({
   filters,
   items,
   loading,
+  refreshing,
   pageCount,
   total,
   error,
@@ -1255,6 +1274,7 @@ function PrivateWorkbenchV3({
   filters: ListFilters;
   items: MediaItem[];
   loading: boolean;
+  refreshing: boolean;
   pageCount: number;
   total: number;
   error: string;
@@ -1324,12 +1344,25 @@ function PrivateWorkbenchV3({
 
   function applySavedView(view: SavedPrivateView<PrivateTablePreferences>) {
     const preferences = normalizePrivateTablePreferences(view.tablePreferences);
-    setColumnPreferences(preferences); onApplyFilters({ ...view.filters, page: 1, pageSize: preferences.pageSize }); setSearchDraft(String(view.filters.query || "")); setActiveSavedView(view.id); setSavedViewsOpen(false);
+    const restoredFilters = {
+      ...view.filters,
+      sort: view.filters.sort ?? (view.sorting?.field === "displayName" ? "displayName" : ""),
+      order: view.filters.order ?? (view.sorting?.field === "displayName" ? view.sorting.direction : ""),
+      page: 1,
+      pageSize: preferences.pageSize
+    } as Partial<ListFilters>;
+    setColumnPreferences(preferences); onApplyFilters(restoredFilters); setSearchDraft(String(view.filters.query || "")); setActiveSavedView(view.id); setSavedViewsOpen(false);
   }
 
   function updateSavedView(view: SavedPrivateView<PrivateTablePreferences>) {
     const now = new Date().toISOString();
-    persistViews(savedViews.map((entry) => entry.id === view.id ? { ...entry, filters: { ...filters, page: 1 }, tablePreferences: columnPreferences, updatedAt: now } : entry));
+    persistViews(savedViews.map((entry) => entry.id === view.id ? {
+      ...entry,
+      filters: { ...filters, page: 1 },
+      sorting: { field: filters.sort || "updated_at", direction: filters.order === "asc" ? "asc" : "desc" },
+      tablePreferences: columnPreferences,
+      updatedAt: now
+    } : entry));
     setActiveSavedView(view.id);
   }
 
@@ -1345,7 +1378,7 @@ function PrivateWorkbenchV3({
   const visibleEnd = items.length === 0 ? 0 : Math.min(total, (filters.page - 1) * filters.pageSize + items.length);
 
   return (
-    <section className="private-workbench">
+    <section className="private-workbench" aria-busy={refreshing}>
       <div className="private-toolbar">
         <label className="private-search-field">
           <Search size={16} />
@@ -1382,20 +1415,26 @@ function PrivateWorkbenchV3({
         </div>
       </div>
 
-      <div className="private-list-region">
-        {error ? (
-          <PrivateErrorCard error={error} onRetry={onRetry} />
-        ) : loading ? (
+      <div className={refreshing ? "private-list-region is-refreshing" : "private-list-region"}>
+        {loading && items.length === 0 ? (
           <PrivateSkeleton />
+        ) : error && items.length === 0 ? (
+          <PrivateErrorCard error={error} onRetry={onRetry} />
         ) : items.length === 0 ? (
           <PrivateEmptyState onClear={onClearFilters} onAdd={onAdd} />
         ) : (
           <>
+            {refreshing && <div className="private-refresh-indicator" role="status">更新中...</div>}
+            {error && <div className="notice danger private-refresh-error" role="alert">{error}</div>}
             <PrivateMobileCards items={items} onSelect={onSelect} />
             <PrivateDataTable
               items={items}
               columns={visibleColumns}
               preferences={columnPreferences}
+              sort={filters.sort || ""}
+              order={filters.order || ""}
+              refreshing={refreshing}
+              onSortTitle={() => onPatchFilters(nextTitleSort(filters))}
               onPreferencesChange={setColumnPreferences}
               onSelect={onSelect}
               onQuickUpdate={onQuickUpdate}
@@ -1422,10 +1461,20 @@ function filterValues(value: string | undefined) {
   return (value || "").split(",").map((entry) => entry.trim()).filter(Boolean);
 }
 
+function nextTitleSort(filters: ListFilters): Partial<ListFilters> {
+  if (filters.sort !== "displayName") return { sort: "displayName", order: "asc", page: 1 };
+  if (filters.order === "asc") return { sort: "displayName", order: "desc", page: 1 };
+  return { sort: "", order: "", page: 1 };
+}
+
 function PrivateDataTable({
   items,
   columns,
   preferences,
+  sort,
+  order,
+  refreshing,
+  onSortTitle,
   onPreferencesChange,
   onSelect,
   onQuickUpdate
@@ -1433,6 +1482,10 @@ function PrivateDataTable({
   items: MediaItem[];
   columns: PrivateColumnDefinition[];
   preferences: PrivateTablePreferences;
+  sort: ListFilters["sort"];
+  order: ListFilters["order"];
+  refreshing: boolean;
+  onSortTitle: () => void;
   onPreferencesChange: (preferences: PrivateTablePreferences | ((current: PrivateTablePreferences) => PrivateTablePreferences)) => void;
   onSelect: (item: MediaItem) => void;
   onQuickUpdate: (item: MediaItem, field: "collection_level" | "rating" | "used", value: unknown) => Promise<void>;
@@ -1501,7 +1554,7 @@ function PrivateDataTable({
 
   return (
     <div className="private-data-table-wrap">
-      <table className="private-data-table private-dense-table" style={{ "--private-table-width": `${Math.max(totalWidth, 760)}px` } as CSSProperties}>
+      <table className="private-data-table private-dense-table" aria-busy={refreshing} style={{ "--private-table-width": `${Math.max(totalWidth, 760)}px` } as CSSProperties}>
         <colgroup>
           {columns.map((column) => (
             <col
@@ -1520,12 +1573,30 @@ function PrivateDataTable({
               <th
                 key={column.id}
                 className={column.id === "title" ? "private-sticky-column" : undefined}
+                aria-sort={column.id === "title" ? sort === "displayName" ? order === "desc" ? "descending" : "ascending" : "none" : undefined}
                 draggable
-                onDragStart={() => setDragColumn(column.id)}
+                onDragStart={(event) => {
+                  if ((event.target as HTMLElement).closest(".private-sort-header,.private-column-resize")) {
+                    event.preventDefault();
+                    return;
+                  }
+                  setDragColumn(column.id);
+                }}
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={() => moveColumn(column.id)}
               >
-                <span>{column.label}</span>
+                {column.id === "title" ? (
+                  <button className="private-sort-header" type="button" onClick={onSortTitle} onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    onSortTitle();
+                  }}>
+                    <span>{column.label}</span>
+                    <span aria-hidden="true">{sort === "displayName" ? order === "desc" ? "↓" : "↑" : ""}</span>
+                  </button>
+                ) : (
+                  <span>{column.label}</span>
+                )}
                 <span className="private-column-resize" onMouseDown={(event) => startResize(column, event)} onDoubleClick={() => autosize(column)} title="拖曳調整寬度，雙擊自動寬度" />
               </th>
             ))}
@@ -1932,7 +2003,7 @@ function SimpleAddModal({
               </select>
             </label>
           )}
-          <TagEditor tags={draft.tags} knownTags={knownTags} onChange={(tags) => patch({ tags })} />
+          <TagEditor tags={draft.tags} knownTags={knownTags} onChange={(tags) => patch({ tags })} placeholder={privateMode ? "輸入私密標籤後按 Enter" : "輸入標籤後按 Enter"} />
           <Field label={privateMode ? "紀錄日" : "觀看日"} value={draft.watched_at} onChange={(value) => patch({ watched_at: value })} type="date" />
         </div>
         <footer className="simple-add-actions">

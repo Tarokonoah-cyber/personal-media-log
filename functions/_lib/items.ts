@@ -376,11 +376,31 @@ async function getPrivateSummary(env: Env, whereSql: string, bind: unknown[]): P
 }
 
 export async function getPrivateFacets(env: Env, whereSql = "WHERE items.is_private = 1", bind: unknown[] = []): Promise<PrivateFacets> {
-  const bindAll = (...extra: unknown[]) => [...bind, ...extra];
+  const query = { whereSql, bind };
+  return getPrivateFacetsFromQueries(env, {
+    source: query,
+    maker: query,
+    series: query,
+    actress: query,
+    javMaker: query,
+    tags: query,
+    ratingBuckets: query,
+    favoriteLevel: query,
+    used: query,
+    status: query
+  });
+}
+
+type FacetQuery = { whereSql: string; bind: unknown[] };
+type PrivateFacetKind = keyof PrivateFacets;
+
+async function getPrivateFacetsFromQueries(env: Env, queries: Record<PrivateFacetKind, FacetQuery>): Promise<PrivateFacets> {
+  const bindRepeated = (query: FacetQuery, count: number) => Array.from({ length: count }).flatMap(() => query.bind);
   const facetRows = (rows: Array<{ value: string | null; count: number }>) =>
     rows
       .map((row) => ({ value: String(row.value || "未設定"), count: Number(row.count || 0) }))
       .filter((row) => row.value.trim().length > 0);
+  const appendWhere = (query: FacetQuery, clause: string) => query.whereSql ? `${query.whereSql} AND ${clause}` : `WHERE ${clause}`;
 
   const sourceStmt = env.MEDIA_LOG_DB.prepare(`
     SELECT
@@ -389,7 +409,7 @@ export async function getPrivateFacets(env: Env, whereSql = "WHERE items.is_priv
         ELSE '其他'
       END AS value,
       COUNT(*) AS count
-    FROM items ${whereSql}
+    FROM items ${queries.source.whereSql}
     GROUP BY value
     ORDER BY CASE value
       WHEN 'FC2' THEN 1
@@ -397,50 +417,49 @@ export async function getPrivateFacets(env: Env, whereSql = "WHERE items.is_priv
       WHEN '糖心' THEN 3
       ELSE 4
     END
-  `).bind(...bind);
+  `).bind(...queries.source.bind);
 
   const makerStmt = env.MEDIA_LOG_DB.prepare(`
     SELECT coalesce(nullif(trim(items.maker), ''), '未設定') AS value, COUNT(*) AS count
-    FROM items ${whereSql}
+    FROM items ${queries.maker.whereSql}
     GROUP BY value
     ORDER BY count DESC, value ASC
     LIMIT 20
-  `).bind(...bind);
+  `).bind(...queries.maker.bind);
 
   const seriesStmt = env.MEDIA_LOG_DB.prepare(`
     SELECT coalesce(nullif(trim(items.series), ''), '未設定') AS value, COUNT(*) AS count
-    FROM items ${whereSql}
+    FROM items ${queries.series.whereSql}
     GROUP BY value
     ORDER BY count DESC, value ASC
     LIMIT 20
-  `).bind(...bind);
+  `).bind(...queries.series.bind);
 
   const actressStmt = env.MEDIA_LOG_DB.prepare(`
     SELECT people.name AS value, COUNT(*) AS count
     FROM people
     JOIN item_people ON item_people.person_id = people.id
     JOIN items ON items.id = item_people.item_id
-    ${whereSql}
+    ${queries.actress.whereSql}
     GROUP BY people.id
     ORDER BY count DESC, people.name ASC
     LIMIT 20
-  `).bind(...bind);
+  `).bind(...queries.actress.bind);
 
   const tagsStmt = env.MEDIA_LOG_DB.prepare(`
     SELECT tags.name AS value, COUNT(*) AS count
     FROM tags
     JOIN item_tags ON item_tags.tag_id = tags.id
     JOIN items ON items.id = item_tags.item_id
-    ${whereSql}
+    ${queries.tags.whereSql}
     GROUP BY tags.id
     ORDER BY count DESC, tags.name ASC
     LIMIT 30
-  `).bind(...bind);
+  `).bind(...queries.tags.bind);
 
   const javMakerStmt = env.MEDIA_LOG_DB.prepare(`
     SELECT coalesce(nullif(trim(items.maker), ''), '未分類') AS value, COUNT(*) AS count
-    FROM items ${whereSql}
-    ${whereSql ? "AND" : "WHERE"} items.platform = 'JAV'
+    FROM items ${appendWhere(queries.javMaker, "items.platform = 'JAV'")}
     GROUP BY value
     ORDER BY CASE value
       WHEN 'S1' THEN 1
@@ -452,30 +471,23 @@ export async function getPrivateFacets(env: Env, whereSql = "WHERE items.is_priv
       ELSE 20
     END, count DESC, value ASC
     LIMIT 30
-  `).bind(...bind);
+  `).bind(...queries.javMaker.bind);
 
   const ratingStmt = env.MEDIA_LOG_DB.prepare(`
-    SELECT '9+' AS value, SUM(CASE WHEN items.rating >= 9 THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
+    SELECT '9+' AS value, SUM(CASE WHEN items.rating >= 9 THEN 1 ELSE 0 END) AS count FROM items ${queries.ratingBuckets.whereSql}
     UNION ALL
-    SELECT '8+' AS value, SUM(CASE WHEN items.rating >= 8 THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
+    SELECT '8+' AS value, SUM(CASE WHEN items.rating >= 8 THEN 1 ELSE 0 END) AS count FROM items ${queries.ratingBuckets.whereSql}
     UNION ALL
-    SELECT '6-7' AS value, SUM(CASE WHEN items.rating >= 6 AND items.rating <= 7 THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
+    SELECT '6-7' AS value, SUM(CASE WHEN items.rating >= 6 AND items.rating <= 7 THEN 1 ELSE 0 END) AS count FROM items ${queries.ratingBuckets.whereSql}
     UNION ALL
-    SELECT '1-5' AS value, SUM(CASE WHEN items.rating >= 1 AND items.rating <= 5 THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
+    SELECT '1-5' AS value, SUM(CASE WHEN items.rating >= 1 AND items.rating <= 5 THEN 1 ELSE 0 END) AS count FROM items ${queries.ratingBuckets.whereSql}
     UNION ALL
-    SELECT '未評分' AS value, SUM(CASE WHEN items.rating IS NULL THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
-  `).bind(...bindAll(...bind, ...bind, ...bind, ...bind));
+    SELECT '未評分' AS value, SUM(CASE WHEN items.rating IS NULL THEN 1 ELSE 0 END) AS count FROM items ${queries.ratingBuckets.whereSql}
+  `).bind(...bindRepeated(queries.ratingBuckets, 5));
 
   const favoriteStmt = env.MEDIA_LOG_DB.prepare(`
     SELECT items.collection_level AS value, COUNT(*) AS count
-    FROM items ${whereSql}
-    WHERE_PLACEHOLDER
-  `.replace(
-    "WHERE_PLACEHOLDER",
-    whereSql
-      ? "AND items.collection_level IN ('unset', 'masterpiece', 'normal', 'discard')"
-      : "WHERE items.collection_level IN ('unset', 'masterpiece', 'normal', 'discard')"
-  ) + `
+    FROM items ${appendWhere(queries.favoriteLevel, "items.collection_level IN ('unset', 'masterpiece', 'normal', 'discard')")}
     GROUP BY items.collection_level
     ORDER BY CASE items.collection_level
       WHEN 'masterpiece' THEN 1
@@ -483,18 +495,17 @@ export async function getPrivateFacets(env: Env, whereSql = "WHERE items.is_priv
       WHEN 'discard' THEN 3
       ELSE 4
     END
-  `).bind(...bind);
+  `).bind(...queries.favoriteLevel.bind);
 
   const usedStmt = env.MEDIA_LOG_DB.prepare(`
-    SELECT '已閱' AS value, SUM(CASE WHEN items.used = 1 THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
+    SELECT '已閱' AS value, SUM(CASE WHEN items.used = 1 THEN 1 ELSE 0 END) AS count FROM items ${queries.used.whereSql}
     UNION ALL
-    SELECT '未閱' AS value, SUM(CASE WHEN items.used = 0 THEN 1 ELSE 0 END) AS count FROM items ${whereSql}
-  `).bind(...bindAll(...bind));
+    SELECT '未閱' AS value, SUM(CASE WHEN items.used = 0 THEN 1 ELSE 0 END) AS count FROM items ${queries.used.whereSql}
+  `).bind(...bindRepeated(queries.used, 2));
 
   const statusStmt = env.MEDIA_LOG_DB.prepare(`
     SELECT items.media_status AS value, COUNT(*) AS count
-    FROM items ${whereSql}
-    ${whereSql ? "AND" : "WHERE"} items.media_status IS NOT NULL AND items.media_status != ''
+    FROM items ${appendWhere(queries.status, "items.media_status IS NOT NULL AND items.media_status != ''")}
     GROUP BY items.media_status
     ORDER BY CASE items.media_status
       WHEN '待觀看' THEN 1
@@ -503,7 +514,7 @@ export async function getPrivateFacets(env: Env, whereSql = "WHERE items.is_priv
       WHEN '已刪除' THEN 4
       ELSE 5
     END
-  `).bind(...bind);
+  `).bind(...queries.status.bind);
 
   const [source, maker, series, actress, javMaker, tags, ratingBuckets, favoriteLevel, used, status] = await Promise.all([
     sourceStmt.all<{ value: string; count: number }>(),
@@ -533,8 +544,40 @@ export async function getPrivateFacets(env: Env, whereSql = "WHERE items.is_priv
 }
 
 export async function getPrivateFacetsForFilters(env: Env, params: ItemListParams) {
-  const { whereSql, bind } = buildItemWhere({ ...params, privateOnly: true, includePrivate: true, includeFacets: false });
-  return getPrivateFacets(env, whereSql, bind);
+  const base = { ...params, privateOnly: true, includePrivate: true, includeFacets: false, page: 1, pageSize: 1 };
+  const queryFor = (facet: PrivateFacetKind) => buildItemWhere(filtersExcludingFacet(base, facet));
+  return getPrivateFacetsFromQueries(env, {
+    source: queryFor("source"),
+    maker: queryFor("maker"),
+    series: queryFor("series"),
+    actress: queryFor("actress"),
+    javMaker: queryFor("javMaker"),
+    tags: queryFor("tags"),
+    ratingBuckets: queryFor("ratingBuckets"),
+    favoriteLevel: queryFor("favoriteLevel"),
+    used: queryFor("used"),
+    status: queryFor("status")
+  });
+}
+
+export function filtersExcludingFacet(params: ItemListParams, facet: PrivateFacetKind): ItemListParams {
+  const next = { ...params };
+  if (facet === "source") next.platformFilters = [];
+  if (facet === "maker" || facet === "javMaker") next.makerFilters = [];
+  if (facet === "favoriteLevel") next.favoriteLevelFilters = [];
+  if (facet === "actress") {
+    next.personFilters = [];
+    next.missingPeople = false;
+  }
+  if (facet === "tags") next.tag = undefined;
+  if (facet === "ratingBuckets") {
+    next.ratingMin = undefined;
+    next.ratingMax = undefined;
+    next.unrated = false;
+  }
+  if (facet === "used") next.usedFilter = "all";
+  if (facet === "status") next.mediaStatus = "all";
+  return next;
 }
 
 export async function searchPrivateFacet(env: Env, facet: "actress" | "tag" | "studio", query: string, limit: number) {
@@ -583,6 +626,20 @@ export async function searchPrivateFacet(env: Env, facet: "actress" | "tag" | "s
 }
 
 function listOrderSql(params: ItemListParams) {
+  if (params.sort === "displayName") {
+    const direction = params.order === "desc" ? "DESC" : "ASC";
+    const codeSql = "coalesce(nullif(trim(items.normalized_code), ''), nullif(trim(items.code), ''), '')";
+    const rawTitleSql = "coalesce(nullif(trim(json_extract(items.metadata_json, '$.title')), ''), nullif(trim(items.official_title), ''), nullif(trim(items.raw_title), ''), '')";
+    const displaySql = `CASE
+      WHEN ${rawTitleSql} = '' THEN ${codeSql}
+      WHEN ${rawTitleSql} IN ('-', '—') THEN ${codeSql}
+      WHEN lower(replace(replace(${rawTitleSql}, '-', ''), ' ', '')) = lower(replace(replace(${codeSql}, '-', ''), ' ', '')) THEN ${codeSql}
+      ELSE ${rawTitleSql}
+    END`;
+    const codePrefixSql = `lower(rtrim(${codeSql}, '0123456789'))`;
+    const codeNumberSql = `CAST(nullif(substr(${codeSql}, length(rtrim(${codeSql}, '0123456789')) + 1), '') AS INTEGER)`;
+    return `ORDER BY lower(trim(${displaySql})) COLLATE NOCASE ${direction}, ${codePrefixSql} COLLATE NOCASE ${direction}, ${codeNumberSql} ${direction}, lower(${codeSql}) COLLATE NOCASE ${direction}, items.id ${direction}`;
+  }
   if (params.mediaStatus === "待觀看") return "ORDER BY datetime(coalesce(planned_at, created_at)) DESC, id DESC";
   if (params.mediaStatus === "已觀看" || params.mediaStatus === "想重看") return "ORDER BY datetime(coalesce(watched_at, updated_at, created_at)) DESC, id DESC";
   return "ORDER BY datetime(updated_at) DESC, id DESC";

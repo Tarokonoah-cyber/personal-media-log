@@ -110,6 +110,8 @@ export interface ItemListParams {
   viewedTo?: string;
   updatedFrom?: string;
   updatedTo?: string;
+  sort?: "displayName";
+  order?: "asc" | "desc";
   page: number;
   pageSize: number;
 }

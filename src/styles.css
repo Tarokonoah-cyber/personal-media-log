@@ -9044,8 +9044,31 @@ h2 {
 .private-list-region {
   width: 100%;
   min-width: 0;
+  position: relative;
   display: grid;
   grid-template-rows: minmax(0, auto) auto;
+}
+
+.private-list-region.is-refreshing .private-data-table,
+.private-list-region.is-refreshing .private-mobile-list {
+  opacity: 0.72;
+}
+
+.private-refresh-indicator {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 6;
+  padding: 4px 8px;
+  border: 1px solid var(--private-soft-line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  font-size: 12px;
+}
+
+.private-refresh-error {
+  margin-bottom: 8px;
 }
 
 .private-workbench .private-data-table-wrap {
@@ -9077,6 +9100,32 @@ h2 {
   font-size: 12px;
   font-weight: 760;
   letter-spacing: 0;
+}
+
+.private-sort-header {
+  width: 100%;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.private-sort-header:hover {
+  color: var(--text);
+}
+
+.private-sort-header:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, white);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 .private-workbench .private-dense-table td {
