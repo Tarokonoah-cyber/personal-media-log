@@ -15,6 +15,11 @@ describe("saved private views", () => {
     expect(view.filters.order).toBe("asc");
     expect(view.sorting).toEqual({ field: "displayName", direction: "asc" });
   });
+  it("persists the unified private status and keeps legacy fields readable", () => {
+    const view = createSavedView("想重看", { ...filters, privateStatus: "rewatch", usedFilter: "all", mediaStatus: "all" }, { order: ["title"] }, []);
+    expect(view.filters.privateStatus).toBe("rewatch");
+    expect(readSavedViews({ getItem: () => JSON.stringify([{ ...view, filters: { ...view.filters, privateStatus: undefined, usedFilter: "used", mediaStatus: "all" } }]) })[0]?.filters.usedFilter).toBe("used");
+  });
   it("rejects blank and duplicate names", () => {
     expect(() => createSavedView(" ", filters, {}, [])).toThrow("不可為空");
     const existing = [createSavedView("常用", filters, {}, [])];

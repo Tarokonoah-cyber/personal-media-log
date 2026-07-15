@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filtersExcludingFacet } from "../functions/_lib/items";
+import { buildItemWhere, filtersExcludingFacet } from "../functions/_lib/items";
 import type { ItemListParams } from "../functions/_lib/types";
 
 const base: ItemListParams = {
@@ -11,6 +11,7 @@ const base: ItemListParams = {
   personFilters: ["Actor"],
   tag: "劇情",
   usedFilter: "used",
+  privateStatus: "rewatch",
   page: 3,
   pageSize: 50
 };
@@ -43,5 +44,25 @@ describe("private facet filter exclusion", () => {
     expect(next.tag).toBeUndefined();
     expect(next.platformFilters).toEqual(["FC2"]);
     expect(next.favoriteLevelFilters).toEqual(["normal"]);
+  });
+
+  it("keeps unified status for other facets and removes it from status facets", () => {
+    expect(filtersExcludingFacet(base, "source").privateStatus).toBe("rewatch");
+    expect(filtersExcludingFacet(base, "used").privateStatus).toBe("all");
+    expect(filtersExcludingFacet(base, "status").privateStatus).toBe("all");
+  });
+
+  it("lets unified status take precedence over legacy status filters", () => {
+    const unified = buildItemWhere({ ...base, privateStatus: "rewatch", usedFilter: "unused", mediaStatus: "待觀看" });
+    expect(unified.whereSql).toContain("THEN 'rewatch'");
+    expect(unified.whereSql.match(/items\.used = 0/g)).toHaveLength(1);
+    expect(unified.whereSql).not.toContain("items.media_status = ?");
+    expect(unified.bind).toContain("rewatch");
+    expect(unified.bind).not.toContain("待觀看");
+
+    const legacy = buildItemWhere({ ...base, privateStatus: "all", usedFilter: "unused", mediaStatus: "待觀看" });
+    expect(legacy.whereSql.match(/items\.used = 0/g)).toHaveLength(1);
+    expect(legacy.whereSql).toContain("items.media_status = ?");
+    expect(legacy.bind).toContain("待觀看");
   });
 });

@@ -4,7 +4,7 @@ import type { ListFilters } from "../src/types";
 
 const base = (): ListFilters => ({
   query: "needle", status: "all", favorite: false, highRated: false, ratingMin: "8", ratingMax: "", unrated: false,
-  usedFilter: "all", collectionLevel: "", favoriteLevel: "all", mediaStatus: "all", platformFilters: "", makerFilters: "",
+  usedFilter: "all", privateStatus: "all", collectionLevel: "", favoriteLevel: "all", mediaStatus: "all", platformFilters: "", makerFilters: "",
   favoriteLevelFilters: "", personFilters: "", missingPeople: false, hasNote: "yes", hasCover: "all", watchStatus: "all",
   type: "", category: "", tag: "", excludeTag: "", year: "", platform: "", maker: "", series: "", codeQuery: "",
   titleQuery: "", person: "", studio: "", watchedFrom: "", watchedTo: "", viewedFrom: "", viewedTo: "", updatedFrom: "",

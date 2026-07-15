@@ -3,6 +3,7 @@ import { inboxWhereSql } from "./organization";
 import { hasPrivateSignalValues, isPrivateMarker as isPrivateMarkerValue, privateItemWhereSql, publicItemWhereSql } from "./privacy";
 import { newId, nowIso } from "./ids";
 import { isCollectionLevel, normalizeCollectionLevel, normalizePlatform as normalizePrivatePlatform, normalizeWorkCode, validateQuickEdit } from "../../shared/privateModel";
+import { privateStatusToFields } from "../../shared/privateStatus";
 import type { Actor, Env, FavoriteLevel, ItemInput, ItemListParams, ItemRecord, ItemStatus, MediaStatus, WatchStatus, PrivateFacets, PrivateSummary } from "./types";
 
 type Row = Record<string, unknown>;
@@ -91,7 +92,7 @@ export async function listItems(env: Env, params: ItemListParams) {
   };
 }
 
-function buildItemWhere(params: ItemListParams) {
+export function buildItemWhere(params: ItemListParams) {
   const where: string[] = [];
   const bind: unknown[] = [];
 
@@ -124,18 +125,23 @@ function buildItemWhere(params: ItemListParams) {
     bind.push(params.ratingMax);
   }
   if (params.unrated) where.push("items.rating IS NULL");
-  if (params.usedFilter === "used") {
-    where.push("items.used = 1");
-  } else if (params.usedFilter === "unused") {
-    where.push("items.used = 0");
+  if (params.privateStatus && params.privateStatus !== "all") {
+    where.push(`${privateStatusSql("items")} = ?`);
+    bind.push(params.privateStatus);
+  } else {
+    if (params.usedFilter === "used") {
+      where.push("items.used = 1");
+    } else if (params.usedFilter === "unused") {
+      where.push("items.used = 0");
+    }
+    if (params.mediaStatus && params.mediaStatus !== "all") {
+      where.push("items.media_status = ?");
+      bind.push(params.mediaStatus);
+    }
   }
   if (params.favoriteLevel && params.favoriteLevel !== "all") {
     where.push("items.favorite_level = ?");
     bind.push(params.favoriteLevel);
-  }
-  if (params.mediaStatus && params.mediaStatus !== "all") {
-    where.push("items.media_status = ?");
-    bind.push(params.mediaStatus);
   }
   if (params.collectionLevel) {
     where.push(`(
@@ -575,9 +581,24 @@ export function filtersExcludingFacet(params: ItemListParams, facet: PrivateFace
     next.ratingMax = undefined;
     next.unrated = false;
   }
-  if (facet === "used") next.usedFilter = "all";
-  if (facet === "status") next.mediaStatus = "all";
+  if (facet === "used") {
+    next.usedFilter = "all";
+    next.privateStatus = "all";
+  }
+  if (facet === "status") {
+    next.mediaStatus = "all";
+    next.privateStatus = "all";
+  }
   return next;
+}
+
+export function privateStatusSql(alias: string) {
+  return `(CASE
+    WHEN ${alias}.media_status = '想重看' THEN 'rewatch'
+    WHEN ${alias}.media_status = '已刪除' THEN 'excluded'
+    WHEN ${alias}.used = 0 OR ${alias}.media_status = '待觀看' THEN 'pending'
+    ELSE 'done'
+  END)`;
 }
 
 export async function searchPrivateFacet(env: Env, facet: "actress" | "tag" | "studio", query: string, limit: number) {
@@ -1249,8 +1270,14 @@ export async function quickUpdateItem(env: Env, actor: Actor, id: string, field:
       .bind(validated.value, legacy, validated.value === "normal" || validated.value === "masterpiece" ? 1 : 0, timestamp, id);
   } else if (validated.field === "rating") {
     statement = env.MEDIA_LOG_DB.prepare("UPDATE items SET rating = ?, updated_at = ? WHERE id = ?").bind(validated.value, timestamp, id);
+  } else if (validated.field === "private_status") {
+    const fields = privateStatusToFields(validated.value);
+    statement = env.MEDIA_LOG_DB.prepare("UPDATE items SET used = ?, media_status = ?, updated_at = ? WHERE id = ?")
+      .bind(fields.used ? 1 : 0, fields.media_status, timestamp, id);
   } else {
-    statement = env.MEDIA_LOG_DB.prepare("UPDATE items SET used = ?, updated_at = ? WHERE id = ?").bind(validated.value ? 1 : 0, timestamp, id);
+    const fields = privateStatusToFields(validated.value ? "done" : "pending");
+    statement = env.MEDIA_LOG_DB.prepare("UPDATE items SET used = ?, media_status = ?, updated_at = ? WHERE id = ?")
+      .bind(fields.used ? 1 : 0, fields.media_status, timestamp, id);
   }
   await env.MEDIA_LOG_DB.batch([statement, audit(env, actor, "quick_update", "item", id, { field: validated.field })]);
   return getItem(env, id);

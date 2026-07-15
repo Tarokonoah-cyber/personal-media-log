@@ -21,6 +21,7 @@ export function toItemInput(item: MediaItem): ItemInput {
     rewatch_score: item.rewatch_score,
     favorite: item.favorite,
     favorite_level: item.favorite_level,
+    collection_level: item.collection_level,
     used: item.used,
     is_private: item.is_private,
     status: item.status === "deleted" ? "raw" : item.status,

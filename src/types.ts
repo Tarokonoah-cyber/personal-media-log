@@ -1,6 +1,7 @@
 export type ItemStatus = "raw" | "partial" | "complete" | "archived" | "deleted";
 export type WatchStatus = "plan_to_watch" | "watching" | "completed" | "paused" | "dropped" | "rewatching";
 import type { CollectionLevel } from "../shared/privateModel";
+import type { PrivateStatusFilter } from "../shared/privateStatus";
 
 export type FavoriteLevel = "神作" | "收藏" | "一般" | "雷片" | "已刪";
 export type MediaStatus = "待觀看" | "已觀看" | "想重看" | "已刪除";
@@ -111,6 +112,7 @@ export interface ListFilters {
   ratingMax: string;
   unrated?: boolean;
   usedFilter: "all" | "used" | "unused";
+  privateStatus: PrivateStatusFilter;
   collectionLevel: string;
   favoriteLevel: FavoriteLevel | "all" | "";
   mediaStatus: MediaStatus | "all" | "";

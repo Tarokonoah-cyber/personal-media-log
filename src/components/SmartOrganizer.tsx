@@ -15,6 +15,7 @@ const baseFilters: ListFilters = {
   ratingMin: "",
   ratingMax: "",
   usedFilter: "all",
+  privateStatus: "all",
   collectionLevel: "",
   favoriteLevel: "all",
   mediaStatus: "all",

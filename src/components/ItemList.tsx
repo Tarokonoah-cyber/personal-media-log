@@ -69,8 +69,8 @@ export function ItemList({
   onMetadata?: (item: MediaItem) => void;
   onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
   onQuickCreate?: (input: ItemInput) => Promise<void>;
-  onBatchUpdate?: (items: MediaItem[], patch: Partial<ItemInput> | ((item: MediaItem) => Partial<ItemInput>)) => Promise<void>;
-  onBatchDelete?: (items: MediaItem[]) => Promise<void>;
+  onBatchUpdate?: (items: MediaItem[], patch: Partial<ItemInput> | ((item: MediaItem) => Partial<ItemInput>)) => Promise<unknown>;
+  onBatchDelete?: (items: MediaItem[]) => Promise<unknown>;
 }) {
   const storageKey = `${columnStoragePrefix}:${privateMode ? "private" : "public"}:${columnScope}`;
   const customStorageKey = `${customColumnStoragePrefix}:${privateMode ? "private" : "public"}:${columnScope}`;
@@ -263,8 +263,8 @@ function BatchToolbar({
 }: {
   selectedItems: MediaItem[];
   privateMode: boolean;
-  onUpdate?: (items: MediaItem[], patch: Partial<ItemInput> | ((item: MediaItem) => Partial<ItemInput>)) => Promise<void>;
-  onDelete?: (items: MediaItem[]) => Promise<void>;
+  onUpdate?: (items: MediaItem[], patch: Partial<ItemInput> | ((item: MediaItem) => Partial<ItemInput>)) => Promise<unknown>;
+  onDelete?: (items: MediaItem[]) => Promise<unknown>;
   onClear: () => void;
 }) {
   const [watchStatus, setWatchStatus] = useState<WatchStatus | "">("");

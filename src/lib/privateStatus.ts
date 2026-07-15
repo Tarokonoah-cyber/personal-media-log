@@ -1,26 +1,15 @@
-import type { MediaStatus } from "../types";
+import { fieldsToPrivateStatus } from "../../shared/privateStatus";
+import type { ListFilters } from "../types";
 
-export const privateStatusOptions = ["pending", "done", "rewatch", "excluded"] as const;
+export { fieldsToPrivateStatus, isPrivateStatus, privateStatusLabels, privateStatusOptions, privateStatusToFields } from "../../shared/privateStatus";
+export type { PrivateMediaStatus, PrivateStatusFilter, PrivateUiStatus } from "../../shared/privateStatus";
 
-export type PrivateUiStatus = (typeof privateStatusOptions)[number];
-
-export const privateStatusLabels: Record<PrivateUiStatus, string> = {
-  pending: "待處理",
-  done: "完成",
-  rewatch: "想重看",
-  excluded: "排除"
-};
-
-export function privateStatusToFields(status: PrivateUiStatus): { used: boolean; media_status: MediaStatus } {
-  if (status === "pending") return { used: false, media_status: "待觀看" };
-  if (status === "rewatch") return { used: true, media_status: "想重看" };
-  if (status === "excluded") return { used: true, media_status: "已刪除" };
-  return { used: true, media_status: "已觀看" };
-}
-
-export function fieldsToPrivateStatus(value: { used?: boolean | null; media_status?: string | null }): PrivateUiStatus {
-  if (value.media_status === "想重看") return "rewatch";
-  if (value.media_status === "已刪除") return "excluded";
-  if (value.used === false || value.media_status === "待觀看") return "pending";
-  return "done";
+export function privateStatusFilterValue(filters: Pick<ListFilters, "privateStatus" | "usedFilter" | "mediaStatus">) {
+  if (filters.privateStatus && filters.privateStatus !== "all") return filters.privateStatus;
+  if (filters.mediaStatus && filters.mediaStatus !== "all") {
+    return fieldsToPrivateStatus({ used: filters.usedFilter !== "unused", media_status: filters.mediaStatus });
+  }
+  if (filters.usedFilter === "unused") return "pending";
+  if (filters.usedFilter === "used") return "done";
+  return "all";
 }

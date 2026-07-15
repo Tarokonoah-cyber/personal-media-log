@@ -17,11 +17,13 @@ describe("private taxonomy and quick edits", () => {
   ])("classifies known platforms without guessing", (input, expected) => expect(normalizePlatform(input)).toBe(expected));
 
   it("normalizes mathematical alphanumeric codes with NFKC", () => expect(normalizeWorkCode("𝚂𝚃𝙰𝚁𝚃-𝟻𝟾𝟹")).toBe("START-583"));
-  it("allows only collection, rating, and viewed quick edits", () => {
+  it("allows only supported private quick edits", () => {
     expect(validateQuickEdit("collection_level", "masterpiece")).toEqual({ field: "collection_level", value: "masterpiece" });
     expect(validateQuickEdit("rating", null)).toEqual({ field: "rating", value: null });
     expect(validateQuickEdit("rating", 11)).toBeNull();
     expect(validateQuickEdit("used", true)).toEqual({ field: "used", value: true });
+    expect(validateQuickEdit("private_status", "rewatch")).toEqual({ field: "private_status", value: "rewatch" });
+    expect(validateQuickEdit("private_status", "watched")).toBeNull();
     expect(validateQuickEdit("platform", "JAV")).toBeNull();
   });
 });

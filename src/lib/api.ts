@@ -70,7 +70,7 @@ export function updateItem(id: string, input: ItemInput) {
   return request<MediaItem>(`/api/items/${id}`, { method: "PUT", body: JSON.stringify(input) });
 }
 
-export function quickUpdateItem(id: string, field: "collection_level" | "rating" | "used", value: unknown) {
+export function quickUpdateItem(id: string, field: "collection_level" | "rating" | "used" | "private_status", value: unknown) {
   return request<MediaItem>(`/api/items/${id}/quick`, { method: "PATCH", body: JSON.stringify({ field, value }) });
 }
 

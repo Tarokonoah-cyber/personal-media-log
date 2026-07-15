@@ -7,6 +7,7 @@ import { applyTmdbMetadata, searchTmdb } from "../_lib/tmdb";
 import { getPrivateQuality, ignorePrivateIssue, isPrivateIssueType, unignorePrivateIssue } from "../_lib/privateQuality";
 import type { Env, FavoriteLevel, ItemInput, ItemListParams, ItemStatus, MediaStatus, WatchStatus } from "../_lib/types";
 import type { CollectionLevel } from "../../shared/privateModel";
+import { isPrivateStatus } from "../../shared/privateStatus";
 
 export const onRequest: PagesFunction<Env, "path"> = async (context) => {
   try {
@@ -217,6 +218,7 @@ function getListParams(url: URL): ItemListParams {
   const status = url.searchParams.get("status");
   const sort = url.searchParams.get("sort");
   const order = url.searchParams.get("order");
+  const privateStatus = url.searchParams.get("privateStatus");
   return {
     query: optional(url.searchParams.get("query")),
     status: isStatusFilter(status) ? status : "all",
@@ -226,6 +228,7 @@ function getListParams(url: URL): ItemListParams {
     ratingMax: optionalNumber(url.searchParams.get("ratingMax")),
     unrated: url.searchParams.get("unrated") === "true",
     usedFilter: isUsedFilter(url.searchParams.get("usedFilter")) ? url.searchParams.get("usedFilter") as "all" | "used" | "unused" : "all",
+    privateStatus: isPrivateStatus(privateStatus) ? privateStatus : "all",
     collectionLevel: optional(url.searchParams.get("collectionLevel")),
     favoriteLevel: isFavoriteLevelFilter(url.searchParams.get("favoriteLevel")) ? url.searchParams.get("favoriteLevel") as FavoriteLevel | "all" : "all",
     mediaStatus: isMediaStatusFilter(url.searchParams.get("mediaStatus")) ? url.searchParams.get("mediaStatus") as MediaStatus | "all" : "all",

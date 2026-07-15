@@ -1,3 +1,5 @@
+import { isPrivateStatus, type PrivateUiStatus } from "./privateStatus";
+
 export const collectionLevels = ["unset", "masterpiece", "normal", "discard"] as const;
 
 export type CollectionLevel = (typeof collectionLevels)[number];
@@ -76,10 +78,17 @@ export function findWorkCodeConflict<T extends { id: string; code?: unknown }>(v
   return items.find((item) => item.id !== currentId && normalizeWorkCode(item.code) === normalized);
 }
 
-export type QuickEditField = "collection_level" | "rating" | "used";
-export function validateQuickEdit(field: unknown, value: unknown): { field: QuickEditField; value: CollectionLevel | number | boolean | null } | null {
+export type QuickEditField = "collection_level" | "rating" | "used" | "private_status";
+export type ValidatedQuickEdit =
+  | { field: "collection_level"; value: CollectionLevel }
+  | { field: "rating"; value: number | null }
+  | { field: "used"; value: boolean }
+  | { field: "private_status"; value: PrivateUiStatus };
+
+export function validateQuickEdit(field: unknown, value: unknown): ValidatedQuickEdit | null {
   if (field === "collection_level") return isCollectionLevel(value) ? { field, value } : null;
   if (field === "rating") return value === null || (typeof value === "number" && Number.isFinite(value) && value >= 1 && value <= 10) ? { field, value } : null;
   if (field === "used") return typeof value === "boolean" ? { field, value } : null;
+  if (field === "private_status") return isPrivateStatus(value) ? { field, value } : null;
   return null;
 }
