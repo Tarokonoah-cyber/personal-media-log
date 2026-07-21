@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { emptyPrivateRowDraft, privateCellPatch, privateCellValue, privateRowDraftToInput } from "../src/lib/privateSpreadsheet";
-import { privateItemDetails } from "../src/lib/privacy";
+import {
+  emptyPrivateRowDraft,
+  privateCellPatch,
+  privateCellValue,
+  privateIdentityLabel,
+  privateIdentityPatch,
+  privateIdentityValue,
+  privateRowDraftToInput
+} from "../src/lib/privateSpreadsheet";
 import type { MediaItem } from "../src/types";
 
 describe("private spreadsheet data flow", () => {
@@ -8,51 +15,77 @@ describe("private spreadsheet data flow", () => {
     const input = privateRowDraftToInput({
       ...emptyPrivateRowDraft("2026-07-20"),
       code: "fc2 ppv 1234567",
-      title: "測試片名",
+      title: "Sample title",
       rating: "8.5",
       collection: "masterpiece",
-      actress: "演員 A、演員 B",
+      actress: "Performer A, Performer B",
       platform: "FC2",
-      maker: "片商",
-      tags: "#高畫質、劇情, 高畫質",
-      summary: "快速筆記"
+      maker: "Studio",
+      tags: "#recommended, plot",
+      summary: "Short note"
     });
 
     expect(input).toMatchObject({
-      raw_title: "測試片名",
-      official_title: "測試片名",
+      raw_title: "Sample title",
+      official_title: "Sample title",
       code: "fc2 ppv 1234567",
       rating: 8.5,
       collection_level: "masterpiece",
-      favorite_level: "神作",
       used: true,
-      media_status: "已觀看",
       watched_at: "2026-07-20",
       platform: "FC2",
-      maker: "片商",
-      quick_note: "快速筆記",
-      people: ["演員 A", "演員 B"],
-      tags: ["高畫質", "劇情"]
+      maker: "Studio",
+      quick_note: "Short note",
+      people: ["Performer A", "Performer B"],
+      tags: ["recommended", "plot"]
     });
   });
 
-  it("maps spreadsheet cells to focused item patches", () => {
+  it("maps ordinary spreadsheet cells to focused item patches", () => {
     const item = {
-      raw_title: "舊片名",
+      raw_title: "Original title",
       official_title: null,
       code: "ABC-123",
-      people: ["演員 A"],
-      tags: ["劇情"],
+      people: ["Performer A"],
+      tags: ["plot"],
       watched_at: "2026-07-01",
       quick_note: null,
-      metadata_json: JSON.stringify({ title: "匯入片名" })
+      metadata_json: "{}"
     } as MediaItem;
 
-    expect(privateCellValue(item, "actress")).toBe("演員 A");
-    expect(privateCellPatch(item, "title", "手動片名")).toEqual({ official_title: "手動片名", raw_title: "手動片名" });
-    expect(privateCellPatch(item, "tags", "劇情、戶外, 劇情")).toEqual({ tags: ["劇情", "戶外"] });
+    expect(privateCellValue(item, "actress")).toBe("Performer A");
+    expect(privateCellPatch(item, "tags", "plot, outdoor, plot")).toEqual({ tags: ["plot", "outdoor"] });
+    expect(privateCellPatch(item, "maker", " Studio ")).toEqual({ maker: "Studio" });
+  });
 
-    const updated = { ...item, official_title: "手動片名" };
-    expect(privateItemDetails(updated).title).toBe("手動片名");
+  it("renders code and optional title in one identity cell", () => {
+    const withTitle = {
+      raw_title: "A readable title",
+      official_title: "A readable title",
+      code: "FC2-PPV-1234567",
+      people: [],
+      tags: [],
+      metadata_json: "{}"
+    } as MediaItem;
+    const codeOnly = { ...withTitle, raw_title: "FC2-PPV-1234567", official_title: null } as MediaItem;
+
+    expect(privateIdentityValue(withTitle)).toEqual({ code: "FC2-PPV-1234567", title: "A readable title" });
+    expect(privateIdentityLabel(withTitle)).toBe("FC2-PPV-1234567 — A readable title");
+    expect(privateIdentityValue(codeOnly)).toEqual({ code: "FC2-PPV-1234567", title: "" });
+    expect(privateIdentityLabel(codeOnly)).toBe("FC2-PPV-1234567");
+  });
+
+  it("updates identity fields together and requires a code", () => {
+    expect(privateIdentityPatch({ code: " ABC-123 ", title: " Updated title " })).toEqual({
+      code: "ABC-123",
+      official_title: "Updated title",
+      raw_title: "Updated title"
+    });
+    expect(privateIdentityPatch({ code: "ABC-123", title: "" })).toEqual({
+      code: "ABC-123",
+      official_title: null,
+      raw_title: "ABC-123"
+    });
+    expect(() => privateIdentityPatch({ code: " ", title: "Title" })).toThrow("番號不能空白");
   });
 });

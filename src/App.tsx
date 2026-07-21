@@ -1,5 +1,6 @@
 ﻿import { Bookmark, Check, CircleSlash2, Columns3, Home, Menu, Moon, Plus, Save, Search, SlidersHorizontal, Star, Sun, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { ArrowDown, ArrowUp, ChevronDown, Pencil, X } from "lucide-react";
 import { FilterSheet } from "./components/FilterSheet";
 import { HomeDashboard } from "./components/HomeDashboard";
 import { ImportExport } from "./components/ImportExport";
@@ -22,8 +23,10 @@ import { mergePrivateFilters } from "./lib/privateFilters";
 import { collectionLevelLabels, collectionLevels, normalizeCollectionLevel, type CollectionLevel } from "../shared/privateModel";
 import { createSavedView, readSavedViews, savedViewSignature, writeSavedViews, type SavedPrivateView } from "./lib/savedViews";
 import { toItemInput } from "./lib/itemTransforms";
-import { emptyPrivateRowDraft, privateCellPatch, privateCellValue, privateRowDraftToInput, type PrivateEditableColumn, type PrivateRowDraft } from "./lib/privateSpreadsheet";
+import { emptyPrivateRowDraft, privateCellPatch, privateCellValue, privateIdentityLabel, privateIdentityPatch, privateIdentityValue, privateRowDraftToInput, type PrivateEditableColumn, type PrivateIdentityDraft, type PrivateRowDraft } from "./lib/privateSpreadsheet";
+import { movePrivateCell, privateCellKey, privateClipboardUpdate, privateClipboardValue, type PrivateCellMovement, type PrivateCellPosition } from "./lib/privateSpreadsheetKeyboard";
 import { isPrivateStatus, privateStatusToFields } from "./lib/privateStatus";
+import { defaultPrivateTablePreferences, normalizePrivateTablePreferences, privateColumnDefinitions, privateColumnMap, readPrivateTablePreferences, savePrivateTablePreferences, type PrivateColumnDefinition, type PrivateColumnId, type PrivateTablePreferences } from "./lib/privateTablePreferences";
 import { isPrivateItem, isPrivateLibraryLabel, privateItemDetails, PRIVATE_LIBRARY_LABEL, PRIVATE_RECOMMENDED_LABEL, PRIVATE_RECOMMENDED_TAG } from "./lib/privacy";
 import { parseQuickEntry } from "./lib/quickParse";
 import { collectionLevelOptions } from "./lib/reflection";
@@ -83,81 +86,6 @@ type DisplayDensity = "comfortable" | "standard" | "compact";
 const displayViews: DisplayView[] = ["table", "list", "poster", "calendar"];
 const displayDensities: DisplayDensity[] = ["comfortable", "standard", "compact"];
 const quickStatusViews = ["home", "watching", "plan_to_watch", "completed"];
-const PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v2";
-
-type PrivateColumnId = "code" | "title" | "rating" | "favorite" | "actress" | "platform" | "maker" | "tags" | "watchedAt" | "summary";
-
-type PrivateColumnDefinition = {
-  id: PrivateColumnId;
-  label: string;
-  width: number;
-  minWidth: number;
-  maxWidth: number;
-  required?: boolean;
-  defaultHidden?: boolean;
-};
-
-type PrivateTablePreferences = {
-  order: PrivateColumnId[];
-  widths: Record<PrivateColumnId, number>;
-  visible: Record<PrivateColumnId, boolean>;
-  pageSize: number;
-};
-
-const privateColumnDefinitions: PrivateColumnDefinition[] = [
-  { id: "code", label: "番號", width: 172, minWidth: 120, maxWidth: 300, required: true },
-  { id: "title", label: "片名", width: 300, minWidth: 160, maxWidth: 680 },
-  { id: "rating", label: "評分", width: 72, minWidth: 64, maxWidth: 100 },
-  { id: "favorite", label: "收藏", width: 92, minWidth: 78, maxWidth: 130 },
-  { id: "actress", label: "女優", width: 160, minWidth: 110, maxWidth: 360 },
-  { id: "platform", label: "平台", width: 100, minWidth: 80, maxWidth: 220 },
-  { id: "maker", label: "片商", width: 130, minWidth: 90, maxWidth: 300 },
-  { id: "tags", label: "標籤", width: 210, minWidth: 130, maxWidth: 420 },
-  { id: "watchedAt", label: "紀錄日", width: 112, minWidth: 104, maxWidth: 150 },
-  { id: "summary", label: "快速筆記", width: 260, minWidth: 160, maxWidth: 520 }
-];
-
-const privateColumnMap = Object.fromEntries(privateColumnDefinitions.map((column) => [column.id, column])) as Record<PrivateColumnId, PrivateColumnDefinition>;
-const privateColumnIds = privateColumnDefinitions.map((column) => column.id);
-
-function defaultPrivateTablePreferences(): PrivateTablePreferences {
-  return {
-    order: privateColumnIds,
-    widths: Object.fromEntries(privateColumnDefinitions.map((column) => [column.id, column.width])) as Record<PrivateColumnId, number>,
-    visible: Object.fromEntries(privateColumnDefinitions.map((column) => [column.id, !column.defaultHidden])) as Record<PrivateColumnId, boolean>,
-    pageSize: 100
-  };
-}
-function normalizePrivateTablePreferences(value?: Partial<PrivateTablePreferences> | null): PrivateTablePreferences {
-  const defaults = defaultPrivateTablePreferences();
-  const order = [...(value?.order || []).filter((id): id is PrivateColumnId => privateColumnIds.includes(id as PrivateColumnId)), ...privateColumnIds.filter((id) => !(value?.order || []).includes(id))];
-  const widths = { ...defaults.widths, ...(value?.widths || {}) };
-  const visible = { ...defaults.visible, ...(value?.visible || {}), code: true };
-  for (const column of privateColumnDefinitions) {
-    widths[column.id] = Math.min(column.maxWidth, Math.max(column.minWidth, Number(widths[column.id]) || column.width));
-    if (column.required) visible[column.id] = true;
-  }
-  return {
-    order,
-    widths,
-    visible,
-    pageSize: [50, 100, 200].includes(Number(value?.pageSize)) ? Number(value?.pageSize) : defaults.pageSize
-  };
-}
-
-function readPrivateTablePreferences() {
-  if (typeof localStorage === "undefined") return defaultPrivateTablePreferences();
-  try {
-    return normalizePrivateTablePreferences(JSON.parse(localStorage.getItem(PRIVATE_TABLE_PREFERENCES_KEY) || "null"));
-  } catch {
-    return defaultPrivateTablePreferences();
-  }
-}
-
-function savePrivateTablePreferences(preferences: PrivateTablePreferences) {
-  if (typeof localStorage === "undefined") return;
-  localStorage.setItem(PRIVATE_TABLE_PREFERENCES_KEY, JSON.stringify(normalizePrivateTablePreferences(preferences)));
-}
 
 function initialPrivatePageSize() {
   return readPrivateTablePreferences().pageSize;
@@ -209,7 +137,7 @@ export default function App() {
   const includePrivate = privateView && !safeMode;
   const privateActive = privateView && includePrivate;
   const privateRecommendedActive = activeView === PRIVATE_RECOMMENDED_LABEL && includePrivate;
-  const privatePageTitle = privateRecommendedActive ? PRIVATE_RECOMMENDED_LABEL : PRIVATE_LIBRARY_LABEL;
+  const privatePageTitle = privateRecommendedActive ? PRIVATE_RECOMMENDED_LABEL : "私密工作台";
   const currentDisplayView = privateActive ? "table" : displayView;
   const effectiveSidebarCollapsed = privateActive ? privateSidebarCollapsed : sidebarCollapsed;
   const loading = initialLoading || refreshing || actionLoading;
@@ -678,18 +606,17 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={privateActive ? "app-shell private-app-shell" : "app-shell"}>
       <header className={privateActive ? "topbar private-shell-topbar" : "topbar"}>
         <button className="icon-button mobile-sidebar-button" onClick={() => setSidebarOpen(true)} title="開啟導覽" aria-label="開啟導覽" aria-expanded={sidebarOpen} aria-controls="private-sidebar"><Menu size={18} /></button>
         {privateActive ? (
           <div className="private-shell-main">
-            <button className="filter-toggle private-return-home" onClick={returnHome}>
+            <button className="icon-button private-return-home" onClick={returnHome} title="返回首頁" aria-label="返回首頁">
               <Home size={16} />
-              返回首頁
             </button>
             <div className="private-shell-title">
               <strong>{privatePageTitle}</strong>
-              <span>{privateRecommendedActive ? "網友推薦好片片" : "高密度資料管理"}</span>
+              <span>{privateRecommendedActive ? "網友推薦" : `${privateSummary?.total ?? total} 筆作品`}</span>
             </div>
           </div>
         ) : (
@@ -713,7 +640,7 @@ export default function App() {
             </div>
           </div>
         )}
-        <button className="icon-button" onClick={() => setDark((value) => !value)} title={dark ? "切換淺色模式" : "切換深色模式"}>
+        <button className="icon-button private-theme-toggle" onClick={() => setDark((value) => !value)} title={dark ? "切換淺色模式" : "切換深色模式"} aria-label={dark ? "切換淺色模式" : "切換深色模式"}>
           {dark ? <Sun size={18} /> : <Moon size={18} />}
         </button>
       </header>
@@ -1328,6 +1255,7 @@ function PrivateWorkbenchV3({
   const [newRow, setNewRow] = useState<PrivateRowDraft>(() => emptyPrivateRowDraft());
   const [newRowBusy, setNewRowBusy] = useState(false);
   const [newRowError, setNewRowError] = useState("");
+  const [sheetFeedback, setSheetFeedback] = useState<PrivateSheetFeedback | null>(null);
   const visibleColumns = useMemo(
     () => columnPreferences.order.filter((id) => columnPreferences.visible[id]).map((id) => privateColumnMap[id]),
     [columnPreferences]
@@ -1355,6 +1283,12 @@ function PrivateWorkbenchV3({
   useEffect(() => {
     savePrivateTablePreferences({ ...columnPreferences, pageSize: filters.pageSize });
   }, [columnPreferences, filters.pageSize]);
+
+  useEffect(() => {
+    if (!sheetFeedback) return;
+    const id = window.setTimeout(() => setSheetFeedback(null), sheetFeedback.tone === "error" ? 5000 : 2500);
+    return () => window.clearTimeout(id);
+  }, [sheetFeedback]);
 
   function updatePageSize(pageSize: number) {
     setColumnPreferences((current) => normalizePrivateTablePreferences({ ...current, pageSize }));
@@ -1407,7 +1341,10 @@ function PrivateWorkbenchV3({
   }
 
   async function submitNewRow() {
-    if (!newRow.code.trim() && !newRow.title.trim()) return;
+    if (!newRow.code.trim()) {
+      setNewRowError("番號不能空白");
+      return;
+    }
     setNewRowBusy(true);
     setNewRowError("");
     try {
@@ -1488,7 +1425,7 @@ function PrivateWorkbenchV3({
   const visibleEnd = items.length === 0 ? 0 : Math.min(total, (filters.page - 1) * filters.pageSize + items.length);
 
   return (
-    <section className="private-workbench" aria-busy={refreshing}>
+    <section className="private-workbench private-workbench-v4" aria-busy={refreshing}>
       <div className="private-toolbar">
         <label className="private-search-field">
           <Search size={16} />
@@ -1511,8 +1448,8 @@ function PrivateWorkbenchV3({
                         <input type="checkbox" checked={columnPreferences.visible[column.id]} disabled={column.required} onChange={() => toggleColumn(column.id)} />
                         <span>{column.label}</span>
                       </label>
-                      <button type="button" className="icon-button" onClick={() => moveConfiguredColumn(column.id, -1)} disabled={index === 0} title="上移" aria-label={`${column.label}上移`}>↑</button>
-                      <button type="button" className="icon-button" onClick={() => moveConfiguredColumn(column.id, 1)} disabled={index === columnPreferences.order.length - 1} title="下移" aria-label={`${column.label}下移`}>↓</button>
+                      <button type="button" className="icon-button" onClick={() => moveConfiguredColumn(column.id, -1)} disabled={index === 0} title="上移" aria-label={`${column.label}上移`}><ArrowUp size={13} /></button>
+                      <button type="button" className="icon-button" onClick={() => moveConfiguredColumn(column.id, 1)} disabled={index === columnPreferences.order.length - 1} title="下移" aria-label={`${column.label}下移`}><ArrowDown size={13} /></button>
                     </div>
                   );
                 })}
@@ -1586,11 +1523,15 @@ function PrivateWorkbenchV3({
               onNewRowChange={setNewRow}
               onNewRowSubmit={() => void submitNewRow()}
               onNewRowCancel={cancelNewRow}
+              onStatusChange={setSheetFeedback}
             />
           </>
         )}
         <div className="private-table-footer">
-          <span>顯示 {visibleStart}-{visibleEnd} / {total}</span>
+          <div className="private-table-footer-status">
+            <span>顯示 {visibleStart}-{visibleEnd} / {total}</span>
+            {sheetFeedback && <span className={`private-sheet-feedback is-${sheetFeedback.tone}`} aria-live="polite">{sheetFeedback.message}</span>}
+          </div>
           <div className="pagination-controls private-pagination" aria-label="分頁">
             <button disabled={filters.page <= 1} onClick={() => onPatchFilters({ page: filters.page - 1 })}>上一頁</button>
             <span>{filters.page} / {pageCount}</span>
@@ -1615,6 +1556,11 @@ function nextTitleSort(filters: ListFilters): Partial<ListFilters> {
   return { sort: "", order: "", page: 1 };
 }
 
+type PrivateSheetFeedback = {
+  message: string;
+  tone: "neutral" | "success" | "error";
+};
+
 function PrivateDataTable({
   items,
   columns,
@@ -1638,7 +1584,8 @@ function PrivateDataTable({
   onQuickUpdate,
   onNewRowChange,
   onNewRowSubmit,
-  onNewRowCancel
+  onNewRowCancel,
+  onStatusChange
 }: {
   items: MediaItem[];
   columns: PrivateColumnDefinition[];
@@ -1663,21 +1610,71 @@ function PrivateDataTable({
   onNewRowChange: (draft: PrivateRowDraft) => void;
   onNewRowSubmit: () => void;
   onNewRowCancel: () => void;
+  onStatusChange: (feedback: PrivateSheetFeedback) => void;
 }) {
   const [dragColumn, setDragColumn] = useState<PrivateColumnId | null>(null);
-  const [editing, setEditing] = useState<{ itemId: string; column: PrivateEditableColumn } | null>(null);
+  const [editing, setEditing] = useState<{ itemId: string; column: PrivateColumnId } | null>(null);
+  const [activeCell, setActiveCell] = useState<PrivateCellPosition | null>(null);
+  const [failedCell, setFailedCell] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  const [identityDraft, setIdentityDraft] = useState<PrivateIdentityDraft>({ code: "", title: "" });
   const [quickPending, setQuickPending] = useState<string | null>(null);
   const [quickError, setQuickError] = useState("");
   const cancelBlur = useRef(false);
   const selectAllRef = useRef<HTMLInputElement | null>(null);
+  const cellRefs = useRef(new Map<string, HTMLTableCellElement>());
+  const savingCellRef = useRef<string | null>(null);
   const allSelected = items.length > 0 && selectedIds.length === items.length;
   const someSelected = selectedIds.length > 0 && !allSelected;
   const totalWidth = 84 + columns.reduce((sum, column) => sum + preferences.widths[column.id], 0);
+  const itemIds = useMemo(() => items.map((item) => item.id), [items]);
+  const columnIds = useMemo(() => columns.map((column) => column.id), [columns]);
+  const resolvedActiveCell = useMemo(() => activeCell && itemIds.includes(activeCell.itemId) && columnIds.includes(activeCell.column)
+    ? activeCell
+    : itemIds[0] && columnIds[0] ? { itemId: itemIds[0], column: columnIds[0] } : null, [activeCell, columnIds, itemIds]);
 
   useEffect(() => {
     if (selectAllRef.current) selectAllRef.current.indeterminate = someSelected;
   }, [someSelected]);
+
+  useEffect(() => {
+    if (!resolvedActiveCell) {
+      setActiveCell(null);
+      setEditing(null);
+      return;
+    }
+    setActiveCell((current) => current && itemIds.includes(current.itemId) && columnIds.includes(current.column) ? current : resolvedActiveCell);
+    setEditing((current) => current && itemIds.includes(current.itemId) && columnIds.includes(current.column) ? current : null);
+  }, [columnIds, itemIds, resolvedActiveCell]);
+
+  function registerCell(position: PrivateCellPosition, node: HTMLTableCellElement | null) {
+    const key = privateCellKey(position);
+    if (node) cellRefs.current.set(key, node);
+    else cellRefs.current.delete(key);
+  }
+
+  function focusCell(position: PrivateCellPosition) {
+    setActiveCell(position);
+    setFailedCell(null);
+    window.requestAnimationFrame(() => {
+      const cell = cellRefs.current.get(privateCellKey(position));
+      if (!cell) return;
+      const target = position.column === "rating" || position.column === "favorite"
+        ? cell.querySelector<HTMLSelectElement>("select") || cell
+        : cell;
+      target.focus({ preventScroll: true });
+      cell.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+  }
+
+  function moveCellFocus(position: PrivateCellPosition, movement: PrivateCellMovement) {
+    const next = movePrivateCell(position, itemIds, columnIds, movement);
+    if (next) focusCell(next);
+  }
+
+  function refocusEditor(position: PrivateCellPosition) {
+    window.requestAnimationFrame(() => cellRefs.current.get(privateCellKey(position))?.querySelector<HTMLInputElement>("input")?.focus());
+  }
 
   function updateWidth(column: PrivateColumnDefinition, width: number) {
     onPreferencesChange((current) => normalizePrivateTablePreferences({
@@ -1716,52 +1713,259 @@ function PrivateDataTable({
     setDragColumn(null);
   }
 
-  function beginCellEdit(item: MediaItem, column: PrivateEditableColumn) {
+  function beginCellEdit(item: MediaItem, column: PrivateColumnId) {
     if (quickPending) return;
+    const position = { itemId: item.id, column };
+    cancelBlur.current = false;
     setQuickError("");
-    setEditDraft(privateCellValue(item, column));
-    setEditing({ itemId: item.id, column });
+    setFailedCell(null);
+    setActiveCell(position);
+    if (column === "identity") setIdentityDraft(privateIdentityValue(item));
+    else if (column !== "rating" && column !== "favorite") setEditDraft(privateCellValue(item, column));
+    setEditing(position);
   }
 
-  async function commitCellEdit(item: MediaItem, column: PrivateEditableColumn) {
+  function identityDraftFromEditor(editor: HTMLElement | null) {
+    if (!editor) return identityDraft;
+    const codeInput = editor.querySelector<HTMLInputElement>('input[aria-label="編輯番號"]');
+    const titleInput = editor.querySelector<HTMLInputElement>('input[aria-label="編輯片名"]');
+    return {
+      code: codeInput?.value ?? identityDraft.code,
+      title: titleInput?.value ?? identityDraft.title,
+    };
+  }
+
+  function finishCellEdit(position: PrivateCellPosition, movement?: PrivateCellMovement) {
+    setEditing(null);
+    setFailedCell(null);
+    if (movement) moveCellFocus(position, movement);
+  }
+
+  function cancelCellEdit(position: PrivateCellPosition) {
+    cancelBlur.current = true;
+    setEditing(null);
+    setQuickError("");
+    focusCell(position);
+  }
+
+  async function commitIdentityEdit(item: MediaItem, nextDraft = identityDraft, movement?: PrivateCellMovement) {
+    const position = { itemId: item.id, column: "identity" } satisfies PrivateCellPosition;
+    const key = privateCellKey(position);
     if (cancelBlur.current) {
       cancelBlur.current = false;
       return;
     }
-    if (editDraft === privateCellValue(item, column)) {
-      setEditing(null);
+    if (savingCellRef.current) return;
+    const original = privateIdentityValue(item);
+    if (nextDraft.code.trim() === original.code && nextDraft.title.trim() === original.title) {
+      finishCellEdit(position, movement);
       return;
     }
-    const key = `${item.id}:${column}`;
+    let patch: Partial<ItemInput>;
+    try {
+      patch = privateIdentityPatch(nextDraft);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "番號不能空白";
+      setQuickError(message);
+      setFailedCell(privateCellKey(position));
+      setActiveCell(position);
+      onStatusChange({ message, tone: "error" });
+      refocusEditor(position);
+      return;
+    }
+    savingCellRef.current = key;
     setQuickPending(key);
     setQuickError("");
+    onStatusChange({ message: "儲存中...", tone: "neutral" });
     try {
-      await onCellUpdate(item, privateCellPatch(item, column, editDraft));
-      setEditing(null);
+      await onCellUpdate(item, patch);
+      finishCellEdit(position, movement);
+      onStatusChange({ message: "已儲存", tone: "success" });
     } catch (err) {
-      setQuickError(err instanceof Error ? err.message : "儲存格更新失敗");
+      const message = err instanceof Error ? err.message : "作品代號更新失敗";
+      setQuickError(message);
+      setFailedCell(key);
+      setActiveCell(position);
+      onStatusChange({ message, tone: "error" });
+      refocusEditor(position);
     } finally {
+      if (savingCellRef.current === key) savingCellRef.current = null;
+      setQuickPending(null);
+    }
+  }
+
+  async function commitCellEdit(item: MediaItem, column: PrivateEditableColumn, nextDraft = editDraft, movement?: PrivateCellMovement) {
+    const position = { itemId: item.id, column } satisfies PrivateCellPosition;
+    if (cancelBlur.current) {
+      cancelBlur.current = false;
+      return;
+    }
+    const key = privateCellKey(position);
+    if (savingCellRef.current) return;
+    if (nextDraft === privateCellValue(item, column)) {
+      finishCellEdit(position, movement);
+      return;
+    }
+    savingCellRef.current = key;
+    setQuickPending(key);
+    setQuickError("");
+    onStatusChange({ message: "儲存中...", tone: "neutral" });
+    try {
+      await onCellUpdate(item, privateCellPatch(item, column, nextDraft));
+      finishCellEdit(position, movement);
+      onStatusChange({ message: "已儲存", tone: "success" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "儲存格更新失敗";
+      setQuickError(message);
+      setFailedCell(key);
+      setActiveCell(position);
+      onStatusChange({ message, tone: "error" });
+      refocusEditor(position);
+    } finally {
+      if (savingCellRef.current === key) savingCellRef.current = null;
       setQuickPending(null);
     }
   }
 
   function handleCellKeyDown(event: React.KeyboardEvent<HTMLInputElement>, item: MediaItem, column: PrivateEditableColumn) {
-    if (event.key === "Enter") {
+    const position = { itemId: item.id, column } satisfies PrivateCellPosition;
+    if (event.key === "Enter" || event.key === "Tab") {
       event.preventDefault();
-      event.currentTarget.blur();
+      event.stopPropagation();
+      const movement: PrivateCellMovement = event.key === "Enter" ? "down" : event.shiftKey ? "tabBackward" : "tabForward";
+      void commitCellEdit(item, column, event.currentTarget.value, movement);
     } else if (event.key === "Escape") {
       event.preventDefault();
-      cancelBlur.current = true;
-      setEditing(null);
+      event.stopPropagation();
+      cancelCellEdit(position);
     }
+  }
+
+  function handleIdentityKeyDown(event: React.KeyboardEvent<HTMLInputElement>, item: MediaItem) {
+    const position = { itemId: item.id, column: "identity" } satisfies PrivateCellPosition;
+    const activeField = event.currentTarget.getAttribute("aria-label") === "編輯片名" ? "title" : "code";
+    if (event.key === "Tab" && ((activeField === "code" && !event.shiftKey) || (activeField === "title" && event.shiftKey))) {
+      event.preventDefault();
+      event.stopPropagation();
+      const targetLabel = activeField === "code" ? "編輯片名" : "編輯番號";
+      event.currentTarget.parentElement?.querySelector<HTMLInputElement>(`input[aria-label="${targetLabel}"]`)?.focus();
+    } else if (event.key === "Enter" || event.key === "Tab") {
+      event.preventDefault();
+      event.stopPropagation();
+      const nextDraft = {
+        ...identityDraftFromEditor(event.currentTarget.parentElement),
+        [activeField]: event.currentTarget.value,
+      };
+      setIdentityDraft(nextDraft);
+      const movement: PrivateCellMovement = event.key === "Enter" ? "down" : event.shiftKey ? "tabBackward" : "tabForward";
+      void commitIdentityEdit(item, nextDraft, movement);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      cancelCellEdit(position);
+    }
+  }
+
+  function handleIdentityBlur(event: React.FocusEvent<HTMLSpanElement>, item: MediaItem) {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    const nextDraft = identityDraftFromEditor(event.currentTarget);
+    setIdentityDraft(nextDraft);
+    void commitIdentityEdit(item, nextDraft);
   }
 
   async function commitQuick(item: MediaItem, field: "collection_level" | "rating", value: unknown) {
     const key = `${item.id}:${field}`; if (quickPending) return;
-    setQuickPending(key); setQuickError("");
-    try { await onQuickUpdate(item, field, value); }
-    catch (err) { setQuickError(err instanceof Error ? err.message : "快速更新失敗"); }
-    finally { setQuickPending(null); }
+    if (savingCellRef.current) return;
+    savingCellRef.current = key;
+    setQuickPending(key); setQuickError(""); setFailedCell(null);
+    onStatusChange({ message: "儲存中...", tone: "neutral" });
+    try {
+      await onQuickUpdate(item, field, value);
+      onStatusChange({ message: "已儲存", tone: "success" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "快速更新失敗";
+      setQuickError(message); setFailedCell(key);
+      onStatusChange({ message, tone: "error" });
+    }
+    finally {
+      if (savingCellRef.current === key) savingCellRef.current = null;
+      setQuickPending(null);
+    }
+  }
+
+  function activateCell(event: React.MouseEvent<HTMLTableCellElement>, position: PrivateCellPosition) {
+    setActiveCell(position);
+    setFailedCell(null);
+    if (!(event.target as HTMLElement).closest("input,select,button")) event.currentTarget.focus({ preventScroll: true });
+  }
+
+  function handleCellNavigation(event: React.KeyboardEvent<HTMLTableCellElement>, item: MediaItem, column: PrivateColumnId) {
+    const position = { itemId: item.id, column };
+    if (editing?.itemId === item.id && editing.column === column) return;
+    const target = event.target as HTMLElement;
+    const directSelect = target instanceof HTMLSelectElement;
+    if (event.key === "Tab") {
+      event.preventDefault();
+      moveCellFocus(position, event.shiftKey ? "tabBackward" : "tabForward");
+      return;
+    }
+    if (directSelect) return;
+    const movement = ({ ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down" } as const)[event.key];
+    if (movement) {
+      event.preventDefault();
+      moveCellFocus(position, movement);
+    } else if (event.key === "Enter" || event.key === "F2") {
+      event.preventDefault();
+      beginCellEdit(item, column);
+    }
+  }
+
+  function handleCellCopy(event: React.ClipboardEvent<HTMLTableCellElement>, item: MediaItem, column: PrivateColumnId) {
+    if (editing?.itemId === item.id && editing.column === column) return;
+    event.preventDefault();
+    event.clipboardData.setData("text/plain", privateClipboardValue(item, column));
+    setActiveCell({ itemId: item.id, column });
+    onStatusChange({ message: `已複製「${privateColumnMap[column].label}」`, tone: "success" });
+  }
+
+  async function pasteCell(item: MediaItem, column: PrivateColumnId, value: string) {
+    const position = { itemId: item.id, column };
+    const key = privateCellKey(position);
+    setActiveCell(position);
+    setFailedCell(null);
+    setQuickError("");
+    let update;
+    try {
+      update = privateClipboardUpdate(item, column, value);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "貼上內容格式不正確";
+      setFailedCell(key);
+      onStatusChange({ message, tone: "error" });
+      return;
+    }
+    const pendingKey = column === "favorite" ? `${item.id}:collection_level` : key;
+    if (savingCellRef.current) return;
+    savingCellRef.current = pendingKey;
+    setQuickPending(pendingKey);
+    onStatusChange({ message: "儲存中...", tone: "neutral" });
+    try {
+      if (update.kind === "quick") await onQuickUpdate(item, update.field, update.value);
+      else await onCellUpdate(item, update.patch);
+      onStatusChange({ message: `已貼上「${privateColumnMap[column].label}」`, tone: "success" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "貼上失敗";
+      setFailedCell(key);
+      onStatusChange({ message, tone: "error" });
+    } finally {
+      if (savingCellRef.current === pendingKey) savingCellRef.current = null;
+      setQuickPending(null);
+    }
+  }
+
+  function handleCellPaste(event: React.ClipboardEvent<HTMLTableCellElement>, item: MediaItem, column: PrivateColumnId) {
+    if (editing?.itemId === item.id && editing.column === column) return;
+    event.preventDefault();
+    void pasteCell(item, column, event.clipboardData.getData("text/plain"));
   }
 
   return (
@@ -1785,8 +1989,8 @@ function PrivateDataTable({
             {columns.map((column) => (
               <th
                 key={column.id}
-                className={column.id === "code" ? "private-sticky-column" : undefined}
-                aria-sort={column.id === "code" || column.id === "title" ? sort === "displayName" ? order === "desc" ? "descending" : "ascending" : "none" : undefined}
+                className={column.id === "identity" ? "private-sticky-column" : undefined}
+                aria-sort={column.id === "identity" ? sort === "displayName" ? order === "desc" ? "descending" : "ascending" : "none" : undefined}
                 draggable
                 onDragStart={(event) => {
                   if ((event.target as HTMLElement).closest(".private-sort-header,.private-column-resize")) {
@@ -1798,14 +2002,14 @@ function PrivateDataTable({
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={() => moveColumn(column.id)}
               >
-                {column.id === "code" || column.id === "title" ? (
+                {column.id === "identity" ? (
                   <button className="private-sort-header" type="button" onClick={onSortTitle} onKeyDown={(event) => {
                     if (event.key !== "Enter" && event.key !== " ") return;
                     event.preventDefault();
                     onSortTitle();
                   }}>
                     <span>{column.label}</span>
-                    <span aria-hidden="true">{sort === "displayName" ? order === "desc" ? "↓" : "↑" : ""}</span>
+                    <span className="private-sort-direction" aria-hidden="true">{sort === "displayName" ? order === "desc" ? <ArrowDown size={13} /> : <ArrowUp size={13} /> : null}</span>
                   </button>
                 ) : (
                   <span>{column.label}</span>
@@ -1835,26 +2039,53 @@ function PrivateDataTable({
                 <td className="private-select-column">
                   <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => onToggleSelected(item.id)} onClick={(event) => event.stopPropagation()} aria-label={`選取 ${privateItemDetails(item).code}`} />
                 </td>
-                {columns.map((column) => (
-                  <td key={column.id} className={column.id === "code" ? "private-sticky-column" : undefined}>
-                    <PrivateTableCell
-                      column={column.id}
-                      item={item}
-                      editing={editing?.itemId === item.id && editing.column === column.id}
-                      draft={editDraft}
-                      pending={quickPending === `${item.id}:${column.id === "favorite" ? "collection_level" : column.id}`}
-                      error={editing?.itemId === item.id && editing.column === column.id ? quickError : ""}
-                      onBeginEdit={() => beginCellEdit(item, column.id as PrivateEditableColumn)}
-                      onDraftChange={setEditDraft}
-                      onBlur={() => void commitCellEdit(item, column.id as PrivateEditableColumn)}
-                      onKeyDown={(event) => handleCellKeyDown(event, item, column.id as PrivateEditableColumn)}
-                      onCommit={(field, value) => void commitQuick(item, field, value)}
-                      onFilter={onFilter}
-                    />
-                  </td>
-                ))}
+                {columns.map((column) => {
+                  const position = { itemId: item.id, column: column.id } satisfies PrivateCellPosition;
+                  const key = privateCellKey(position);
+                  const isActive = resolvedActiveCell?.itemId === item.id && resolvedActiveCell.column === column.id;
+                  const isDirectSelect = column.id === "rating" || column.id === "favorite";
+                  const className = [
+                    column.id === "identity" ? "private-sticky-column" : "",
+                    isActive ? "is-active-cell" : "",
+                    failedCell === key ? "is-error-cell" : "",
+                  ].filter(Boolean).join(" ");
+                  return (
+                    <td
+                      key={column.id}
+                      ref={(node) => registerCell(position, node)}
+                      className={className || undefined}
+                      tabIndex={isDirectSelect ? -1 : isActive ? 0 : -1}
+                      aria-selected={isActive}
+                      onClick={(event) => activateCell(event, position)}
+                      onFocusCapture={() => setActiveCell(position)}
+                      onKeyDown={(event) => handleCellNavigation(event, item, column.id)}
+                      onCopy={(event) => handleCellCopy(event, item, column.id)}
+                      onPaste={(event) => handleCellPaste(event, item, column.id)}
+                    >
+                      <PrivateTableCell
+                        column={column.id}
+                        item={item}
+                        active={isActive}
+                        editing={editing?.itemId === item.id && editing.column === column.id}
+                        draft={editDraft}
+                        identityDraft={identityDraft}
+                        pending={quickPending === `${item.id}:${column.id === "favorite" ? "collection_level" : column.id}`}
+                        error={editing?.itemId === item.id && editing.column === column.id ? quickError : ""}
+                        onBeginEdit={() => beginCellEdit(item, column.id)}
+                        onDraftChange={setEditDraft}
+                        onIdentityDraftChange={setIdentityDraft}
+                        onBlur={(event) => void commitCellEdit(item, column.id as PrivateEditableColumn, event.currentTarget.value)}
+                        onIdentityBlur={(event) => handleIdentityBlur(event, item)}
+                        onKeyDown={(event) => handleCellKeyDown(event, item, column.id as PrivateEditableColumn)}
+                        onIdentityKeyDown={(event) => handleIdentityKeyDown(event, item)}
+                        onCommit={(field, value) => void commitQuick(item, field, value)}
+                        onFilter={onFilter}
+                      />
+                    </td>
+                  );
+                })}
                 <td className="private-open-column">
-                  <button type="button" className="private-open-row" onClick={() => onSelect(item)} title="開啟詳細資料">編輯</button>
+                  <button type="button" className="private-open-row" onClick={() => onSelect(item)} title="編輯詳細資料" aria-label={`編輯 ${privateItemDetails(item).code}`}><Pencil size={13} /></button>
                 </td>
               </tr>
             );
@@ -1868,42 +2099,95 @@ function PrivateDataTable({
 function PrivateTableCell({
   column,
   item,
+  active,
   editing,
   draft,
+  identityDraft,
   pending,
   error,
   onBeginEdit,
   onDraftChange,
+  onIdentityDraftChange,
   onBlur,
+  onIdentityBlur,
   onKeyDown,
+  onIdentityKeyDown,
   onCommit
 }: {
   column: PrivateColumnId;
   item: MediaItem;
+  active: boolean;
   editing: boolean;
   draft: string;
+  identityDraft: PrivateIdentityDraft;
   pending: boolean;
   error: string;
   onBeginEdit: () => void;
   onDraftChange: (value: string) => void;
-  onBlur: () => void;
+  onIdentityDraftChange: (value: PrivateIdentityDraft) => void;
+  onBlur: (event: React.FocusEvent<HTMLInputElement>) => void;
+  onIdentityBlur: (event: React.FocusEvent<HTMLSpanElement>) => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
+  onIdentityKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
   onCommit: (field: "collection_level" | "rating", value: unknown) => void;
   onFilter: (patch: Partial<ListFilters>) => void;
 }) {
+  if (column === "identity") {
+    const identity = privateIdentityValue(item);
+    if (editing) {
+      return (
+        <span className="private-identity-editor" onBlur={onIdentityBlur}>
+          <input
+            autoFocus
+            value={identityDraft.code}
+            disabled={pending}
+            onChange={(event) => onIdentityDraftChange({ ...identityDraft, code: event.target.value })}
+            onKeyDown={onIdentityKeyDown}
+            placeholder="番號"
+            aria-label="編輯番號"
+          />
+          <input
+            value={identityDraft.title}
+            disabled={pending}
+            onChange={(event) => onIdentityDraftChange({ ...identityDraft, title: event.target.value })}
+            onKeyDown={onIdentityKeyDown}
+            placeholder="片名可留空"
+            aria-label="編輯片名"
+          />
+          {error && <em role="alert">{error}</em>}
+        </span>
+      );
+    }
+    return (
+      <span
+        className={`private-identity-value${pending ? " is-saving" : ""}`}
+        title={privateIdentityLabel(item) || "雙擊編輯"}
+        onDoubleClick={onBeginEdit}
+      >
+        <strong>{identity.code}</strong>
+        {identity.title && <><span className="private-identity-separator">—</span><span className="private-identity-title">{identity.title}</span></>}
+      </span>
+    );
+  }
   if (column === "rating") {
     return (
-      <select className="private-sheet-select" value={item.rating ?? ""} disabled={pending} onChange={(event) => onCommit("rating", event.target.value ? Number(event.target.value) : null)} aria-label={`評分 ${privateItemDetails(item).code}`}>
-        <option value="">-</option>
-        {Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}
-      </select>
+      <span className="private-sheet-select-cell">
+        <select className="private-sheet-select" tabIndex={active ? 0 : -1} value={item.rating ?? ""} disabled={pending} onChange={(event) => onCommit("rating", event.target.value ? Number(event.target.value) : null)} aria-label={`評分 ${privateItemDetails(item).code}`}>
+          <option value="">-</option>
+          {Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+        <ChevronDown size={12} aria-hidden="true" />
+      </span>
     );
   }
   if (column === "favorite") {
     return (
-      <select className="private-sheet-select" value={normalizeCollectionLevel(item.collection_level)} disabled={pending} onChange={(event) => onCommit("collection_level", event.target.value)} aria-label={`收藏 ${privateItemDetails(item).code}`}>
-        {collectionLevels.map((value) => <option key={value} value={value}>{collectionLevelLabels[value]}</option>)}
-      </select>
+      <span className="private-sheet-select-cell">
+        <select className="private-sheet-select" tabIndex={active ? 0 : -1} value={normalizeCollectionLevel(item.collection_level)} disabled={pending} onChange={(event) => onCommit("collection_level", event.target.value)} aria-label={`收藏 ${privateItemDetails(item).code}`}>
+          {collectionLevels.map((value) => <option key={value} value={value}>{collectionLevelLabels[value]}</option>)}
+        </select>
+        <ChevronDown size={12} aria-hidden="true" />
+      </span>
     );
   }
 
@@ -1929,10 +2213,8 @@ function PrivateTableCell({
   return (
     <span
       className={`private-sheet-value private-sheet-${column}${pending ? " is-saving" : ""}`}
-      tabIndex={0}
       title={value || "雙擊輸入"}
       onDoubleClick={onBeginEdit}
-      onKeyDown={(event) => { if (event.key === "Enter" || event.key === "F2") onBeginEdit(); }}
     >
       {value || ""}
     </span>
@@ -1941,9 +2223,10 @@ function PrivateTableCell({
 
 function estimatePrivateColumnWidth(column: PrivateColumnId, items: MediaItem[]) {
   const sample = items.slice(0, 100).map((item) => {
+    if (column === "identity") return privateIdentityLabel(item) || "-";
     if (column === "rating") return item.rating ? Number(item.rating).toFixed(1) : "-";
     if (column === "favorite") return privateFavoriteLevel(item);
-    return privateCellValue(item, column as PrivateEditableColumn) || "-";
+    return privateCellValue(item, column) || "-";
   });
   const maxLength = Math.max(privateColumnMap[column].label.length, ...sample.map((value) => value.length));
   return maxLength * 8 + 34;
@@ -1974,12 +2257,10 @@ function PrivateNewSpreadsheetRow({ columns, draft, busy, error, knownTags, onCh
   }
 
   function cell(column: PrivateColumnId) {
+    if (column === "identity") return <span className="private-new-identity-editor"><input autoFocus value={draft.code} onChange={(event) => patch({ code: event.target.value })} onKeyDown={handleKeyDown} placeholder="輸入番號" aria-label="新資料番號" /><input value={draft.title} onChange={(event) => patch({ title: event.target.value })} onKeyDown={handleKeyDown} placeholder="片名可留空" aria-label="新資料片名" /></span>;
     if (column === "rating") return <input value={draft.rating} onChange={(event) => patch({ rating: event.target.value })} onKeyDown={handleKeyDown} inputMode="decimal" aria-label="新資料評分" />;
     if (column === "favorite") return <select value={draft.collection} onChange={(event) => patch({ collection: event.target.value as CollectionLevel })} onKeyDown={handleKeyDown} aria-label="新資料收藏">{collectionLevels.map((value) => <option key={value} value={value}>{collectionLevelLabels[value]}</option>)}</select>;
-    if (column === "code") return <input autoFocus value={draft.code} onChange={(event) => patch({ code: event.target.value })} onKeyDown={handleKeyDown} placeholder="輸入番號" aria-label="新資料番號" />;
-    if (column === "title") return <input value={draft.title} onChange={(event) => patch({ title: event.target.value })} onKeyDown={handleKeyDown} placeholder="片名可留空" aria-label="新資料片名" />;
     if (column === "actress") return <input value={draft.actress} onChange={(event) => patch({ actress: event.target.value })} onKeyDown={handleKeyDown} placeholder="多人用逗號分隔" aria-label="新資料女優" />;
-    if (column === "platform") return <input value={draft.platform} onChange={(event) => patch({ platform: event.target.value })} onKeyDown={handleKeyDown} placeholder="平台" aria-label="新資料平台" />;
     if (column === "maker") return <input value={draft.maker} onChange={(event) => patch({ maker: event.target.value })} onKeyDown={handleKeyDown} placeholder="片商" aria-label="新資料片商" />;
     if (column === "tags") return <input value={draft.tags} onChange={(event) => patch({ tags: event.target.value })} onKeyDown={handleKeyDown} placeholder="標籤以逗號分隔" list="private-sheet-known-tags" aria-label="新資料標籤" />;
     if (column === "watchedAt") return <input type="date" value={draft.watchedAt} onChange={(event) => patch({ watchedAt: event.target.value })} onKeyDown={handleKeyDown} aria-label="新資料紀錄日" />;
@@ -1989,11 +2270,11 @@ function PrivateNewSpreadsheetRow({ columns, draft, busy, error, knownTags, onCh
   return (
     <tr className="private-new-sheet-row">
       <td className="private-select-column" aria-hidden="true">+</td>
-      {columns.map((column) => <td key={column.id} className={column.id === "code" ? "private-sticky-column" : undefined}>{cell(column.id)}</td>)}
+      {columns.map((column) => <td key={column.id} className={column.id === "identity" ? "private-sticky-column" : undefined}>{cell(column.id)}</td>)}
       <td className="private-open-column">
         <span className="private-new-row-actions" title={error || undefined}>
-          <button type="button" onClick={onSubmit} disabled={busy || (!draft.code.trim() && !draft.title.trim())} title="儲存新資料" aria-label="儲存新資料"><Check size={14} /></button>
-          <button type="button" onClick={onCancel} disabled={busy} title="取消新增" aria-label="取消新增">×</button>
+          <button type="button" onClick={onSubmit} disabled={busy || !draft.code.trim()} title="儲存新資料" aria-label="儲存新資料"><Check size={14} /></button>
+          <button type="button" onClick={onCancel} disabled={busy} title="取消新增" aria-label="取消新增"><X size={14} /></button>
         </span>
         {error && <em role="alert">!</em>}
         <datalist id="private-sheet-known-tags">{knownTags.slice(0, 40).map((tag) => <option key={tag} value={tag} />)}</datalist>

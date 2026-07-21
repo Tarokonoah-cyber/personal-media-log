@@ -4,7 +4,12 @@ import { privateItemDetails, PRIVATE_LIBRARY_LABEL } from "./privacy";
 import { normalizeTags, parseTagInput } from "./tags";
 import type { ItemInput, MediaItem } from "../types";
 
-export type PrivateEditableColumn = "code" | "title" | "actress" | "platform" | "maker" | "tags" | "watchedAt" | "summary";
+export type PrivateEditableColumn = "actress" | "maker" | "tags" | "watchedAt" | "summary";
+
+export type PrivateIdentityDraft = {
+  code: string;
+  title: string;
+};
 
 export type PrivateRowDraft = {
   code: string;
@@ -64,26 +69,44 @@ export function privateRowDraftToInput(draft: PrivateRowDraft): ItemInput {
 
 export function privateCellValue(item: MediaItem, column: PrivateEditableColumn) {
   const details = privateItemDetails(item);
-  if (column === "code") return details.code === "-" ? "" : details.code;
-  if (column === "title") return details.title === "-" ? "" : details.title;
   if (column === "actress") return details.performers === "-" ? "" : details.performers;
-  if (column === "platform") return item.platform || "";
   if (column === "maker") return item.maker || "";
   if (column === "tags") return item.tags.join(", ");
   if (column === "watchedAt") return item.watched_at?.slice(0, 10) || "";
   return item.quick_note || "";
 }
 
-export function privateCellPatch(item: MediaItem, column: PrivateEditableColumn, value: string): Partial<ItemInput> {
+export function privateCellPatch(_item: MediaItem, column: PrivateEditableColumn, value: string): Partial<ItemInput> {
   const clean = value.trim();
-  if (column === "code") return { code: clean || null };
-  if (column === "title") return { official_title: clean || null, raw_title: clean || item.code || item.raw_title };
   if (column === "actress") return { people: splitPeople(value) };
-  if (column === "platform") return { platform: clean || null };
   if (column === "maker") return { maker: clean || null };
   if (column === "tags") return { tags: normalizeTags(parseTagInput(value)) };
   if (column === "watchedAt") return { watched_at: clean || null };
   return { quick_note: clean || null };
+}
+
+export function privateIdentityValue(item: MediaItem): PrivateIdentityDraft {
+  const details = privateItemDetails(item);
+  const code = details.code === "-" ? "" : details.code.trim();
+  const rawTitle = details.title === "-" ? "" : details.title.trim();
+  const title = rawTitle && rawTitle.toLocaleLowerCase() !== code.toLocaleLowerCase() ? rawTitle : "";
+  return { code, title };
+}
+
+export function privateIdentityLabel(item: MediaItem) {
+  const identity = privateIdentityValue(item);
+  return identity.title ? `${identity.code} — ${identity.title}` : identity.code;
+}
+
+export function privateIdentityPatch(draft: PrivateIdentityDraft): Partial<ItemInput> {
+  const code = draft.code.trim();
+  const title = draft.title.trim();
+  if (!code) throw new Error("番號不能空白");
+  return {
+    code,
+    official_title: title || null,
+    raw_title: title || code
+  };
 }
 
 function cleanNullable(value: string) {
