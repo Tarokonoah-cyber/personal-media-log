@@ -22,7 +22,8 @@ import { mergePrivateFilters } from "./lib/privateFilters";
 import { collectionLevelLabels, collectionLevels, normalizeCollectionLevel, type CollectionLevel } from "../shared/privateModel";
 import { createSavedView, readSavedViews, savedViewSignature, writeSavedViews, type SavedPrivateView } from "./lib/savedViews";
 import { toItemInput } from "./lib/itemTransforms";
-import { fieldsToPrivateStatus, isPrivateStatus, privateStatusLabels, privateStatusOptions, privateStatusToFields, type PrivateUiStatus } from "./lib/privateStatus";
+import { emptyPrivateRowDraft, privateCellPatch, privateCellValue, privateRowDraftToInput, type PrivateEditableColumn, type PrivateRowDraft } from "./lib/privateSpreadsheet";
+import { isPrivateStatus, privateStatusToFields } from "./lib/privateStatus";
 import { isPrivateItem, isPrivateLibraryLabel, privateItemDetails, PRIVATE_LIBRARY_LABEL, PRIVATE_RECOMMENDED_LABEL, PRIVATE_RECOMMENDED_TAG } from "./lib/privacy";
 import { parseQuickEntry } from "./lib/quickParse";
 import { collectionLevelOptions } from "./lib/reflection";
@@ -82,9 +83,9 @@ type DisplayDensity = "comfortable" | "standard" | "compact";
 const displayViews: DisplayView[] = ["table", "list", "poster", "calendar"];
 const displayDensities: DisplayDensity[] = ["comfortable", "standard", "compact"];
 const quickStatusViews = ["home", "watching", "plan_to_watch", "completed"];
-const PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v1";
+const PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v2";
 
-type PrivateColumnId = "title" | "rating" | "favorite" | "used" | "actress" | "tags" | "source" | "summary";
+type PrivateColumnId = "code" | "title" | "rating" | "favorite" | "actress" | "platform" | "maker" | "tags" | "watchedAt" | "summary";
 
 type PrivateColumnDefinition = {
   id: PrivateColumnId;
@@ -104,14 +105,16 @@ type PrivateTablePreferences = {
 };
 
 const privateColumnDefinitions: PrivateColumnDefinition[] = [
-  { id: "title", label: "作品代號 / 標題", width: 520, minWidth: 320, maxWidth: 900, required: true },
-  { id: "rating", label: "評分", width: 78, minWidth: 64, maxWidth: 120 },
-  { id: "favorite", label: "收藏", width: 68, minWidth: 56, maxWidth: 110 },
-  { id: "used", label: "狀態", width: 64, minWidth: 58, maxWidth: 100 },
-  { id: "actress", label: "女優", width: 180, minWidth: 120, maxWidth: 360 },
-  { id: "tags", label: "標籤", width: 220, minWidth: 140, maxWidth: 420 },
-  { id: "source", label: "來源", width: 140, minWidth: 100, maxWidth: 260, defaultHidden: true },
-  { id: "summary", label: "一句話心得", width: 280, minWidth: 180, maxWidth: 520, defaultHidden: true }
+  { id: "code", label: "番號", width: 172, minWidth: 120, maxWidth: 300, required: true },
+  { id: "title", label: "片名", width: 300, minWidth: 160, maxWidth: 680 },
+  { id: "rating", label: "評分", width: 72, minWidth: 64, maxWidth: 100 },
+  { id: "favorite", label: "收藏", width: 92, minWidth: 78, maxWidth: 130 },
+  { id: "actress", label: "女優", width: 160, minWidth: 110, maxWidth: 360 },
+  { id: "platform", label: "平台", width: 100, minWidth: 80, maxWidth: 220 },
+  { id: "maker", label: "片商", width: 130, minWidth: 90, maxWidth: 300 },
+  { id: "tags", label: "標籤", width: 210, minWidth: 130, maxWidth: 420 },
+  { id: "watchedAt", label: "紀錄日", width: 112, minWidth: 104, maxWidth: 150 },
+  { id: "summary", label: "快速筆記", width: 260, minWidth: 160, maxWidth: 520 }
 ];
 
 const privateColumnMap = Object.fromEntries(privateColumnDefinitions.map((column) => [column.id, column])) as Record<PrivateColumnId, PrivateColumnDefinition>;
@@ -129,7 +132,7 @@ function normalizePrivateTablePreferences(value?: Partial<PrivateTablePreference
   const defaults = defaultPrivateTablePreferences();
   const order = [...(value?.order || []).filter((id): id is PrivateColumnId => privateColumnIds.includes(id as PrivateColumnId)), ...privateColumnIds.filter((id) => !(value?.order || []).includes(id))];
   const widths = { ...defaults.widths, ...(value?.widths || {}) };
-  const visible = { ...defaults.visible, ...(value?.visible || {}), title: true };
+  const visible = { ...defaults.visible, ...(value?.visible || {}), code: true };
   for (const column of privateColumnDefinitions) {
     widths[column.id] = Math.min(column.maxWidth, Math.max(column.minWidth, Number(widths[column.id]) || column.width));
     if (column.required) visible[column.id] = true;
@@ -780,8 +783,9 @@ export default function App() {
                   onClearFilters={resetFilters}
                   onRetry={() => void loadItems()}
                   onOpenAdvanced={() => setFiltersOpen(true)}
-                  onAdd={() => setSimpleAddOpen(true)}
+                  onCreate={quickCreateFromTable}
                   onSelect={(item) => void openItemDetail(item)}
+                  onCellUpdate={quickUpdate}
                   onQuickUpdate={quickPrivateUpdate}
                   onBatchUpdate={batchUpdate}
                   onBatchDelete={batchDelete}
@@ -1282,8 +1286,9 @@ function PrivateWorkbenchV3({
   onClearFilters,
   onRetry,
   onOpenAdvanced,
-  onAdd,
+  onCreate,
   onSelect,
+  onCellUpdate,
   onQuickUpdate,
   onBatchUpdate,
   onBatchDelete,
@@ -1302,8 +1307,9 @@ function PrivateWorkbenchV3({
   onClearFilters: () => void;
   onRetry: () => void;
   onOpenAdvanced: () => void;
-  onAdd: () => void;
+  onCreate: (input: ItemInput) => Promise<void>;
   onSelect: (item: MediaItem) => void;
+  onCellUpdate: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
   onQuickUpdate: (item: MediaItem, field: "collection_level" | "rating" | "used" | "private_status", value: unknown) => Promise<void>;
   onBatchUpdate: (items: MediaItem[], patch: Partial<ItemInput> | ((item: MediaItem) => Partial<ItemInput>)) => Promise<BatchOperationResult>;
   onBatchDelete: (items: MediaItem[]) => Promise<BatchOperationResult>;
@@ -1318,6 +1324,10 @@ function PrivateWorkbenchV3({
   const [activeSavedView, setActiveSavedView] = useState<string | null>(null);
   const [savedViewError, setSavedViewError] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [addingRow, setAddingRow] = useState(false);
+  const [newRow, setNewRow] = useState<PrivateRowDraft>(() => emptyPrivateRowDraft());
+  const [newRowBusy, setNewRowBusy] = useState(false);
+  const [newRowError, setNewRowError] = useState("");
   const visibleColumns = useMemo(
     () => columnPreferences.order.filter((id) => columnPreferences.visible[id]).map((id) => privateColumnMap[id]),
     [columnPreferences]
@@ -1363,13 +1373,57 @@ function PrivateWorkbenchV3({
     setColumnPreferences(defaultPrivateTablePreferences());
   }
 
+  function moveConfiguredColumn(id: PrivateColumnId, offset: -1 | 1) {
+    setColumnPreferences((current) => {
+      const index = current.order.indexOf(id);
+      const target = index + offset;
+      if (index < 0 || target < 0 || target >= current.order.length) return current;
+      const order = [...current.order];
+      [order[index], order[target]] = [order[target], order[index]];
+      return normalizePrivateTablePreferences({ ...current, order });
+    });
+  }
+
+  function autosizeAllColumns() {
+    setColumnPreferences((current) => ({
+      ...current,
+      widths: Object.fromEntries(privateColumnDefinitions.map((column) => [
+        column.id,
+        Math.min(column.maxWidth, Math.max(column.minWidth, estimatePrivateColumnWidth(column.id, items)))
+      ])) as Record<PrivateColumnId, number>
+    }));
+  }
+
+  function beginNewRow() {
+    setNewRow(emptyPrivateRowDraft());
+    setNewRowError("");
+    setAddingRow(true);
+  }
+
+  function cancelNewRow() {
+    if (newRowBusy) return;
+    setAddingRow(false);
+    setNewRowError("");
+  }
+
+  async function submitNewRow() {
+    if (!newRow.code.trim() && !newRow.title.trim()) return;
+    setNewRowBusy(true);
+    setNewRowError("");
+    try {
+      await onCreate(privateRowDraftToInput(newRow));
+      setAddingRow(false);
+      setNewRow(emptyPrivateRowDraft());
+    } catch (err) {
+      setNewRowError(err instanceof Error ? err.message : "新增失敗");
+    } finally {
+      setNewRowBusy(false);
+    }
+  }
+
   function keepFailedSelection(result: BatchOperationResult) {
     if (!result.cancelled) setSelectedIds(result.failedIds);
     return result;
-  }
-
-  async function updateSelectedStatus(status: PrivateUiStatus) {
-    return keepFailedSelection(await onBatchUpdate(selectedItems, privateStatusToFields(status)));
   }
 
   async function updateSelectedCollection(collection: CollectionLevel) {
@@ -1399,6 +1453,9 @@ function PrivateWorkbenchV3({
     const preferences = normalizePrivateTablePreferences(view.tablePreferences);
     const restoredFilters = {
       ...view.filters,
+      privateStatus: "all",
+      usedFilter: "all",
+      mediaStatus: "all",
       sort: view.filters.sort ?? (view.sorting?.field === "displayName" ? "displayName" : ""),
       order: view.filters.order ?? (view.sorting?.field === "displayName" ? view.sorting.direction : ""),
       page: 1,
@@ -1444,14 +1501,25 @@ function PrivateWorkbenchV3({
             <button className="filter-toggle column-toggle" onClick={() => setColumnsOpen((value) => !value)}><Columns3 size={16} />欄位</button>
             {columnsOpen && (
               <div className="private-columns-popover" role="dialog" aria-label="欄位設定">
-                <strong>欄位設定</strong>
-                {privateColumnDefinitions.map((column) => (
-                  <label key={column.id} className="private-column-option">
-                    <input type="checkbox" checked={columnPreferences.visible[column.id]} disabled={column.required} onChange={() => toggleColumn(column.id)} />
-                    <span>{column.label}</span>
-                  </label>
-                ))}
-                <button className="filter-chip-clear" onClick={resetColumns}>重設欄位</button>
+                <strong>資料表欄位</strong>
+                <p>勾選顯示，使用箭頭調整順序；表頭邊緣可拖曳欄寬。</p>
+                {columnPreferences.order.map((id, index) => {
+                  const column = privateColumnMap[id];
+                  return (
+                    <div key={column.id} className="private-column-option">
+                      <label>
+                        <input type="checkbox" checked={columnPreferences.visible[column.id]} disabled={column.required} onChange={() => toggleColumn(column.id)} />
+                        <span>{column.label}</span>
+                      </label>
+                      <button type="button" className="icon-button" onClick={() => moveConfiguredColumn(column.id, -1)} disabled={index === 0} title="上移" aria-label={`${column.label}上移`}>↑</button>
+                      <button type="button" className="icon-button" onClick={() => moveConfiguredColumn(column.id, 1)} disabled={index === columnPreferences.order.length - 1} title="下移" aria-label={`${column.label}下移`}>↓</button>
+                    </div>
+                  );
+                })}
+                <div className="private-column-actions">
+                  <button type="button" onClick={autosizeAllColumns}>自動欄寬</button>
+                  <button type="button" className="filter-chip-clear" onClick={resetColumns}>恢復預設</button>
+                </div>
               </div>
             )}
           </div>
@@ -1464,7 +1532,7 @@ function PrivateWorkbenchV3({
               {savedViews.map((view) => <div className="saved-view-row" key={view.id}><button onClick={() => applySavedView(view)}>{view.name}</button><button title="覆蓋更新" onClick={() => updateSavedView(view)}>更新</button><button title="重新命名" onClick={() => renameSavedView(view)}>改名</button><button title="刪除" onClick={() => { if (window.confirm(`刪除檢視「${view.name}」？`)) { persistViews(savedViews.filter((entry) => entry.id !== view.id)); if (activeSavedView === view.id) setActiveSavedView(null); } }}>刪除</button></div>)}
             </div>}
           </div>
-          <button className="primary" onClick={onAdd}><Plus size={16} />新增</button>
+          <button className="primary" onClick={beginNewRow} disabled={addingRow}><Plus size={16} />新增資料列</button>
         </div>
       </div>
 
@@ -1475,7 +1543,6 @@ function PrivateWorkbenchV3({
           selectedCount={selectedItems.length}
           knownTags={knownTags}
           busy={batchBusy}
-          onStatus={updateSelectedStatus}
           onCollection={updateSelectedCollection}
           onTags={updateSelectedTags}
           onDelete={deleteSelected}
@@ -1488,8 +1555,8 @@ function PrivateWorkbenchV3({
           <PrivateSkeleton />
         ) : error && items.length === 0 ? (
           <PrivateErrorCard error={error} onRetry={onRetry} />
-        ) : items.length === 0 ? (
-          <PrivateEmptyState onClear={onClearFilters} onAdd={onAdd} />
+        ) : items.length === 0 && !addingRow ? (
+          <PrivateEmptyState onClear={onClearFilters} onAdd={beginNewRow} />
         ) : (
           <>
             {refreshing && <div className="private-refresh-indicator" role="status">更新中...</div>}
@@ -1503,13 +1570,22 @@ function PrivateWorkbenchV3({
               order={filters.order || ""}
               refreshing={refreshing}
               selectedIds={selectedIds}
+              addingRow={addingRow}
+              newRow={newRow}
+              newRowBusy={newRowBusy}
+              newRowError={newRowError}
+              knownTags={knownTags}
               onSortTitle={() => onPatchFilters(nextTitleSort(filters))}
               onFilter={(patch) => onPatchFilters({ ...patch, page: 1 })}
               onPreferencesChange={setColumnPreferences}
               onToggleSelected={(id) => setSelectedIds((current) => togglePageItemSelection(current, id))}
               onToggleAll={() => setSelectedIds((current) => togglePageSelection(current, items))}
               onSelect={onSelect}
+              onCellUpdate={onCellUpdate}
               onQuickUpdate={onQuickUpdate}
+              onNewRowChange={setNewRow}
+              onNewRowSubmit={() => void submitNewRow()}
+              onNewRowCancel={cancelNewRow}
             />
           </>
         )}
@@ -1547,13 +1623,22 @@ function PrivateDataTable({
   order,
   refreshing,
   selectedIds,
+  addingRow,
+  newRow,
+  newRowBusy,
+  newRowError,
+  knownTags,
   onSortTitle,
   onPreferencesChange,
   onToggleSelected,
   onToggleAll,
   onFilter,
   onSelect,
-  onQuickUpdate
+  onCellUpdate,
+  onQuickUpdate,
+  onNewRowChange,
+  onNewRowSubmit,
+  onNewRowCancel
 }: {
   items: MediaItem[];
   columns: PrivateColumnDefinition[];
@@ -1562,24 +1647,33 @@ function PrivateDataTable({
   order: ListFilters["order"];
   refreshing: boolean;
   selectedIds: string[];
+  addingRow: boolean;
+  newRow: PrivateRowDraft;
+  newRowBusy: boolean;
+  newRowError: string;
+  knownTags: string[];
   onSortTitle: () => void;
   onPreferencesChange: (preferences: PrivateTablePreferences | ((current: PrivateTablePreferences) => PrivateTablePreferences)) => void;
   onToggleSelected: (id: string) => void;
   onToggleAll: () => void;
   onFilter: (patch: Partial<ListFilters>) => void;
   onSelect: (item: MediaItem) => void;
+  onCellUpdate: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
   onQuickUpdate: (item: MediaItem, field: "collection_level" | "rating" | "used" | "private_status", value: unknown) => Promise<void>;
+  onNewRowChange: (draft: PrivateRowDraft) => void;
+  onNewRowSubmit: () => void;
+  onNewRowCancel: () => void;
 }) {
   const [dragColumn, setDragColumn] = useState<PrivateColumnId | null>(null);
-  const [editing, setEditing] = useState<{ itemId: string; column: "favorite" | "rating" | "used" } | null>(null);
+  const [editing, setEditing] = useState<{ itemId: string; column: PrivateEditableColumn } | null>(null);
+  const [editDraft, setEditDraft] = useState("");
   const [quickPending, setQuickPending] = useState<string | null>(null);
   const [quickError, setQuickError] = useState("");
-  const quickTrigger = useRef<HTMLButtonElement | null>(null);
+  const cancelBlur = useRef(false);
   const selectAllRef = useRef<HTMLInputElement | null>(null);
   const allSelected = items.length > 0 && selectedIds.length === items.length;
   const someSelected = selectedIds.length > 0 && !allSelected;
-  const totalWidth = 42 + columns.reduce((sum, column) => sum + preferences.widths[column.id], 0);
-  const nonTitleWidth = columns.reduce((sum, column) => sum + (column.id === "title" ? 0 : preferences.widths[column.id]), 0);
+  const totalWidth = 84 + columns.reduce((sum, column) => sum + preferences.widths[column.id], 0);
 
   useEffect(() => {
     if (selectAllRef.current) selectAllRef.current.indeterminate = someSelected;
@@ -1622,19 +1716,50 @@ function PrivateDataTable({
     setDragColumn(null);
   }
 
-  useEffect(() => {
-    if (!editing) return;
-    const close = () => setEditing(null);
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") close(); };
-    const onPointer = (event: MouseEvent) => { if (!(event.target as HTMLElement).closest(".private-quick-editor,[data-quick-trigger]")) close(); };
-    document.addEventListener("keydown", onKey); document.addEventListener("mousedown", onPointer);
-    return () => { document.removeEventListener("keydown", onKey); document.removeEventListener("mousedown", onPointer); window.setTimeout(() => quickTrigger.current?.focus(), 0); };
-  }, [editing]);
+  function beginCellEdit(item: MediaItem, column: PrivateEditableColumn) {
+    if (quickPending) return;
+    setQuickError("");
+    setEditDraft(privateCellValue(item, column));
+    setEditing({ itemId: item.id, column });
+  }
 
-  async function commitQuick(item: MediaItem, field: "collection_level" | "rating" | "used" | "private_status", value: unknown) {
+  async function commitCellEdit(item: MediaItem, column: PrivateEditableColumn) {
+    if (cancelBlur.current) {
+      cancelBlur.current = false;
+      return;
+    }
+    if (editDraft === privateCellValue(item, column)) {
+      setEditing(null);
+      return;
+    }
+    const key = `${item.id}:${column}`;
+    setQuickPending(key);
+    setQuickError("");
+    try {
+      await onCellUpdate(item, privateCellPatch(item, column, editDraft));
+      setEditing(null);
+    } catch (err) {
+      setQuickError(err instanceof Error ? err.message : "儲存格更新失敗");
+    } finally {
+      setQuickPending(null);
+    }
+  }
+
+  function handleCellKeyDown(event: React.KeyboardEvent<HTMLInputElement>, item: MediaItem, column: PrivateEditableColumn) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      event.currentTarget.blur();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      cancelBlur.current = true;
+      setEditing(null);
+    }
+  }
+
+  async function commitQuick(item: MediaItem, field: "collection_level" | "rating", value: unknown) {
     const key = `${item.id}:${field}`; if (quickPending) return;
     setQuickPending(key); setQuickError("");
-    try { await onQuickUpdate(item, field, value); setEditing(null); }
+    try { await onQuickUpdate(item, field, value); }
     catch (err) { setQuickError(err instanceof Error ? err.message : "快速更新失敗"); }
     finally { setQuickPending(null); }
   }
@@ -1647,13 +1772,10 @@ function PrivateDataTable({
           {columns.map((column) => (
             <col
               key={column.id}
-              style={{
-                width: column.id === "title"
-                  ? `max(${preferences.widths[column.id]}px, calc(100% - ${nonTitleWidth + 42}px))`
-                  : preferences.widths[column.id]
-              }}
+              style={{ width: preferences.widths[column.id] }}
             />
           ))}
+          <col className="private-open-column" />
         </colgroup>
         <thead>
           <tr>
@@ -1663,8 +1785,8 @@ function PrivateDataTable({
             {columns.map((column) => (
               <th
                 key={column.id}
-                className={column.id === "title" ? "private-sticky-column" : undefined}
-                aria-sort={column.id === "title" ? sort === "displayName" ? order === "desc" ? "descending" : "ascending" : "none" : undefined}
+                className={column.id === "code" ? "private-sticky-column" : undefined}
+                aria-sort={column.id === "code" || column.id === "title" ? sort === "displayName" ? order === "desc" ? "descending" : "ascending" : "none" : undefined}
                 draggable
                 onDragStart={(event) => {
                   if ((event.target as HTMLElement).closest(".private-sort-header,.private-column-resize")) {
@@ -1676,7 +1798,7 @@ function PrivateDataTable({
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={() => moveColumn(column.id)}
               >
-                {column.id === "title" ? (
+                {column.id === "code" || column.id === "title" ? (
                   <button className="private-sort-header" type="button" onClick={onSortTitle} onKeyDown={(event) => {
                     if (event.key !== "Enter" && event.key !== " ") return;
                     event.preventDefault();
@@ -1691,20 +1813,49 @@ function PrivateDataTable({
                 <span className="private-column-resize" onMouseDown={(event) => startResize(column, event)} onDoubleClick={() => autosize(column)} title="拖曳調整寬度，雙擊自動寬度" />
               </th>
             ))}
+            <th className="private-open-column" aria-label="開啟詳細資料" />
           </tr>
         </thead>
         <tbody>
+          {addingRow && (
+            <PrivateNewSpreadsheetRow
+              columns={columns}
+              draft={newRow}
+              busy={newRowBusy}
+              error={newRowError}
+              knownTags={knownTags}
+              onChange={onNewRowChange}
+              onSubmit={onNewRowSubmit}
+              onCancel={onNewRowCancel}
+            />
+          )}
           {items.map((item) => {
             return (
-              <tr key={item.id} className={selectedIds.includes(item.id) ? "selected" : ""} onClick={() => onSelect(item)}>
+              <tr key={item.id} className={selectedIds.includes(item.id) ? "selected" : ""}>
                 <td className="private-select-column">
                   <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => onToggleSelected(item.id)} onClick={(event) => event.stopPropagation()} aria-label={`選取 ${privateItemDetails(item).code}`} />
                 </td>
                 {columns.map((column) => (
-                  <td key={column.id} className={column.id === "title" ? "private-sticky-column" : undefined}>
-                    <PrivateTableCell column={column.id} item={item} editing={editing?.itemId === item.id && editing.column === column.id} pending={quickPending === `${item.id}:${column.id === "favorite" ? "collection_level" : column.id === "used" ? "private_status" : column.id}`} error={quickError} onOpen={(button) => { quickTrigger.current = button; setQuickError(""); setEditing({ itemId: item.id, column: column.id as "favorite" | "rating" | "used" }); }} onCommit={(field, value) => void commitQuick(item, field, value)} onFilter={onFilter} />
+                  <td key={column.id} className={column.id === "code" ? "private-sticky-column" : undefined}>
+                    <PrivateTableCell
+                      column={column.id}
+                      item={item}
+                      editing={editing?.itemId === item.id && editing.column === column.id}
+                      draft={editDraft}
+                      pending={quickPending === `${item.id}:${column.id === "favorite" ? "collection_level" : column.id}`}
+                      error={editing?.itemId === item.id && editing.column === column.id ? quickError : ""}
+                      onBeginEdit={() => beginCellEdit(item, column.id as PrivateEditableColumn)}
+                      onDraftChange={setEditDraft}
+                      onBlur={() => void commitCellEdit(item, column.id as PrivateEditableColumn)}
+                      onKeyDown={(event) => handleCellKeyDown(event, item, column.id as PrivateEditableColumn)}
+                      onCommit={(field, value) => void commitQuick(item, field, value)}
+                      onFilter={onFilter}
+                    />
                   </td>
                 ))}
+                <td className="private-open-column">
+                  <button type="button" className="private-open-row" onClick={() => onSelect(item)} title="開啟詳細資料">編輯</button>
+                </td>
               </tr>
             );
           })}
@@ -1714,52 +1865,141 @@ function PrivateDataTable({
   );
 }
 
-function PrivateTableCell({ column, item, editing, pending, error, onOpen, onCommit, onFilter }: { column: PrivateColumnId; item: MediaItem; editing: boolean; pending: boolean; error: string; onOpen: (button: HTMLButtonElement) => void; onCommit: (field: "collection_level" | "rating" | "used" | "private_status", value: unknown) => void; onFilter: (patch: Partial<ListFilters>) => void }) {
-  const details = privateItemDetails(item);
-  if (column === "title") {
-    const titleText = privateDisplayTitle(details.title, details.code);
-    const codeTitleText = titleText ? `${details.code} — ${titleText}` : details.code;
+function PrivateTableCell({
+  column,
+  item,
+  editing,
+  draft,
+  pending,
+  error,
+  onBeginEdit,
+  onDraftChange,
+  onBlur,
+  onKeyDown,
+  onCommit
+}: {
+  column: PrivateColumnId;
+  item: MediaItem;
+  editing: boolean;
+  draft: string;
+  pending: boolean;
+  error: string;
+  onBeginEdit: () => void;
+  onDraftChange: (value: string) => void;
+  onBlur: () => void;
+  onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
+  onCommit: (field: "collection_level" | "rating", value: unknown) => void;
+  onFilter: (patch: Partial<ListFilters>) => void;
+}) {
+  if (column === "rating") {
     return (
-      <span className="private-title-code-cell" title={codeTitleText}>
-        <span className="private-code-title-line">
-          <strong>{details.code}</strong>
-          {titleText && (
-            <>
-              <span className="private-title-separator">—</span>
-              <span className="private-title-text">{titleText}</span>
-            </>
-          )}
-        </span>
+      <select className="private-sheet-select" value={item.rating ?? ""} disabled={pending} onChange={(event) => onCommit("rating", event.target.value ? Number(event.target.value) : null)} aria-label={`評分 ${privateItemDetails(item).code}`}>
+        <option value="">-</option>
+        {Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}
+      </select>
+    );
+  }
+  if (column === "favorite") {
+    return (
+      <select className="private-sheet-select" value={normalizeCollectionLevel(item.collection_level)} disabled={pending} onChange={(event) => onCommit("collection_level", event.target.value)} aria-label={`收藏 ${privateItemDetails(item).code}`}>
+        {collectionLevels.map((value) => <option key={value} value={value}>{collectionLevelLabels[value]}</option>)}
+      </select>
+    );
+  }
+
+  const editableColumn = column as PrivateEditableColumn;
+  const value = privateCellValue(item, editableColumn);
+  if (editing) {
+    return (
+      <span className="private-sheet-editor">
+        <input
+          autoFocus
+          type={column === "watchedAt" ? "date" : "text"}
+          value={draft}
+          disabled={pending}
+          onChange={(event) => onDraftChange(event.target.value)}
+          onBlur={onBlur}
+          onKeyDown={onKeyDown}
+          aria-label={`編輯${privateColumnMap[column].label}`}
+        />
+        {error && <em role="alert">{error}</em>}
       </span>
     );
   }
-  if (column === "rating") return <span className="private-quick-cell"><button data-quick-trigger aria-haspopup="menu" aria-expanded={editing} disabled={pending} onClick={(event) => { event.stopPropagation(); onOpen(event.currentTarget); }}><PrivateRating item={item} /></button>{editing && <PrivateQuickEditor error={error} options={[{ value: null, label: "未評分" }, ...Array.from({ length: 10 }, (_, index) => ({ value: index + 1, label: `${index + 1}.0` }))]} onSelect={(value) => onCommit("rating", value)} />}</span>;
-  if (column === "favorite") return <span className="private-quick-cell"><button data-quick-trigger aria-haspopup="menu" aria-expanded={editing} disabled={pending} onClick={(event) => { event.stopPropagation(); onOpen(event.currentTarget); }}><PrivateFavoriteMark level={privateFavoriteLevel(item)} /></button>{editing && <PrivateQuickEditor error={error} options={collectionLevels.map((value) => ({ value, label: collectionLevelLabels[value] }))} onSelect={(value) => onCommit("collection_level", value)} />}</span>;
-  if (column === "used") return <span className="private-quick-cell"><button className="private-status-quick" data-quick-trigger aria-haspopup="menu" aria-expanded={editing} disabled={pending} onClick={(event) => { event.stopPropagation(); onOpen(event.currentTarget); }}><PrivateStatusBadge item={item} /></button>{editing && <PrivateQuickEditor error={error} options={privateStatusOptions.map((value) => ({ value, label: privateStatusLabels[value] }))} onSelect={(value) => onCommit("private_status", value)} />}</span>;
-  if (column === "actress") return <span className="private-ellipsis" title={details.performers}>{details.performers || "-"}</span>;
-  if (column === "tags") return <PrivateTags tags={item.tags} onSelect={(tag) => onFilter({ tag })} />;
-  if (column === "source") return <PrivateSource item={item} onSelect={(source) => onFilter({ platformFilters: source, platform: "" })} />;
-  return <span className="private-summary-cell" title={item.quick_note || ""}>{item.quick_note || "-"}</span>;
-}
-
-function PrivateQuickEditor({ options, error, onSelect }: { options: Array<{ value: unknown; label: string }>; error: string; onSelect: (value: unknown) => void }) {
-  return <div className="private-quick-editor" role="menu" onClick={(event) => event.stopPropagation()}>{options.map((option) => <button key={String(option.value)} role="menuitem" onClick={() => onSelect(option.value)}>{option.label}</button>)}{error && <em role="alert">{error}</em>}</div>;
+  return (
+    <span
+      className={`private-sheet-value private-sheet-${column}${pending ? " is-saving" : ""}`}
+      tabIndex={0}
+      title={value || "雙擊輸入"}
+      onDoubleClick={onBeginEdit}
+      onKeyDown={(event) => { if (event.key === "Enter" || event.key === "F2") onBeginEdit(); }}
+    >
+      {value || ""}
+    </span>
+  );
 }
 
 function estimatePrivateColumnWidth(column: PrivateColumnId, items: MediaItem[]) {
   const sample = items.slice(0, 100).map((item) => {
-    const details = privateItemDetails(item);
-    if (column === "title") return privateDisplayTitle(details.title, details.code) ? `${details.code} — ${privateDisplayTitle(details.title, details.code)}` : details.code;
     if (column === "rating") return item.rating ? Number(item.rating).toFixed(1) : "-";
     if (column === "favorite") return privateFavoriteLevel(item);
-    if (column === "used") return item.used ? "✓" : "-";
-    if (column === "actress") return details.performers || "-";
-    if (column === "tags") return item.tags.join(" ");
-    if (column === "source") return privateSourceLabel(item) || "-";
-    return item.quick_note || "-";
+    return privateCellValue(item, column as PrivateEditableColumn) || "-";
   });
   const maxLength = Math.max(privateColumnMap[column].label.length, ...sample.map((value) => value.length));
   return maxLength * 8 + 34;
+}
+
+function PrivateNewSpreadsheetRow({ columns, draft, busy, error, knownTags, onChange, onSubmit, onCancel }: {
+  columns: PrivateColumnDefinition[];
+  draft: PrivateRowDraft;
+  busy: boolean;
+  error: string;
+  knownTags: string[];
+  onChange: (draft: PrivateRowDraft) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+}) {
+  function patch(next: Partial<PrivateRowDraft>) {
+    onChange({ ...draft, ...next });
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      onSubmit();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      onCancel();
+    }
+  }
+
+  function cell(column: PrivateColumnId) {
+    if (column === "rating") return <input value={draft.rating} onChange={(event) => patch({ rating: event.target.value })} onKeyDown={handleKeyDown} inputMode="decimal" aria-label="新資料評分" />;
+    if (column === "favorite") return <select value={draft.collection} onChange={(event) => patch({ collection: event.target.value as CollectionLevel })} onKeyDown={handleKeyDown} aria-label="新資料收藏">{collectionLevels.map((value) => <option key={value} value={value}>{collectionLevelLabels[value]}</option>)}</select>;
+    if (column === "code") return <input autoFocus value={draft.code} onChange={(event) => patch({ code: event.target.value })} onKeyDown={handleKeyDown} placeholder="輸入番號" aria-label="新資料番號" />;
+    if (column === "title") return <input value={draft.title} onChange={(event) => patch({ title: event.target.value })} onKeyDown={handleKeyDown} placeholder="片名可留空" aria-label="新資料片名" />;
+    if (column === "actress") return <input value={draft.actress} onChange={(event) => patch({ actress: event.target.value })} onKeyDown={handleKeyDown} placeholder="多人用逗號分隔" aria-label="新資料女優" />;
+    if (column === "platform") return <input value={draft.platform} onChange={(event) => patch({ platform: event.target.value })} onKeyDown={handleKeyDown} placeholder="平台" aria-label="新資料平台" />;
+    if (column === "maker") return <input value={draft.maker} onChange={(event) => patch({ maker: event.target.value })} onKeyDown={handleKeyDown} placeholder="片商" aria-label="新資料片商" />;
+    if (column === "tags") return <input value={draft.tags} onChange={(event) => patch({ tags: event.target.value })} onKeyDown={handleKeyDown} placeholder="標籤以逗號分隔" list="private-sheet-known-tags" aria-label="新資料標籤" />;
+    if (column === "watchedAt") return <input type="date" value={draft.watchedAt} onChange={(event) => patch({ watchedAt: event.target.value })} onKeyDown={handleKeyDown} aria-label="新資料紀錄日" />;
+    return <input value={draft.summary} onChange={(event) => patch({ summary: event.target.value })} onKeyDown={handleKeyDown} placeholder="快速筆記" aria-label="新資料快速筆記" />;
+  }
+
+  return (
+    <tr className="private-new-sheet-row">
+      <td className="private-select-column" aria-hidden="true">+</td>
+      {columns.map((column) => <td key={column.id} className={column.id === "code" ? "private-sticky-column" : undefined}>{cell(column.id)}</td>)}
+      <td className="private-open-column">
+        <span className="private-new-row-actions" title={error || undefined}>
+          <button type="button" onClick={onSubmit} disabled={busy || (!draft.code.trim() && !draft.title.trim())} title="儲存新資料" aria-label="儲存新資料"><Check size={14} /></button>
+          <button type="button" onClick={onCancel} disabled={busy} title="取消新增" aria-label="取消新增">×</button>
+        </span>
+        {error && <em role="alert">!</em>}
+        <datalist id="private-sheet-known-tags">{knownTags.slice(0, 40).map((tag) => <option key={tag} value={tag} />)}</datalist>
+      </td>
+    </tr>
+  );
 }
 
 function PrivateMobileCards({ items, selectedIds, onToggleSelected, onSelect }: { items: MediaItem[]; selectedIds: string[]; onToggleSelected: (id: string) => void; onSelect: (item: MediaItem) => void }) {
@@ -1791,7 +2031,6 @@ function PrivateMobileCard({ item, onSelect, desktop = false, selected = false, 
       </div>
       <div className="private-card-badges">
         <PrivateBadge tone="favorite">{privateFavoriteLevel(item)}</PrivateBadge>
-        <PrivateStatusBadge item={item} />
       </div>
       <p>{item.platform || "-"} / {item.maker || details.studio}</p>
       <p>{details.performers}</p>
@@ -1806,11 +2045,6 @@ function PrivateMobileCard({ item, onSelect, desktop = false, selected = false, 
 function PrivateRating({ item }: { item: MediaItem }) {
   if (!item.rating) return <span className="private-muted-cell">-</span>;
   return <span className="private-rating"><Star size={14} fill="currentColor" />{Number(item.rating).toFixed(1)}</span>;
-}
-
-function PrivateStatusBadge({ item }: { item: Pick<MediaItem, "used" | "media_status"> }) {
-  const status = fieldsToPrivateStatus(item);
-  return <PrivateBadge tone="status">{privateStatusLabels[status]}</PrivateBadge>;
 }
 
 function PrivateFavoriteMark({ level }: { level: string }) {
@@ -1915,10 +2149,6 @@ function privateFilterSummary(filters: ListFilters) {
   if (filters.favoriteLevelFilters) parts.push(`收藏 ${filterValues(filters.favoriteLevelFilters).join("、")}`);
   if (filters.favoriteLevel && filters.favoriteLevel !== "all") parts.push(filters.favoriteLevel);
   if (filters.personFilters) parts.push(`女優 ${filterValues(filters.personFilters).join("、")}`);
-  if (filters.usedFilter === "used") parts.push("完成");
-  if (filters.usedFilter === "unused") parts.push("待處理");
-  if (filters.privateStatus && filters.privateStatus !== "all") parts.push(privateStatusLabels[filters.privateStatus]);
-  if (filters.mediaStatus && filters.mediaStatus !== "all") parts.push(filters.mediaStatus);
   if (filters.tag) parts.push(`#${filters.tag}`);
   if (filters.query) parts.push(`搜尋：${filters.query}`);
   return parts.join(" / ");
@@ -1948,8 +2178,6 @@ function hasPrivateFilters(filters: ListFilters) {
     filters.ratingMin.trim() ||
     filters.ratingMax.trim() ||
     filters.unrated ||
-    filters.usedFilter !== "all" ||
-    (filters.privateStatus && filters.privateStatus !== "all") ||
     filters.collectionLevel.trim() ||
     filters.favoriteLevel !== "all" ||
     filters.platformFilters?.trim() ||
@@ -1959,7 +2187,6 @@ function hasPrivateFilters(filters: ListFilters) {
     filters.missingPeople ||
     (filters.hasNote && filters.hasNote !== "all") ||
     (filters.hasCover && filters.hasCover !== "all") ||
-    filters.mediaStatus !== "all" ||
     filters.tag.trim() ||
     filters.platform.trim() ||
     filters.maker.trim() ||
@@ -2061,9 +2288,13 @@ function SimpleAddModal({
     code: "",
     title: "",
     rating: "",
+    collection: "unset" as CollectionLevel,
+    actress: "",
+    platform: "",
+    maker: "",
+    summary: "",
     tags: [] as string[],
-    watched_at: todayDate(),
-    private_status: "done" as PrivateUiStatus
+    watched_at: todayDate()
   });
   const canSubmit = privateMode ? Boolean(draft.code.trim() || draft.title.trim()) : Boolean(draft.title.trim());
 
@@ -2086,7 +2317,7 @@ function SimpleAddModal({
         <header className="simple-add-head">
           <div>
             <p className="eyebrow">簡單新增</p>
-            <h2>{privateMode ? "私密核心欄位" : "核心欄位"}</h2>
+            <h2>{privateMode ? "新增私密資料" : "核心欄位"}</h2>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="關閉">×</button>
         </header>
@@ -2096,14 +2327,18 @@ function SimpleAddModal({
           <Field label="評分" value={draft.rating} onChange={(value) => patch({ rating: value })} inputMode="decimal" />
           {privateMode && (
             <label>
-              狀態
-              <select value={draft.private_status} onChange={(event) => patch({ private_status: event.target.value as PrivateUiStatus })}>
-                {privateStatusOptions.map((status) => <option key={status} value={status}>{privateStatusLabels[status]}</option>)}
+              收藏
+              <select value={draft.collection} onChange={(event) => patch({ collection: event.target.value as CollectionLevel })}>
+                {collectionLevels.map((value) => <option key={value} value={value}>{collectionLevelLabels[value]}</option>)}
               </select>
             </label>
           )}
-          <TagEditor tags={draft.tags} knownTags={knownTags} onChange={(tags) => patch({ tags })} placeholder={privateMode ? "輸入私密標籤後按 Enter" : "輸入標籤後按 Enter"} />
+          {privateMode && <Field label="女優" value={draft.actress} onChange={(value) => patch({ actress: value })} />}
+          {privateMode && <Field label="平台" value={draft.platform} onChange={(value) => patch({ platform: value })} />}
+          {privateMode && <Field label="片商" value={draft.maker} onChange={(value) => patch({ maker: value })} />}
+          <TagEditor tags={draft.tags} knownTags={knownTags} maxSuggestions={privateMode ? 0 : 16} onChange={(tags) => patch({ tags })} placeholder={privateMode ? "輸入標籤，按 Enter 分隔" : "輸入標籤後按 Enter"} />
           <Field label={privateMode ? "紀錄日" : "觀看日"} value={draft.watched_at} onChange={(value) => patch({ watched_at: value })} type="date" />
+          {privateMode && <label className="wide">快速筆記<input value={draft.summary} onChange={(event) => patch({ summary: event.target.value })} /></label>}
         </div>
         <footer className="simple-add-actions">
           <button onClick={onClose}>取消</button>
@@ -2137,33 +2372,24 @@ function Field({
   );
 }
 
-function simpleDraftToInput(draft: { code: string; title: string; rating: string; tags: string[]; watched_at: string; private_status: PrivateUiStatus }, privateMode: boolean): ItemInput {
+function simpleDraftToInput(draft: { code: string; title: string; rating: string; collection: CollectionLevel; actress: string; platform: string; maker: string; summary: string; tags: string[]; watched_at: string }, privateMode: boolean): ItemInput {
   const code = draft.code.trim();
   const title = draft.title.trim();
   const tags = normalizeTags(draft.tags);
   const rating = numberOrNull(draft.rating);
   if (privateMode) {
-    const statusFields = privateStatusToFields(draft.private_status);
-    return {
-      raw_title: title || code,
-      official_title: title || null,
-      code: code || null,
-      type: PRIVATE_LIBRARY_LABEL,
-      is_private: true,
-      watched_at: draft.watched_at || null,
-      rating,
-      favorite_level: rating !== null && rating >= 9 ? "神作" : "一般",
-      collection_level: "unset",
-      used: statusFields.used,
-      media_status: statusFields.media_status,
-      tags,
-      metadata_json: JSON.stringify({
-        ...(code ? { code } : {}),
-        ...(title ? { title } : {}),
-        ...(statusFields.used ? { used: true } : {})
-      }),
-      status: "raw"
-    };
+    return privateRowDraftToInput({
+      code,
+      title,
+      rating: rating === null ? "" : String(rating),
+      collection: draft.collection,
+      actress: draft.actress,
+      platform: draft.platform,
+      maker: draft.maker,
+      tags: tags.join(", "),
+      watchedAt: draft.watched_at,
+      summary: draft.summary
+    });
   }
   return {
     raw_title: title,

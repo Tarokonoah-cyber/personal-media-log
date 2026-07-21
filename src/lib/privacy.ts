@@ -71,7 +71,7 @@ export function privateItemDetails(item: MediaItem): PrivateItemDetails {
 }
 
 function privateTitle(item: MediaItem, metadata: MetadataRecord, code: string) {
-  const title = firstValue([metadataValue(metadata, TITLE_KEYS), item.official_title, titleIfNotCode(item.raw_title, code), titleIfNotCode(item.original_title, code)]);
+  const title = firstValue([item.official_title, metadataValue(metadata, TITLE_KEYS), titleIfNotCode(item.raw_title, code), titleIfNotCode(item.original_title, code)]);
   return title || "-";
 }
 

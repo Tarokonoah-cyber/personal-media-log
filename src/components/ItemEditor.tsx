@@ -1,7 +1,7 @@
 import { Save, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { TagEditor } from "./TagEditor";
-import { fieldsToPrivateStatus, privateStatusLabels, privateStatusOptions, privateStatusToFields, type PrivateUiStatus } from "../lib/privateStatus";
+import { fieldsToPrivateStatus, privateStatusToFields, type PrivateUiStatus } from "../lib/privateStatus";
 import { isPrivateItem, PRIVATE_LIBRARY_LABEL, privateItemDetails } from "../lib/privacy";
 import { collectionLevelOptions, getReflectionFromMetadata, mergeReflectionMetadata, moodOptions, rewatchIntentOptions } from "../lib/reflection";
 import { classifyItem, libraryTree } from "../lib/taxonomy";
@@ -245,7 +245,6 @@ function PrivateForm({
         <h3>私密紀錄</h3>
         <div className="form-grid nested">
           <Field label="評分（0-10）" value={form.rating} onChange={(value) => setForm({ ...form, rating: value })} inputMode="decimal" />
-          <PrivateStatusField value={form.private_status} onChange={(private_status) => setForm({ ...form, private_status, ...privateStatusToFields(private_status) })} />
           <CollectionLevelField value={normalizeCollectionLevel(form.collection_level)} onChange={(value) => setForm({ ...form, collection_level: value })} />
           <TagEditor tags={form.tags} knownTags={knownTags} onChange={(tags) => setForm({ ...form, tags })} />
           <label className="wide">快速筆記<textarea value={form.quick_note} onChange={(event) => setForm({ ...form, quick_note: event.target.value })} rows={3} /></label>
@@ -253,20 +252,6 @@ function PrivateForm({
         </div>
       </section>
     </div>
-  );
-}
-
-function PrivateStatusField({ value, onChange }: { value: PrivateUiStatus; onChange: (value: PrivateUiStatus) => void }) {
-  return (
-    <fieldset className="private-status-control">
-      <legend>狀態</legend>
-      {privateStatusOptions.map((status) => (
-        <label key={status} className={value === status ? "active" : ""}>
-          <input type="radio" name="private-status" value={status} checked={value === status} onChange={() => onChange(status)} />
-          <span>{privateStatusLabels[status]}</span>
-        </label>
-      ))}
-    </fieldset>
   );
 }
 

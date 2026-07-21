@@ -20,7 +20,7 @@ describe("private filter shortcuts", () => {
   it("creates individually removable chips for multi-value filters", () => {
     const chips = privateFilterChips({ ...filters(), platformFilters: "FC2,JAV", privateStatus: "rewatch", collectionLevel: "masterpiece", tag: "戶外", titleQuery: "測試" });
     expect(chips.find((chip) => chip.key === "platformFilters:FC2")?.patch).toEqual({ platformFilters: "JAV", page: 1 });
-    expect(chips.find((chip) => chip.key === "privateStatus")?.label).toBe("狀態：想重看");
+    expect(chips.find((chip) => chip.key === "privateStatus")).toBeUndefined();
     expect(chips.find((chip) => chip.key === "tag")?.label).toBe("#戶外");
     expect(chips.find((chip) => chip.key === "collectionLevel")?.label).toBe("收藏：神作");
     expect(chips.find((chip) => chip.key === "title")?.patch).toEqual({ titleQuery: "", page: 1 });
@@ -33,12 +33,10 @@ describe("private filter shortcuts", () => {
     expect(onPatch).toHaveBeenCalledWith({ platformFilters: "JAV", page: 1 });
   });
 
-  it("shows a single four-state control in private advanced filters", () => {
+  it("does not expose status controls in private advanced filters", () => {
     const { container } = render(<FilterSheet open filters={filters()} privateMode onChange={vi.fn()} onClose={vi.fn()} />);
     const statusLabels = Array.from(container.querySelectorAll("label")).filter((label) => label.firstChild?.textContent?.trim() === "狀態");
-    expect(statusLabels).toHaveLength(1);
-    expect(screen.getByRole("option", { name: "待處理" })).toBeVisible();
-    expect(screen.getByRole("option", { name: "想重看" })).toBeVisible();
-    expect(screen.getByRole("option", { name: "排除" })).toBeVisible();
+    expect(statusLabels).toHaveLength(0);
+    expect(screen.queryByRole("option", { name: "待處理" })).not.toBeInTheDocument();
   });
 });

@@ -1,4 +1,3 @@
-import { privateStatusFilterValue, privateStatusLabels } from "./privateStatus";
 import { collectionLevelLabels, isCollectionLevel } from "../../shared/privateModel";
 import type { ListFilters } from "../types";
 
@@ -16,10 +15,6 @@ export function privateFilterChips(filters: ListFilters): PrivateFilterChip[] {
   };
 
   if (filters.query.trim()) add("query", `搜尋：${filters.query.trim()}`, { query: "" });
-  if ((filters.privateStatus && filters.privateStatus !== "all") || filters.usedFilter !== "all" || filters.mediaStatus !== "all") {
-    const status = privateStatusFilterValue(filters);
-    add("privateStatus", `狀態：${status === "all" ? "全部" : privateStatusLabels[status]}`, { privateStatus: "all", usedFilter: "all", mediaStatus: "all" });
-  }
   if (filters.ratingMin || filters.ratingMax) add("rating", `評分：${filters.ratingMin || "不限"}～${filters.ratingMax || "不限"}`, { ratingMin: "", ratingMax: "" });
   if (filters.unrated) add("unrated", "未評分", { unrated: false });
   if (filters.collectionLevel.trim()) {

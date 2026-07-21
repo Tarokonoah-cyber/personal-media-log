@@ -1,6 +1,5 @@
 import { SlidersHorizontal, X } from "lucide-react";
 import { PRIVATE_TAG_PRESETS } from "../lib/tagPresets";
-import { privateStatusFilterValue, privateStatusLabels, privateStatusOptions, type PrivateStatusFilter } from "../lib/privateStatus";
 import type { ListFilters } from "../types";
 
 export function FilterSheet({
@@ -59,13 +58,6 @@ function PrivateFilters({ filters, onChange }: { filters: ListFilters; onChange:
         <Field label="系列 / 番號前綴" value={filters.series} onChange={(value) => onChange({ series: value })} placeholder="SSIS / IPZZ / FC2PPV" />
         <Field label="評分下限" value={filters.ratingMin} inputMode="decimal" onChange={(value) => onChange({ ratingMin: value, unrated: false })} />
         <Field label="評分上限" value={filters.ratingMax} inputMode="decimal" onChange={(value) => onChange({ ratingMax: value, unrated: false })} />
-        <Select
-          label="狀態"
-          value={privateStatusFilterValue(filters)}
-          options={["all", ...privateStatusOptions]}
-          labels={{ all: "全部", ...privateStatusLabels }}
-          onChange={(value) => onChange({ privateStatus: value as PrivateStatusFilter, usedFilter: "all", mediaStatus: "all" })}
-        />
         <Field label="年份" value={filters.year} inputMode="numeric" onChange={(value) => onChange({ year: value })} />
         <OptionSelect label="標籤" value={filters.tag} options={PRIVATE_TAG_PRESETS} onChange={(value) => onChange({ tag: value })} />
         <Select label="心得" value={filters.hasNote || "all"} options={["all", "yes", "no"]} labels={{ all: "全部", yes: "有心得", no: "無心得" }} onChange={(value) => onChange({ hasNote: value as ListFilters["hasNote"] })} />

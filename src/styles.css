@@ -9656,3 +9656,325 @@ h2 {
     display: none;
   }
 }
+
+/* Private spreadsheet workspace */
+.private-workbench {
+  --private-row-height: 34px;
+  font-family: "Segoe UI", "Noto Sans TC", Arial, sans-serif;
+}
+
+.private-workbench .private-data-table-wrap {
+  border-radius: 0;
+  border-color: color-mix(in srgb, var(--line) 88%, transparent);
+  background: var(--panel);
+}
+
+.private-workbench .private-dense-table {
+  min-width: 1100px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.private-workbench .private-dense-table th {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  height: 32px;
+  padding: 0 7px;
+  border-right: 1px solid var(--private-soft-line);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 92%, transparent);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--panel) 90%, #edf1f4);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.private-workbench .private-dense-table td {
+  height: var(--private-row-height);
+  padding: 0;
+  border-right: 1px solid color-mix(in srgb, var(--line) 64%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 64%, transparent);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.25;
+}
+
+.private-workbench .private-dense-table tbody tr:nth-child(even) td {
+  background: var(--panel);
+}
+
+.private-workbench .private-dense-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--hover) 62%, var(--panel));
+}
+
+.private-workbench .private-dense-table tbody tr:hover {
+  box-shadow: none;
+}
+
+.private-workbench .private-dense-table th.private-sticky-column,
+.private-workbench .private-dense-table td.private-sticky-column {
+  left: 42px;
+  z-index: 7;
+  box-shadow: 1px 0 0 color-mix(in srgb, var(--line) 88%, transparent);
+}
+
+.private-workbench .private-dense-table th.private-sticky-column {
+  z-index: 10;
+}
+
+.private-sheet-value {
+  width: 100%;
+  height: var(--private-row-height);
+  display: block;
+  overflow: hidden;
+  padding: 8px 7px 0;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: cell;
+}
+
+.private-sheet-value:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, white);
+  outline-offset: -2px;
+}
+
+.private-sheet-code {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-weight: 600;
+}
+
+.private-sheet-tags {
+  color: color-mix(in srgb, var(--text) 74%, var(--muted));
+}
+
+.private-sheet-value.is-saving {
+  opacity: 0.5;
+}
+
+.private-sheet-editor {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: var(--private-row-height);
+}
+
+.private-sheet-editor input,
+.private-sheet-select,
+.private-new-sheet-row input,
+.private-new-sheet-row select {
+  width: 100%;
+  height: var(--private-row-height);
+  min-height: var(--private-row-height);
+  margin: 0;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  box-shadow: none;
+}
+
+.private-sheet-editor input {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: var(--panel);
+}
+
+.private-sheet-editor em {
+  position: absolute;
+  left: 4px;
+  top: calc(100% + 2px);
+  z-index: 12;
+  min-width: 160px;
+  padding: 4px 6px;
+  border: 1px solid var(--danger);
+  background: var(--panel);
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.private-sheet-select {
+  cursor: pointer;
+  appearance: auto;
+}
+
+.private-sheet-select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.private-workbench .private-dense-table col.private-open-column,
+.private-workbench .private-dense-table th.private-open-column,
+.private-workbench .private-dense-table td.private-open-column {
+  width: 42px;
+  min-width: 42px;
+  max-width: 42px;
+}
+
+.private-workbench .private-dense-table th.private-open-column,
+.private-workbench .private-dense-table td.private-open-column {
+  position: sticky;
+  right: 0;
+  z-index: 7;
+  padding: 0;
+  text-align: center;
+  background: var(--panel);
+  box-shadow: -1px 0 0 var(--private-soft-line);
+}
+
+.private-workbench .private-dense-table th.private-open-column {
+  z-index: 10;
+  background: color-mix(in srgb, var(--panel) 90%, #edf1f4);
+}
+
+.private-open-row {
+  width: 100%;
+  height: var(--private-row-height);
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.private-open-row:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.private-new-sheet-row td,
+.private-new-sheet-row td.private-sticky-column,
+.private-new-sheet-row td.private-open-column {
+  background: color-mix(in srgb, #dff4e7 52%, var(--panel)) !important;
+}
+
+.private-new-sheet-row td.private-select-column {
+  color: #24704a;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.private-new-sheet-row input::placeholder {
+  color: var(--faint);
+}
+
+.private-new-row-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: var(--private-row-height);
+}
+
+.private-new-row-actions button {
+  min-width: 0;
+  min-height: 0;
+  height: var(--private-row-height);
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.private-new-row-actions button:hover {
+  background: color-mix(in srgb, var(--accent-soft) 72%, transparent);
+}
+
+.private-open-column > em {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.private-columns-popover {
+  width: min(360px, calc(100vw - 24px));
+}
+
+.private-columns-popover > p {
+  margin: -2px 0 5px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.private-columns-popover .private-column-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px 28px;
+  gap: 4px;
+  min-height: 30px;
+  align-items: center;
+}
+
+.private-columns-popover .private-column-option > label {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+}
+
+.private-columns-popover .private-column-option .icon-button {
+  width: 28px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  border-radius: 4px;
+}
+
+.private-column-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--private-soft-line);
+}
+
+.simple-add-modal {
+  width: min(780px, calc(100vw - 24px));
+}
+
+.simple-add-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+.simple-add-grid > .tag-editor,
+.simple-add-grid > .wide {
+  grid-column: span 2;
+}
+
+@media (max-width: 819px) {
+  .private-workbench .private-data-table-wrap {
+    display: block !important;
+    max-height: calc(100vh - 210px);
+  }
+
+  .private-workbench .private-mobile-list {
+    display: none !important;
+  }
+
+  .private-workbench .private-dense-table {
+    min-width: 1100px;
+  }
+
+  .simple-add-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .simple-add-grid > .tag-editor,
+  .simple-add-grid > .wide {
+    grid-column: auto;
+  }
+}
