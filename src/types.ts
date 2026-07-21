@@ -3,7 +3,7 @@ export type WatchStatus = "plan_to_watch" | "watching" | "completed" | "paused" 
 import type { CollectionLevel } from "../shared/privateModel";
 import type { PrivateStatusFilter } from "../shared/privateStatus";
 
-export type FavoriteLevel = "神作" | "收藏" | "一般" | "雷片" | "已刪";
+export type FavoriteLevel = "已使用" | "神作" | "收藏" | "一般" | "雷片" | "已刪";
 export type MediaStatus = "待觀看" | "已觀看" | "想重看" | "已刪除";
 
 export interface MediaItem {
@@ -18,6 +18,7 @@ export interface MediaItem {
   maker: string | null;
   series: string | null;
   release_year: number | null;
+  release_date: string | null;
   year: number | null;
   watched_at: string | null;
   started_at: string | null;

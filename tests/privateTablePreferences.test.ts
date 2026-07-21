@@ -2,10 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import {
   LEGACY_PRIVATE_TABLE_PREFERENCES_KEY,
   LEGACY_V3_PRIVATE_TABLE_PREFERENCES_KEY,
+  LEGACY_V4_PRIVATE_TABLE_PREFERENCES_KEY,
   PRIVATE_TABLE_PREFERENCES_KEY,
   defaultPrivateTablePreferences,
   migratePrivateTablePreferencesV2,
   migratePrivateTablePreferencesV3,
+  migratePrivateTablePreferencesV4,
   normalizePrivateTablePreferences,
   readPrivateTablePreferences
 } from "../src/lib/privateTablePreferences";
@@ -17,6 +19,18 @@ describe("private table preference migration", () => {
     expect(defaults.widths.identity).toBe(520);
     expect(defaults.visible.identity).toBe(true);
     expect(defaults.order).not.toContain("platform");
+    expect(defaults.order.indexOf("releaseDate")).toBeLessThan(defaults.order.indexOf("watchedAt"));
+  });
+
+  it("adds release date before record date when migrating v4 preferences", () => {
+    const migrated = migratePrivateTablePreferencesV4({
+      order: ["identity", "rating", "watchedAt", "summary"],
+      widths: { identity: 600, watchedAt: 120 },
+      pageSize: 100
+    });
+    expect(migrated.order).toEqual(["identity", "rating", "releaseDate", "watchedAt", "summary", "favorite", "actress", "maker", "tags"]);
+    expect(migrated.widths.identity).toBe(600);
+    expect(migrated.visible.releaseDate).toBe(true);
   });
 
   it("turns untouched v3 code and title columns into the 520px identity default", () => {
@@ -55,11 +69,13 @@ describe("private table preference migration", () => {
     expect(normalized.widths.identity).toBe(900);
   });
 
-  it("reads v3 before v2 and persists the migrated v4 preference", () => {
+  it("reads v4 before v3 and persists the migrated v5 preference", () => {
+    const legacyV4 = JSON.stringify({ order: ["identity", "watchedAt", "tags"], pageSize: 200 });
     const legacyV3 = JSON.stringify({ order: ["tags", "code", "title"], pageSize: 50 });
     const legacyV2 = JSON.stringify({ order: ["summary", "code", "title"], pageSize: 200 });
     const storage = {
       getItem: vi.fn((key: string) => {
+        if (key === LEGACY_V4_PRIVATE_TABLE_PREFERENCES_KEY) return legacyV4;
         if (key === LEGACY_V3_PRIVATE_TABLE_PREFERENCES_KEY) return legacyV3;
         if (key === LEGACY_PRIVATE_TABLE_PREFERENCES_KEY) return legacyV2;
         return null;
@@ -67,8 +83,8 @@ describe("private table preference migration", () => {
       setItem: vi.fn()
     };
     const result = readPrivateTablePreferences(storage);
-    expect(result.order.slice(0, 2)).toEqual(["identity", "tags"]);
-    expect(result.pageSize).toBe(50);
+    expect(result.order.slice(0, 3)).toEqual(["identity", "releaseDate", "watchedAt"]);
+    expect(result.pageSize).toBe(200);
     expect(storage.setItem).toHaveBeenCalledWith(PRIVATE_TABLE_PREFERENCES_KEY, expect.any(String));
   });
 });

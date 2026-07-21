@@ -21,6 +21,7 @@ const itemColumns = [
   "maker",
   "series",
   "release_year",
+  "release_date",
   "year",
   "watched_at",
   "started_at",
@@ -193,16 +194,31 @@ export function buildItemWhere(params: ItemListParams) {
     bind.push(...params.makerFilters);
   }
   if (params.favoriteLevelFilters?.length) {
-    where.push(`items.collection_level IN (${params.favoriteLevelFilters.map(() => "?").join(", ")})`);
-    bind.push(...params.favoriteLevelFilters);
+    const includesUsed = params.favoriteLevelFilters.includes("used");
+    const levels = params.favoriteLevelFilters.filter((level) => level !== "used");
+    const clauses: string[] = [];
+    if (includesUsed) clauses.push("items.used = 1");
+    if (levels.length) {
+      clauses.push(`(items.used = 0 AND items.collection_level IN (${levels.map(() => "?").join(", ")}))`);
+      bind.push(...levels);
+    }
+    where.push(`(${clauses.join(" OR ")})`);
   }
   if (params.personFilters?.length) {
-    where.push(`EXISTS (
-      SELECT 1 FROM item_people selected_ip
-      JOIN people selected_people ON selected_people.id = selected_ip.person_id
-      WHERE selected_ip.item_id = items.id AND selected_people.name IN (${params.personFilters.map(() => "?").join(", ")})
-    )`);
-    bind.push(...params.personFilters);
+    const includesAmateur = params.personFilters.includes("素人");
+    const namedPeople = params.personFilters.filter((person) => person !== "素人");
+    const clauses: string[] = [];
+    if (includesAmateur) clauses.push(`NOT EXISTS (SELECT 1 FROM item_people amateur_ip WHERE amateur_ip.item_id = items.id)`);
+    if (includesAmateur || namedPeople.length) {
+      const people = includesAmateur ? ["素人", ...namedPeople] : namedPeople;
+      clauses.push(`EXISTS (
+        SELECT 1 FROM item_people selected_ip
+        JOIN people selected_people ON selected_people.id = selected_ip.person_id
+        WHERE selected_ip.item_id = items.id AND selected_people.name IN (${people.map(() => "?").join(", ")})
+      )`);
+      bind.push(...people);
+    }
+    where.push(`(${clauses.join(" OR ")})`);
   }
   if (params.missingPeople) {
     where.push(`NOT EXISTS (
@@ -353,13 +369,14 @@ async function getPrivateSummary(env: Env, whereSql: string, bind: unknown[]): P
     FROM items ${whereSql}
   `).bind(...bind);
   const collectionStmt = env.MEDIA_LOG_DB.prepare(`
-    SELECT items.collection_level AS level, COUNT(*) AS count
+    SELECT CASE WHEN items.used = 1 THEN 'used' ELSE items.collection_level END AS level, COUNT(*) AS count
     FROM items ${collectionWhereSql}
-    GROUP BY items.collection_level
-    ORDER BY CASE items.collection_level
-      WHEN 'masterpiece' THEN 1
-      WHEN 'normal' THEN 2
-      WHEN 'discard' THEN 3
+    GROUP BY level
+    ORDER BY CASE level
+      WHEN 'used' THEN 1
+      WHEN 'masterpiece' THEN 2
+      WHEN 'normal' THEN 3
+      WHEN 'discard' THEN 5
       ELSE 4
     END
   `).bind(...bind);
@@ -442,15 +459,21 @@ async function getPrivateFacetsFromQueries(env: Env, queries: Record<PrivateFace
   `).bind(...queries.series.bind);
 
   const actressStmt = env.MEDIA_LOG_DB.prepare(`
-    SELECT people.name AS value, COUNT(*) AS count
-    FROM people
-    JOIN item_people ON item_people.person_id = people.id
-    JOIN items ON items.id = item_people.item_id
-    ${queries.actress.whereSql}
-    GROUP BY people.id
-    ORDER BY count DESC, people.name ASC
+    SELECT value, SUM(count) AS count FROM (
+      SELECT people.name AS value, COUNT(*) AS count
+      FROM people
+      JOIN item_people ON item_people.person_id = people.id
+      JOIN items ON items.id = item_people.item_id
+      ${queries.actress.whereSql}
+      GROUP BY people.id
+      UNION ALL
+      SELECT '素人' AS value, COUNT(*) AS count
+      FROM items ${appendWhere(queries.actress, "NOT EXISTS (SELECT 1 FROM item_people empty_ip WHERE empty_ip.item_id = items.id)")}
+    )
+    GROUP BY value
+    ORDER BY count DESC, value ASC
     LIMIT 20
-  `).bind(...queries.actress.bind);
+  `).bind(...queries.actress.bind, ...queries.actress.bind);
 
   const tagsStmt = env.MEDIA_LOG_DB.prepare(`
     SELECT tags.name AS value, COUNT(*) AS count
@@ -480,25 +503,26 @@ async function getPrivateFacetsFromQueries(env: Env, queries: Record<PrivateFace
   `).bind(...queries.javMaker.bind);
 
   const ratingStmt = env.MEDIA_LOG_DB.prepare(`
-    SELECT '9+' AS value, SUM(CASE WHEN items.rating >= 9 THEN 1 ELSE 0 END) AS count FROM items ${queries.ratingBuckets.whereSql}
+    SELECT '5 星' AS value, SUM(CASE WHEN items.rating >= 9 THEN 1 ELSE 0 END) AS count FROM items ${queries.ratingBuckets.whereSql}
     UNION ALL
-    SELECT '8+' AS value, SUM(CASE WHEN items.rating >= 8 THEN 1 ELSE 0 END) AS count FROM items ${queries.ratingBuckets.whereSql}
+    SELECT '4 星' AS value, SUM(CASE WHEN items.rating >= 7 AND items.rating <= 8 THEN 1 ELSE 0 END) AS count FROM items ${queries.ratingBuckets.whereSql}
     UNION ALL
-    SELECT '6-7' AS value, SUM(CASE WHEN items.rating >= 6 AND items.rating <= 7 THEN 1 ELSE 0 END) AS count FROM items ${queries.ratingBuckets.whereSql}
+    SELECT '3 星' AS value, SUM(CASE WHEN items.rating >= 5 AND items.rating <= 6 THEN 1 ELSE 0 END) AS count FROM items ${queries.ratingBuckets.whereSql}
     UNION ALL
-    SELECT '1-5' AS value, SUM(CASE WHEN items.rating >= 1 AND items.rating <= 5 THEN 1 ELSE 0 END) AS count FROM items ${queries.ratingBuckets.whereSql}
+    SELECT '1–2 星' AS value, SUM(CASE WHEN items.rating >= 1 AND items.rating <= 4 THEN 1 ELSE 0 END) AS count FROM items ${queries.ratingBuckets.whereSql}
     UNION ALL
     SELECT '未評分' AS value, SUM(CASE WHEN items.rating IS NULL THEN 1 ELSE 0 END) AS count FROM items ${queries.ratingBuckets.whereSql}
   `).bind(...bindRepeated(queries.ratingBuckets, 5));
 
   const favoriteStmt = env.MEDIA_LOG_DB.prepare(`
-    SELECT items.collection_level AS value, COUNT(*) AS count
+    SELECT CASE WHEN items.used = 1 THEN 'used' ELSE items.collection_level END AS value, COUNT(*) AS count
     FROM items ${appendWhere(queries.favoriteLevel, "items.collection_level IN ('unset', 'masterpiece', 'normal', 'discard')")}
-    GROUP BY items.collection_level
-    ORDER BY CASE items.collection_level
-      WHEN 'masterpiece' THEN 1
-      WHEN 'normal' THEN 2
-      WHEN 'discard' THEN 3
+    GROUP BY value
+    ORDER BY CASE value
+      WHEN 'used' THEN 1
+      WHEN 'masterpiece' THEN 2
+      WHEN 'normal' THEN 3
+      WHEN 'discard' THEN 5
       ELSE 4
     END
   `).bind(...queries.favoriteLevel.bind);
@@ -699,10 +723,10 @@ export async function createItem(env: Env, actor: Actor, input: ItemInput) {
     env.MEDIA_LOG_DB
       .prepare(`INSERT INTO items (
         id, raw_title, official_title, original_title, code, type, category, platform, maker, series,
-        release_year, year, watched_at, started_at, completed_at, planned_at, rating, rewatch_score,
+        release_year, release_date, year, watched_at, started_at, completed_at, planned_at, rating, rewatch_score,
         favorite, favorite_level, collection_level, normalized_code, used, is_private, status, media_status, quick_note, long_note,
         source_url, cover_url, metadata_json, progress_json, search_text, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(
         id,
         rawTitle,
@@ -715,6 +739,7 @@ export async function createItem(env: Env, actor: Actor, input: ItemInput) {
         normalized.maker,
         normalized.series,
         normalized.release_year,
+        normalized.release_date,
         normalized.year,
         normalized.watched_at,
         normalized.started_at,
@@ -760,7 +785,7 @@ export async function updateItem(env: Env, actor: Actor, id: string, input: Item
     env.MEDIA_LOG_DB
       .prepare(`UPDATE items SET
         raw_title = ?, official_title = ?, original_title = ?, code = ?, type = ?,
-        category = ?, platform = ?, maker = ?, series = ?, release_year = ?, year = ?, watched_at = ?, started_at = ?,
+        category = ?, platform = ?, maker = ?, series = ?, release_year = ?, release_date = ?, year = ?, watched_at = ?, started_at = ?,
         completed_at = ?, planned_at = ?, rating = ?, rewatch_score = ?, favorite = ?,
         favorite_level = ?, collection_level = ?, normalized_code = ?, used = ?, is_private = ?, status = ?, media_status = ?,
         quick_note = ?, long_note = ?, source_url = ?, cover_url = ?,
@@ -777,6 +802,7 @@ export async function updateItem(env: Env, actor: Actor, id: string, input: Item
         normalized.maker,
         normalized.series,
         normalized.release_year,
+        normalized.release_date,
         normalized.year,
         normalized.watched_at,
         normalized.started_at,
@@ -813,10 +839,10 @@ function insertItemStatement(env: Env, id: string, timestamp: string, normalized
   return env.MEDIA_LOG_DB
     .prepare(`INSERT INTO items (
       id, raw_title, official_title, original_title, code, type, category, platform, maker, series,
-      release_year, year, watched_at, started_at, completed_at, planned_at, rating, rewatch_score,
+      release_year, release_date, year, watched_at, started_at, completed_at, planned_at, rating, rewatch_score,
       favorite, favorite_level, collection_level, normalized_code, used, is_private, status, media_status, quick_note, long_note,
       source_url, cover_url, metadata_json, progress_json, search_text, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(
       id,
       normalized.raw_title,
@@ -829,6 +855,7 @@ function insertItemStatement(env: Env, id: string, timestamp: string, normalized
       normalized.maker,
       normalized.series,
       normalized.release_year,
+      normalized.release_date,
       normalized.year,
       normalized.watched_at,
       normalized.started_at,
@@ -1123,6 +1150,7 @@ async function hydrateItems(env: Env, rows: Row[]): Promise<ItemRecord[]> {
     maker: nullableString(row.maker),
     series: nullableString(row.series),
     release_year: nullableNumber(row.release_year),
+    release_date: nullableString(row.release_date),
     year: nullableNumber(row.year),
     watched_at: nullableString(row.watched_at),
     started_at: nullableString(row.started_at),
@@ -1207,15 +1235,18 @@ function normalizeInput(input: ItemInput): NormalizedInput {
   const platform = input.is_private ? privatePlatform : normalizePlatform(platformValue, parsed);
   const maker = normalizeMaker(makerValue, parsed);
   const series = cleanString(input.series) || metadataString(metadata, ["series"]) || parsed.series;
-  const year = nullableNumber(input.year ?? input.release_year ?? metadataNumber(metadata, ["year", "releaseYear"]));
+  const releaseDate = cleanString(input.release_date) || metadataString(metadata, ["release_date", "released_at"]);
+  const releaseDateYear = releaseDate && /^\d{4}-\d{2}-\d{2}$/.test(releaseDate) ? Number(releaseDate.slice(0, 4)) : null;
+  const year = nullableNumber(input.year ?? input.release_year ?? metadataNumber(metadata, ["year", "releaseYear"])) ?? releaseDateYear;
   const favoriteLevel = normalizeFavoriteLevel(input.favorite_level || metadataString(metadata, ["favorite_level", "collection_level"]) || reflectionString(metadata, "collection_level"), input.favorite, input.rating);
-  const collectionLevel = normalizeCollectionLevel(input.collection_level ?? input.favorite_level ?? input.favorite);
-  const used = input.used ?? metadataBool(metadata, ["used", "is_used", "viewed"]);
+  const privateUsedLevel = favoriteLevel === "已使用";
+  const collectionLevel = privateUsedLevel ? "masterpiece" : normalizeCollectionLevel(input.collection_level ?? input.favorite_level ?? input.favorite);
+  const used = privateUsedLevel || (input.used ?? metadataBool(metadata, ["used", "is_used", "viewed"]));
   const mediaStatus = normalizeMediaStatus(input.media_status, input.status, input.progress_json);
   const quickNote = cleanString(input.quick_note);
   const longNote = cleanString(input.long_note);
   const tags = (input.tags || []).filter((tag) => !isPrivateMarkerValue(tag));
-  const people = input.people || [];
+  const people = input.is_private && !(input.people || []).some((person) => person.trim()) ? ["素人"] : input.people || [];
   const normalized = {
     raw_title: rawTitle,
     official_title: cleanString(input.official_title),
@@ -1227,6 +1258,7 @@ function normalizeInput(input: ItemInput): NormalizedInput {
     maker,
     series,
     release_year: nullableNumber(input.release_year) ?? year,
+    release_date: releaseDate,
     year,
     watched_at: cleanString(input.watched_at),
     started_at: cleanString(input.started_at),
@@ -1265,9 +1297,11 @@ export async function quickUpdateItem(env: Env, actor: Actor, id: string, field:
   const timestamp = nowIso();
   let statement: D1PreparedStatement;
   if (validated.field === "collection_level") {
-    const legacy = validated.value === "masterpiece" ? "神作" : validated.value === "discard" ? "已刪" : "一般";
-    statement = env.MEDIA_LOG_DB.prepare("UPDATE items SET collection_level = ?, favorite_level = ?, favorite = ?, updated_at = ? WHERE id = ?")
-      .bind(validated.value, legacy, validated.value === "normal" || validated.value === "masterpiece" ? 1 : 0, timestamp, id);
+    const dbLevel = validated.value === "used" ? "masterpiece" : validated.value;
+    const legacy = validated.value === "used" ? "已使用" : validated.value === "masterpiece" ? "神作" : validated.value === "discard" ? "已刪" : "一般";
+    const favorite = validated.value === "used" || validated.value === "normal" || validated.value === "masterpiece";
+    statement = env.MEDIA_LOG_DB.prepare("UPDATE items SET collection_level = ?, favorite_level = ?, favorite = ?, used = ?, updated_at = ? WHERE id = ?")
+      .bind(dbLevel, legacy, favorite ? 1 : 0, validated.value === "used" ? 1 : 0, timestamp, id);
   } else if (validated.field === "rating") {
     statement = env.MEDIA_LOG_DB.prepare("UPDATE items SET rating = ?, updated_at = ? WHERE id = ?").bind(validated.value, timestamp, id);
   } else if (validated.field === "private_status") {
@@ -1360,7 +1394,7 @@ function normalizeMaker(value: string | null, parsed: ReturnType<typeof parseCod
 
 function normalizeFavoriteLevel(value: unknown, favorite?: unknown, rating?: unknown): FavoriteLevel {
   const text = typeof value === "string" ? value.trim() : "";
-  if (text === "神作" || text === "收藏" || text === "一般" || text === "雷片" || text === "已刪") return text;
+  if (text === "已使用" || text === "神作" || text === "收藏" || text === "一般" || text === "雷片" || text === "已刪") return text;
   const numericRating = nullableNumber(rating);
   if (numericRating !== null && numericRating >= 9) return "神作";
   if (favorite) return "收藏";

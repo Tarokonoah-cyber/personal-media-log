@@ -1,4 +1,4 @@
-import { collectionLevelLabels, isCollectionLevel } from "../../shared/privateModel";
+import { collectionLevelLabels, isCollectionLevel, isPrivateCollectionLevel, privateCollectionLevelLabels, privateStarsFromRating } from "../../shared/privateModel";
 import type { ListFilters } from "../types";
 
 export type PrivateFilterChip = {
@@ -11,11 +11,14 @@ export function privateFilterChips(filters: ListFilters): PrivateFilterChip[] {
   const chips: PrivateFilterChip[] = [];
   const add = (key: string, label: string, patch: Partial<ListFilters>) => chips.push({ key, label, patch: { ...patch, page: 1 } });
   const addCsv = (field: "platformFilters" | "makerFilters" | "favoriteLevelFilters" | "personFilters", prefix: string) => {
-    for (const value of splitCsv(filters[field])) add(`${field}:${value}`, `${prefix}：${value}`, { [field]: removeCsv(filters[field], value) });
+    for (const value of splitCsv(filters[field])) {
+      const label = field === "favoriteLevelFilters" && isPrivateCollectionLevel(value) ? privateCollectionLevelLabels[value] : value;
+      add(`${field}:${value}`, `${prefix}：${label}`, { [field]: removeCsv(filters[field], value) });
+    }
   };
 
   if (filters.query.trim()) add("query", `搜尋：${filters.query.trim()}`, { query: "" });
-  if (filters.ratingMin || filters.ratingMax) add("rating", `評分：${filters.ratingMin || "不限"}～${filters.ratingMax || "不限"}`, { ratingMin: "", ratingMax: "" });
+  if (filters.ratingMin || filters.ratingMax) add("rating", `評分：${privateStarLabel(filters.ratingMin)}～${privateStarLabel(filters.ratingMax)}`, { ratingMin: "", ratingMax: "" });
   if (filters.unrated) add("unrated", "未評分", { unrated: false });
   if (filters.collectionLevel.trim()) {
     const value = filters.collectionLevel.trim();
@@ -47,4 +50,8 @@ function splitCsv(value?: string) {
 
 function removeCsv(current: string | undefined, value: string) {
   return splitCsv(current).filter((entry) => entry !== value).join(",");
+}
+
+function privateStarLabel(value: string) {
+  return value ? `${privateStarsFromRating(Number(value))} 星` : "不限";
 }

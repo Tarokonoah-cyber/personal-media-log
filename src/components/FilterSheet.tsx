@@ -1,4 +1,5 @@
 import { SlidersHorizontal, X } from "lucide-react";
+import { privateStarsFromRating } from "../../shared/privateModel";
 import { PRIVATE_TAG_PRESETS } from "../lib/tagPresets";
 import type { ListFilters } from "../types";
 
@@ -56,8 +57,8 @@ function PrivateFilters({ filters, onChange }: { filters: ListFilters; onChange:
         <Field label="搜尋" value={filters.query} onChange={(value) => onChange({ query: value })} placeholder="代號、女優、平台、片商、標籤、心得" />
         <Field label="作品代號" value={filters.codeQuery} onChange={(value) => onChange({ codeQuery: value })} placeholder="FC2PPV-2255291" />
         <Field label="系列 / 番號前綴" value={filters.series} onChange={(value) => onChange({ series: value })} placeholder="SSIS / IPZZ / FC2PPV" />
-        <Field label="評分下限" value={filters.ratingMin} inputMode="decimal" onChange={(value) => onChange({ ratingMin: value, unrated: false })} />
-        <Field label="評分上限" value={filters.ratingMax} inputMode="decimal" onChange={(value) => onChange({ ratingMax: value, unrated: false })} />
+        <StarFilter label="最低星等" value={filters.ratingMin} bound="min" onChange={(value) => onChange({ ratingMin: value, unrated: false })} />
+        <StarFilter label="最高星等" value={filters.ratingMax} bound="max" onChange={(value) => onChange({ ratingMax: value, unrated: false })} />
         <Field label="年份" value={filters.year} inputMode="numeric" onChange={(value) => onChange({ year: value })} />
         <OptionSelect label="標籤" value={filters.tag} options={PRIVATE_TAG_PRESETS} onChange={(value) => onChange({ tag: value })} />
         <Select label="心得" value={filters.hasNote || "all"} options={["all", "yes", "no"]} labels={{ all: "全部", yes: "有心得", no: "無心得" }} onChange={(value) => onChange({ hasNote: value as ListFilters["hasNote"] })} />
@@ -65,6 +66,22 @@ function PrivateFilters({ filters, onChange }: { filters: ListFilters; onChange:
         <label className="check"><input type="checkbox" checked={Boolean(filters.unrated)} onChange={(event) => onChange({ unrated: event.target.checked, ratingMin: "", ratingMax: "" })} />未評分</label>
       </div>
     </>
+  );
+}
+
+function StarFilter({ label, value, bound, onChange }: { label: string; value: string; bound: "min" | "max"; onChange: (value: string) => void }) {
+  const stars = value ? String(privateStarsFromRating(Number(value))) : "";
+  return (
+    <label>
+      {label}
+      <select value={stars} onChange={(event) => {
+        const selected = Number(event.target.value);
+        onChange(selected ? String(bound === "min" ? Math.max(1, selected * 2 - 1) : selected * 2) : "");
+      }}>
+        <option value="">不限</option>
+        {[1, 2, 3, 4, 5].map((star) => <option key={star} value={star}>{"★".repeat(star)} {star} 星</option>)}
+      </select>
+    </label>
   );
 }
 

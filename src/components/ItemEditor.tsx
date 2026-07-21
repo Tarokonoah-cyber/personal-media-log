@@ -1,13 +1,14 @@
 import { Save, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { TagEditor } from "./TagEditor";
+import { PrivateStarRating } from "./PrivateStarRating";
 import { fieldsToPrivateStatus, privateStatusToFields, type PrivateUiStatus } from "../lib/privateStatus";
 import { isPrivateItem, PRIVATE_LIBRARY_LABEL, privateItemDetails } from "../lib/privacy";
 import { collectionLevelOptions, getReflectionFromMetadata, mergeReflectionMetadata, moodOptions, rewatchIntentOptions } from "../lib/reflection";
 import { classifyItem, libraryTree } from "../lib/taxonomy";
 import { getWatchProgress, getWatchStatus, isSeriesLike, updateWatchProgress, watchStatuses } from "../lib/watch";
 import type { ItemInput, MediaItem, WatchStatus } from "../types";
-import { collectionLevelLabels, collectionLevels, normalizeCollectionLevel, type CollectionLevel } from "../../shared/privateModel";
+import { PRIVATE_DEFAULT_ACTRESS, privateCollectionLevel, privateCollectionLevelLabels, privateCollectionLevels, privateCollectionPatch, type PrivateCollectionLevel } from "../../shared/privateModel";
 
 const platformOptions = ["Netflix", "Disney+", "Prime Video", "Apple TV+", "HBO Max", "YouTube", "Crunchyroll", "電影院", "DVD / BD", "其他"];
 
@@ -244,8 +245,10 @@ function PrivateForm({
       <section className="editor-section wide">
         <h3>私密紀錄</h3>
         <div className="form-grid nested">
-          <Field label="評分（0-10）" value={form.rating} onChange={(value) => setForm({ ...form, rating: value })} inputMode="decimal" />
-          <CollectionLevelField value={normalizeCollectionLevel(form.collection_level)} onChange={(value) => setForm({ ...form, collection_level: value })} />
+          <label className="private-star-field">評分<PrivateStarRating value={numberOrNull(form.rating)} label="私密評分" onChange={(rating) => setForm({ ...form, rating: rating === null ? "" : String(rating) })} /></label>
+          <CollectionLevelField value={form.collection_level as PrivateCollectionLevel} onChange={(value) => setForm({ ...form, collection_level: value })} />
+          <Field label="發行日期" value={form.release_date} onChange={(value) => setForm({ ...form, release_date: value })} type="date" />
+          <Field label="紀錄日" value={form.watched_at} onChange={(value) => setForm({ ...form, watched_at: value })} type="date" />
           <TagEditor tags={form.tags} knownTags={knownTags} onChange={(tags) => setForm({ ...form, tags })} />
           <label className="wide">快速筆記<textarea value={form.quick_note} onChange={(event) => setForm({ ...form, quick_note: event.target.value })} rows={3} /></label>
           <label className="wide">完整心得<textarea value={form.long_note} onChange={(event) => setForm({ ...form, long_note: event.target.value })} rows={6} /></label>
@@ -264,14 +267,14 @@ function Field({ label, value, onChange, required, type = "text", inputMode }: {
   );
 }
 
-export function CollectionLevelField({ value, onChange }: { value: CollectionLevel; onChange: (value: CollectionLevel) => void }) {
+export function CollectionLevelField({ value, onChange }: { value: PrivateCollectionLevel; onChange: (value: PrivateCollectionLevel) => void }) {
   return (
     <fieldset className="collection-level-control">
       <legend>收藏等級</legend>
-      {collectionLevels.map((level) => (
+      {privateCollectionLevels.map((level) => (
         <label key={level} className={value === level ? "active" : ""}>
           <input type="radio" name="collection-level" value={level} checked={value === level} onChange={() => onChange(level)} />
-          <span>{collectionLevelLabels[level]}</span>
+          <span>{privateCollectionLevelLabels[level]}</span>
         </label>
       ))}
     </fieldset>
@@ -323,6 +326,7 @@ function toForm(item: MediaItem) {
     category: item.category || classification.category || "",
     platform: item.platform || "",
     release_year: item.release_year?.toString() || (details.releaseYear !== "-" ? details.releaseYear : ""),
+    release_date: item.release_date || "",
     watched_at: item.watched_at || item.completed_at || item.started_at || "",
     started_at: item.started_at || "",
     completed_at: item.completed_at || "",
@@ -348,13 +352,13 @@ function toForm(item: MediaItem) {
     collections: item.collections.join(", "),
     mood: reflection.mood,
     rewatch_intent: reflection.rewatch_intent,
-    collection_level: isPrivate ? normalizeCollectionLevel(item.collection_level ?? item.favorite_level ?? reflection.collection_level) : String(item.favorite_level || reflection.collection_level || ""),
+    collection_level: isPrivate ? privateCollectionLevel(item) : String(item.favorite_level || reflection.collection_level || ""),
     media_status: mediaStatus,
     used,
     private_status: fieldsToPrivateStatus({ used, media_status: mediaStatus }),
     private_code: details.code !== "-" ? details.code : "",
     private_title: privateTitle,
-    private_performers: details.performers !== "-" ? details.performers : metadataList(metadata, ["actresses", "performers", "cast", "actors"]),
+    private_performers: details.performers !== "-" ? details.performers : metadataList(metadata, ["actresses", "performers", "cast", "actors"]) || PRIVATE_DEFAULT_ACTRESS,
     private_platform: item.platform || "",
     private_studio: item.maker || (details.studio !== "-" ? details.studio : ""),
     private_type: privateType
@@ -377,6 +381,7 @@ function toInput(form: FormState): ItemInput {
     category: emptyToNull(form.category),
     platform: emptyToNull(form.platform),
     release_year: numberOrNull(form.release_year),
+    release_date: emptyToNull(form.release_date),
     watched_at: emptyToNull(form.watched_at),
     started_at: null,
     completed_at: null,
@@ -401,20 +406,23 @@ function toPrivateInput(form: FormState): ItemInput {
   const code = form.private_code.trim();
   const title = form.private_title.trim();
   const performers = splitList(form.private_performers);
+  const privatePerformers = performers.length ? performers : [PRIVATE_DEFAULT_ACTRESS];
   const studio = form.private_studio.trim();
   const platform = form.private_platform.trim();
   const privateType = form.private_type.trim();
   const metadata = mergePrivateMetadata(form.metadata_json, {
     code,
     title,
-    performers,
+    performers: privatePerformers,
     studio,
-    releaseYear: form.release_year.trim(),
+    releaseYear: String(yearFromReleaseDate(form.release_date) ?? form.release_year.trim()),
+    releaseDate: form.release_date.trim(),
     type: privateType
   });
   const metadataWithReflection = mergeReflectionMetadata(JSON.stringify(metadata), privateReflectionInput(form));
   const statusFields = privateStatusToFields(form.private_status);
-  const metadataWithUsed = mergePrivateUsedMetadata(JSON.stringify(metadataWithReflection), statusFields.used);
+  const collection = privateCollectionPatch(form.collection_level as PrivateCollectionLevel);
+  const metadataWithUsed = mergePrivateUsedMetadata(JSON.stringify(metadataWithReflection), collection.used);
 
   return {
     raw_title: title || code || form.raw_title,
@@ -426,18 +434,16 @@ function toPrivateInput(form: FormState): ItemInput {
     platform: platform || null,
     maker: studio || null,
     series: code ? codeSeries(code) : null,
-    release_year: numberOrNull(form.release_year),
-    year: numberOrNull(form.release_year),
-    watched_at: null,
+    release_year: yearFromReleaseDate(form.release_date) ?? numberOrNull(form.release_year),
+    release_date: emptyToNull(form.release_date),
+    year: yearFromReleaseDate(form.release_date) ?? numberOrNull(form.release_year),
+    watched_at: emptyToNull(form.watched_at),
     started_at: null,
     completed_at: null,
     planned_at: null,
     rating: numberOrNull(form.rating),
     rewatch_score: null,
-    favorite: false,
-    favorite_level: favoriteLevel(form.collection_level, numberOrNull(form.rating)),
-    collection_level: normalizeCollectionLevel(form.collection_level),
-    used: statusFields.used,
+    ...collection,
     is_private: true,
     media_status: statusFields.media_status,
     quick_note: emptyToNull(form.quick_note),
@@ -446,7 +452,7 @@ function toPrivateInput(form: FormState): ItemInput {
     cover_url: emptyToNull(form.cover_url),
     metadata_json: metadataToString(metadataWithUsed),
     tags: form.tags,
-    people: performers,
+    people: privatePerformers,
     collections: splitList(form.collections),
     ...privateProgressInput()
   };
@@ -511,7 +517,7 @@ function isSeriesType(type: string, category = "") {
   return ["影集", "沙雕动画", "series", "tv", "tv show", "drama"].some((term) => text.includes(term.toLowerCase()));
 }
 
-function mergePrivateMetadata(value: string, update: { code: string; title: string; performers: string[]; studio: string; releaseYear: string; type: string }) {
+function mergePrivateMetadata(value: string, update: { code: string; title: string; performers: string[]; studio: string; releaseYear: string; releaseDate: string; type: string }) {
   const metadata = parseMetadata(value);
   setOrDelete(metadata, "code", update.code);
   setOrDelete(metadata, "title", update.title);
@@ -520,8 +526,14 @@ function mergePrivateMetadata(value: string, update: { code: string; title: stri
   setOrDelete(metadata, "studio", update.studio);
   setOrDelete(metadata, "maker", update.studio);
   setOrDelete(metadata, "year", update.releaseYear);
+  setOrDelete(metadata, "release_date", update.releaseDate);
   setOrDelete(metadata, "type", update.type);
   return metadata;
+}
+
+function yearFromReleaseDate(value: string) {
+  const match = /^(\d{4})-\d{2}-\d{2}$/.exec(value.trim());
+  return match ? Number(match[1]) : null;
 }
 
 function privateUsedValue(metadata: Record<string, unknown>) {
@@ -576,12 +588,6 @@ function numberOrNull(value: string) {
   if (!value.trim()) return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
-}
-
-function favoriteLevel(value: string, rating: number | null) {
-  if (value === "神作" || value === "收藏" || value === "一般" || value === "雷片" || value === "已刪") return value;
-  if (rating !== null && rating >= 9) return "神作";
-  return "一般";
 }
 
 function codeSeries(code: string) {

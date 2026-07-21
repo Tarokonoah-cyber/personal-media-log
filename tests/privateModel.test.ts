@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findWorkCodeConflict, normalizeCollectionLevel, normalizePlatform, normalizeWorkCode, validateQuickEdit, workCodesEqual } from "../shared/privateModel";
+import { findWorkCodeConflict, normalizeCollectionLevel, normalizePlatform, normalizeWorkCode, privateCollectionLevel, privateCollectionPatch, privateRatingFromStars, privateStarsFromRating, validateQuickEdit, workCodesEqual } from "../shared/privateModel";
 
 describe("collection level normalization", () => {
   it.each([
@@ -19,12 +19,27 @@ describe("private taxonomy and quick edits", () => {
   it("normalizes mathematical alphanumeric codes with NFKC", () => expect(normalizeWorkCode("𝚂𝚃𝙰𝚁𝚃-𝟻𝟾𝟹")).toBe("START-583"));
   it("allows only supported private quick edits", () => {
     expect(validateQuickEdit("collection_level", "masterpiece")).toEqual({ field: "collection_level", value: "masterpiece" });
+    expect(validateQuickEdit("collection_level", "used")).toEqual({ field: "collection_level", value: "used" });
     expect(validateQuickEdit("rating", null)).toEqual({ field: "rating", value: null });
     expect(validateQuickEdit("rating", 11)).toBeNull();
     expect(validateQuickEdit("used", true)).toEqual({ field: "used", value: true });
     expect(validateQuickEdit("private_status", "rewatch")).toEqual({ field: "private_status", value: "rewatch" });
     expect(validateQuickEdit("private_status", "watched")).toBeNull();
     expect(validateQuickEdit("platform", "JAV")).toBeNull();
+  });
+
+  it("keeps the highest private collection compatible with existing storage", () => {
+    expect(privateCollectionPatch("used")).toEqual({ collection_level: "masterpiece", favorite_level: "已使用", favorite: true, used: true });
+    expect(privateCollectionPatch("masterpiece").used).toBe(false);
+    expect(privateCollectionLevel({ used: true, collection_level: "normal" })).toBe("used");
+  });
+
+  it("maps private five-star ratings to the existing ten-point storage", () => {
+    expect(privateRatingFromStars(1)).toBe(2);
+    expect(privateRatingFromStars(5)).toBe(10);
+    expect(privateRatingFromStars(6)).toBeNull();
+    expect(privateStarsFromRating(8)).toBe(4);
+    expect(privateStarsFromRating(9)).toBe(5);
   });
 });
 

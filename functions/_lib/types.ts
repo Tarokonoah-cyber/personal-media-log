@@ -16,10 +16,10 @@ export interface Actor {
 
 export type ItemStatus = "raw" | "partial" | "complete" | "archived" | "deleted";
 export type WatchStatus = "plan_to_watch" | "watching" | "completed" | "paused" | "dropped" | "rewatching";
-import type { CollectionLevel } from "../../shared/privateModel";
+import type { CollectionLevel, PrivateCollectionLevel } from "../../shared/privateModel";
 import type { PrivateStatusFilter } from "../../shared/privateStatus";
 
-export type FavoriteLevel = "神作" | "收藏" | "一般" | "雷片" | "已刪";
+export type FavoriteLevel = "已使用" | "神作" | "收藏" | "一般" | "雷片" | "已刪";
 export type MediaStatus = "待觀看" | "已觀看" | "想重看" | "已刪除";
 
 export interface ItemInput {
@@ -33,6 +33,7 @@ export interface ItemInput {
   maker?: string | null;
   series?: string | null;
   release_year?: number | null;
+  release_date?: string | null;
   year?: number | null;
   watched_at?: string | null;
   started_at?: string | null;
@@ -88,7 +89,7 @@ export interface ItemListParams {
   includeFacets?: boolean;
   platformFilters?: string[];
   makerFilters?: string[];
-  favoriteLevelFilters?: CollectionLevel[];
+  favoriteLevelFilters?: PrivateCollectionLevel[];
   personFilters?: string[];
   missingPeople?: boolean;
   hasNote?: "all" | "yes" | "no";

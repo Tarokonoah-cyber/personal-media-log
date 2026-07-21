@@ -6,7 +6,7 @@ import { parseSmartAdd } from "../_lib/smartAdd";
 import { applyTmdbMetadata, searchTmdb } from "../_lib/tmdb";
 import { getPrivateQuality, ignorePrivateIssue, isPrivateIssueType, unignorePrivateIssue } from "../_lib/privateQuality";
 import type { Env, FavoriteLevel, ItemInput, ItemListParams, ItemStatus, MediaStatus, WatchStatus } from "../_lib/types";
-import type { CollectionLevel } from "../../shared/privateModel";
+import type { PrivateCollectionLevel } from "../../shared/privateModel";
 import { isPrivateStatus } from "../../shared/privateStatus";
 
 export const onRequest: PagesFunction<Env, "path"> = async (context) => {
@@ -174,6 +174,7 @@ function defaultMapping(columns: string[]) {
     "maker",
     "series",
     "release_year",
+    "release_date",
     "year",
     "watched_at",
     "started_at",
@@ -237,7 +238,7 @@ function getListParams(url: URL): ItemListParams {
     includeFacets: url.searchParams.get("includeFacets") === "true",
     platformFilters: csvValues(url.searchParams.get("platformFilters")),
     makerFilters: csvValues(url.searchParams.get("makerFilters")),
-    favoriteLevelFilters: csvValues(url.searchParams.get("favoriteLevelFilters")).filter(isCollectionLevelFilter) as CollectionLevel[],
+    favoriteLevelFilters: csvValues(url.searchParams.get("favoriteLevelFilters")).filter(isCollectionLevelFilter) as PrivateCollectionLevel[],
     personFilters: csvValues(url.searchParams.get("personFilters")),
     missingPeople: url.searchParams.get("missingPeople") === "true",
     hasNote: isTriState(url.searchParams.get("hasNote")) ? url.searchParams.get("hasNote") as "all" | "yes" | "no" : "all",
@@ -302,11 +303,11 @@ function isTriState(value: string | null): value is "all" | "yes" | "no" {
 }
 
 function isFavoriteLevelFilter(value: string | null): value is FavoriteLevel | "all" {
-  return value === "all" || value === "神作" || value === "收藏" || value === "一般" || value === "雷片" || value === "已刪";
+  return value === "all" || value === "已使用" || value === "神作" || value === "收藏" || value === "一般" || value === "雷片" || value === "已刪";
 }
 
-function isCollectionLevelFilter(value: string | null): value is CollectionLevel {
-  return value === "unset" || value === "masterpiece" || value === "normal" || value === "discard";
+function isCollectionLevelFilter(value: string | null): value is PrivateCollectionLevel {
+  return value === "unset" || value === "masterpiece" || value === "normal" || value === "used" || value === "discard";
 }
 
 function isMediaStatusFilter(value: string | null): value is MediaStatus | "all" {

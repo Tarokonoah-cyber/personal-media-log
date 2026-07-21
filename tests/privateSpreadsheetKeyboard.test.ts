@@ -18,6 +18,7 @@ const item = {
   people: ["Performer A", "Performer B"],
   maker: "Studio",
   tags: ["plot"],
+  release_date: "2026-06-15",
   watched_at: "2026-07-20",
   quick_note: "Short note",
   metadata_json: "{}",
@@ -45,7 +46,7 @@ describe("private spreadsheet keyboard navigation", () => {
 describe("private spreadsheet clipboard", () => {
   it("copies the displayed value for every column kind", () => {
     expect(privateClipboardValue(item, "identity")).toBe("ABC-123 — Readable title");
-    expect(privateClipboardValue(item, "rating")).toBe("8.5");
+    expect(privateClipboardValue(item, "rating")).toBe("5");
     expect(privateClipboardValue(item, "favorite")).toBe("神作");
     expect(privateClipboardValue(item, "actress")).toBe("Performer A, Performer B");
   });
@@ -66,13 +67,16 @@ describe("private spreadsheet clipboard", () => {
   });
 
   it("validates ratings, favorites, and dates", () => {
-    expect(privateClipboardUpdate(item, "rating", "9.5")).toEqual({ kind: "quick", field: "rating", value: 9.5 });
+    expect(privateClipboardUpdate(item, "rating", "5 星")).toEqual({ kind: "quick", field: "rating", value: 10 });
     expect(privateClipboardUpdate(item, "rating", "")).toEqual({ kind: "quick", field: "rating", value: null });
     expect(privateClipboardUpdate(item, "favorite", "淘汰")).toEqual({ kind: "quick", field: "collection_level", value: "discard" });
     expect(privateClipboardUpdate(item, "favorite", "normal")).toEqual({ kind: "quick", field: "collection_level", value: "normal" });
+    expect(privateClipboardUpdate(item, "favorite", "已使用")).toEqual({ kind: "quick", field: "collection_level", value: "used" });
+    expect(privateClipboardUpdate(item, "releaseDate", "2026-02-28")).toEqual({ kind: "patch", patch: { release_date: "2026-02-28", release_year: 2026 } });
     expect(privateClipboardUpdate(item, "watchedAt", "2026-02-28")).toEqual({ kind: "patch", patch: { watched_at: "2026-02-28" } });
-    expect(() => privateClipboardUpdate(item, "rating", "11")).toThrow("評分必須是 1–10");
-    expect(() => privateClipboardUpdate(item, "favorite", "最愛")).toThrow("收藏必須是未分類、神作、一般或淘汰");
+    expect(() => privateClipboardUpdate(item, "rating", "6")).toThrow("評分必須是 1–5 星");
+    expect(() => privateClipboardUpdate(item, "favorite", "最愛")).toThrow("收藏必須是未分類、一般、神作、已使用或淘汰");
+    expect(() => privateClipboardUpdate(item, "releaseDate", "2026-02-30")).toThrow("發行日期格式必須是 YYYY-MM-DD");
     expect(() => privateClipboardUpdate(item, "watchedAt", "2026-02-30")).toThrow("紀錄日格式必須是 YYYY-MM-DD");
   });
 

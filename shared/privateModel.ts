@@ -1,14 +1,25 @@
 import { isPrivateStatus, type PrivateUiStatus } from "./privateStatus";
 
 export const collectionLevels = ["unset", "masterpiece", "normal", "discard"] as const;
+export const privateCollectionLevels = ["unset", "normal", "masterpiece", "used", "discard"] as const;
+export const PRIVATE_DEFAULT_ACTRESS = "素人";
 
 export type CollectionLevel = (typeof collectionLevels)[number];
+export type PrivateCollectionLevel = (typeof privateCollectionLevels)[number];
 export type NormalizedPlatform = "FC2" | "JAV" | "unknown";
 
 export const collectionLevelLabels: Record<CollectionLevel, string> = {
   unset: "未分類",
   masterpiece: "神作",
   normal: "一般",
+  discard: "淘汰"
+};
+
+export const privateCollectionLevelLabels: Record<PrivateCollectionLevel, string> = {
+  unset: "未分類",
+  normal: "一般",
+  masterpiece: "神作",
+  used: "已使用",
   discard: "淘汰"
 };
 
@@ -25,6 +36,40 @@ export function normalizeCollectionLevel(value: unknown): CollectionLevel {
   if (["收藏", "一般", "normal", "favorite", "favourite", "true", "1"].includes(text)) return "normal";
   if (["雷片", "已刪", "刪除", "淘汰", "discard", "deleted", "trash"].includes(text)) return "discard";
   return "unset";
+}
+
+export function isPrivateCollectionLevel(value: unknown): value is PrivateCollectionLevel {
+  return typeof value === "string" && privateCollectionLevels.includes(value as PrivateCollectionLevel);
+}
+
+export function privateCollectionLevel(value: { used?: unknown; collection_level?: unknown; favorite_level?: unknown }): PrivateCollectionLevel {
+  if (value.used === true || value.used === 1 || value.favorite_level === "已使用") return "used";
+  return normalizeCollectionLevel(value.collection_level ?? value.favorite_level);
+}
+
+export function privateCollectionPatch(level: PrivateCollectionLevel) {
+  if (level === "used") {
+    return { collection_level: "masterpiece" as const, favorite_level: "已使用" as const, favorite: true, used: true };
+  }
+  return {
+    collection_level: level,
+    favorite_level: level === "masterpiece" ? "神作" as const : level === "discard" ? "已刪" as const : "一般" as const,
+    favorite: level === "normal" || level === "masterpiece",
+    used: false
+  };
+}
+
+export function privateStarsFromRating(rating: unknown): number {
+  const numeric = typeof rating === "number" ? rating : Number(rating);
+  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
+  return Math.min(5, Math.max(1, Math.ceil(numeric / 2)));
+}
+
+export function privateRatingFromStars(stars: unknown): number | null {
+  if (stars === null || stars === undefined || stars === "") return null;
+  const numeric = typeof stars === "number" ? stars : Number(stars);
+  if (!Number.isInteger(numeric) || numeric < 1 || numeric > 5) return null;
+  return numeric * 2;
 }
 
 export function normalizeWorkCode(value: unknown): string {
@@ -80,13 +125,13 @@ export function findWorkCodeConflict<T extends { id: string; code?: unknown }>(v
 
 export type QuickEditField = "collection_level" | "rating" | "used" | "private_status";
 export type ValidatedQuickEdit =
-  | { field: "collection_level"; value: CollectionLevel }
+  | { field: "collection_level"; value: PrivateCollectionLevel }
   | { field: "rating"; value: number | null }
   | { field: "used"; value: boolean }
   | { field: "private_status"; value: PrivateUiStatus };
 
 export function validateQuickEdit(field: unknown, value: unknown): ValidatedQuickEdit | null {
-  if (field === "collection_level") return isCollectionLevel(value) ? { field, value } : null;
+  if (field === "collection_level") return isPrivateCollectionLevel(value) ? { field, value } : null;
   if (field === "rating") return value === null || (typeof value === "number" && Number.isFinite(value) && value >= 1 && value <= 10) ? { field, value } : null;
   if (field === "used") return typeof value === "boolean" ? { field, value } : null;
   if (field === "private_status") return isPrivateStatus(value) ? { field, value } : null;

@@ -1,4 +1,4 @@
-import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, Database, Film, Folder, Hash, Heart, Settings, Sparkles, Tv, X } from "lucide-react";
+import { BarChart3, Building2, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, Database, Film, Folder, Hash, Heart, Settings, Sparkles, Tv, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isPrivateLibraryLabel } from "../lib/privacy";
 import { searchPrivateFacet } from "../lib/api";
@@ -80,6 +80,7 @@ export function ViewSidebar({
   closeMobileRef.current = onCloseMobile;
   const platformFilters = filterValues(filters.platformFilters);
   const favoriteFilters = filterValues(filters.favoriteLevelFilters);
+  const makerFilters = filterValues(filters.makerFilters);
   const personFilters = filterValues(filters.personFilters);
   const actressItems = useMemo(() => actressResults.length ? actressResults : privateFacets?.actress || [], [actressResults, privateFacets?.actress]);
 
@@ -136,6 +137,16 @@ export function ViewSidebar({
 
   const clearPrivateFilters = () => applyPrivateFilter(clearPrivateSidebarFilters(filters));
 
+  const toggleJavMaker = (maker: string) => {
+    const next = makerFilters.includes(maker) ? makerFilters.filter((entry) => entry !== maker) : [...makerFilters, maker];
+    applyPrivateFilter({
+      makerFilters: next.join(","),
+      platformFilters: "JAV",
+      platform: "",
+      maker: ""
+    });
+  };
+
   if (privateMode) {
     return (
       <>
@@ -157,16 +168,32 @@ export function ViewSidebar({
           </NavSection>
 
           <PrivateNavSection title="平台" open={platformOpen} showText={showText} onToggle={() => setPlatformOpen((value) => !value)}>
-            {["FC2", "JAV"].map((platform) => (
-              <PrivateFilterButton key={platform} label={platform} count={facetCount(privateFacets?.source, platform)} active={platformFilters.includes(platform)} showText={showText} icon={<Clapperboard size={15} />} onClick={() => patchMulti("platformFilters", platform)} />
-            ))}
+            <PrivateFilterButton label="FC2" count={facetCount(privateFacets?.source, "FC2")} active={platformFilters.includes("FC2")} showText={showText} icon={<Clapperboard size={15} />} onClick={() => patchMulti("platformFilters", "FC2")} />
+            <PrivateFilterButton label="JAV" count={facetCount(privateFacets?.source, "JAV")} active={platformFilters.includes("JAV")} showText={showText} icon={<Clapperboard size={15} />} onClick={() => patchMulti("platformFilters", "JAV")} />
+            {showText && (privateFacets?.javMaker?.length || 0) > 0 && (
+              <div className="private-nav-subfilters" aria-label="JAV 片商">
+                {privateFacets?.javMaker.map((maker) => (
+                  <PrivateFilterButton
+                    key={maker.value}
+                    label={maker.value}
+                    count={maker.count}
+                    active={makerFilters.includes(maker.value)}
+                    showText
+                    icon={<Building2 size={13} />}
+                    nested
+                    onClick={() => toggleJavMaker(maker.value)}
+                  />
+                ))}
+              </div>
+            )}
           </PrivateNavSection>
 
           <PrivateNavSection title="收藏" open={favoriteOpen} showText={showText} onToggle={() => setFavoriteOpen((value) => !value)}>
             {[
               { label: "未分類", value: "unset" },
-              { label: "神作", value: "masterpiece" },
               { label: "一般", value: "normal" },
+              { label: "神作", value: "masterpiece" },
+              { label: "已使用", value: "used" },
               { label: "淘汰", value: "discard" }
             ].map((entry) => (
               <PrivateFilterButton key={entry.value} label={entry.label} count={facetCount(privateFacets?.favoriteLevel, entry.value)} active={favoriteFilters.includes(entry.value)} showText={showText} icon={<Heart size={15} />} onClick={() => patchMulti("favoriteLevelFilters", entry.value)} />
@@ -182,7 +209,6 @@ export function ViewSidebar({
                 <PrivateFilterButton key={actress.value} label={actress.value} count={actress.count} active={personFilters.includes(actress.value)} showText={showText} onClick={() => patchMulti("personFilters", actress.value)} />
               ))}
             </div>
-            <PrivateFilterButton label="未填女優" count={0} active={Boolean(filters.missingPeople)} showText={showText} onClick={() => applyPrivateFilter({ missingPeople: !filters.missingPeople })} />
           </PrivateNavSection>
 
           <NavSection title="工具" showText={showText} tone="tools">
@@ -340,6 +366,7 @@ function PrivateFilterButton({
   active,
   showText,
   icon,
+  nested = false,
   onClick
 }: {
   label: string;
@@ -347,10 +374,11 @@ function PrivateFilterButton({
   active: boolean;
   showText: boolean;
   icon?: ReactNode;
+  nested?: boolean;
   onClick: () => void;
 }) {
   return (
-    <button className={active ? "active private-nav-filter" : "private-nav-filter"} onClick={onClick} title={`${label} ${count}`} aria-pressed={active}>
+    <button className={`${active ? "active " : ""}private-nav-filter${nested ? " is-nested" : ""}`} onClick={onClick} title={`${label} ${count}`} aria-pressed={active}>
       {icon || <span className="private-nav-dot" />}
       {showText && (
         <>

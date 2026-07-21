@@ -55,13 +55,13 @@ describe("private facet filter exclusion", () => {
   it("lets unified status take precedence over legacy status filters", () => {
     const unified = buildItemWhere({ ...base, privateStatus: "rewatch", usedFilter: "unused", mediaStatus: "待觀看" });
     expect(unified.whereSql).toContain("THEN 'rewatch'");
-    expect(unified.whereSql.match(/items\.used = 0/g)).toHaveLength(1);
+    expect(unified.whereSql.match(/items\.used = 0/g)).toHaveLength(2);
     expect(unified.whereSql).not.toContain("items.media_status = ?");
     expect(unified.bind).toContain("rewatch");
     expect(unified.bind).not.toContain("待觀看");
 
     const legacy = buildItemWhere({ ...base, privateStatus: "all", usedFilter: "unused", mediaStatus: "待觀看" });
-    expect(legacy.whereSql.match(/items\.used = 0/g)).toHaveLength(1);
+    expect(legacy.whereSql.match(/items\.used = 0/g)).toHaveLength(2);
     expect(legacy.whereSql).toContain("items.media_status = ?");
     expect(legacy.bind).toContain("待觀看");
   });

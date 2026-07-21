@@ -10,6 +10,7 @@ import { CalendarView } from "./components/CalendarView";
 import { MetadataLookupModal } from "./components/MetadataLookupModal";
 import { PrivateBatchToolbar } from "./components/PrivateBatchToolbar";
 import { PrivateFilterChips } from "./components/PrivateFilterChips";
+import { PrivateStarDisplay, PrivateStarRating } from "./components/PrivateStarRating";
 import { QuickCapture } from "./components/QuickCapture";
 import { SmartOrganizer } from "./components/SmartOrganizer";
 import { StatsPanel } from "./components/StatsPanel";
@@ -20,7 +21,7 @@ import { PrivateQualityCenter } from "./components/PrivateQualityCenter";
 import { applyMetadata, createItem, deleteItem, getItem, getPrivateFacets, listItems, parseSmartAdd, quickUpdateItem as quickUpdateItemApi, searchMetadata, updateItem } from "./lib/api";
 import { privateBatchTagPatch, retainVisibleSelection, runLimitedBatch, togglePageItemSelection, togglePageSelection, type BatchOperationResult } from "./lib/privateBatch";
 import { mergePrivateFilters } from "./lib/privateFilters";
-import { collectionLevelLabels, collectionLevels, normalizeCollectionLevel, type CollectionLevel } from "../shared/privateModel";
+import { PRIVATE_DEFAULT_ACTRESS, isPrivateCollectionLevel, privateCollectionLevel, privateCollectionLevelLabels, privateCollectionLevels, privateCollectionPatch, privateRatingFromStars, privateStarsFromRating, type PrivateCollectionLevel } from "../shared/privateModel";
 import { createSavedView, readSavedViews, savedViewSignature, writeSavedViews, type SavedPrivateView } from "./lib/savedViews";
 import { toItemInput } from "./lib/itemTransforms";
 import { emptyPrivateRowDraft, privateCellPatch, privateCellValue, privateIdentityLabel, privateIdentityPatch, privateIdentityValue, privateRowDraftToInput, type PrivateEditableColumn, type PrivateIdentityDraft, type PrivateRowDraft } from "./lib/privateSpreadsheet";
@@ -413,6 +414,8 @@ export default function App() {
     const previous = item;
     const optimistic = field === "private_status" && isPrivateStatus(value)
       ? { ...item, ...privateStatusToFields(value) }
+      : field === "collection_level" && isPrivateCollectionLevel(value)
+        ? { ...item, ...privateCollectionPatch(value) }
       : { ...item, [field]: value } as MediaItem;
     setItems((current) => current.map((entry) => entry.id === item.id ? optimistic : entry));
     try {
@@ -1363,8 +1366,8 @@ function PrivateWorkbenchV3({
     return result;
   }
 
-  async function updateSelectedCollection(collection: CollectionLevel) {
-    return keepFailedSelection(await onBatchUpdate(selectedItems, { collection_level: collection }));
+  async function updateSelectedCollection(collection: PrivateCollectionLevel) {
+    return keepFailedSelection(await onBatchUpdate(selectedItems, privateCollectionPatch(collection)));
   }
 
   async function updateSelectedTags(input: string, mode: "add" | "remove") {
@@ -1660,7 +1663,7 @@ function PrivateDataTable({
       const cell = cellRefs.current.get(privateCellKey(position));
       if (!cell) return;
       const target = position.column === "rating" || position.column === "favorite"
-        ? cell.querySelector<HTMLSelectElement>("select") || cell
+        ? cell.querySelector<HTMLElement>('[data-private-cell-control] [tabindex="0"], [data-private-cell-control], select') || cell
         : cell;
       target.focus({ preventScroll: true });
       cell.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -2171,20 +2174,21 @@ function PrivateTableCell({
   }
   if (column === "rating") {
     return (
-      <span className="private-sheet-select-cell">
-        <select className="private-sheet-select" tabIndex={active ? 0 : -1} value={item.rating ?? ""} disabled={pending} onChange={(event) => onCommit("rating", event.target.value ? Number(event.target.value) : null)} aria-label={`評分 ${privateItemDetails(item).code}`}>
-          <option value="">-</option>
-          {Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}
-        </select>
-        <ChevronDown size={12} aria-hidden="true" />
-      </span>
+      <PrivateStarRating
+        value={item.rating}
+        active={active}
+        compact
+        disabled={pending}
+        label={`評分 ${privateItemDetails(item).code}`}
+        onChange={(rating) => onCommit("rating", rating)}
+      />
     );
   }
   if (column === "favorite") {
     return (
       <span className="private-sheet-select-cell">
-        <select className="private-sheet-select" tabIndex={active ? 0 : -1} value={normalizeCollectionLevel(item.collection_level)} disabled={pending} onChange={(event) => onCommit("collection_level", event.target.value)} aria-label={`收藏 ${privateItemDetails(item).code}`}>
-          {collectionLevels.map((value) => <option key={value} value={value}>{collectionLevelLabels[value]}</option>)}
+        <select data-private-cell-control className="private-sheet-select" tabIndex={active ? 0 : -1} value={privateCollectionLevel(item)} disabled={pending} onChange={(event) => onCommit("collection_level", event.target.value)} aria-label={`收藏 ${privateItemDetails(item).code}`}>
+          {privateCollectionLevels.map((value) => <option key={value} value={value}>{privateCollectionLevelLabels[value]}</option>)}
         </select>
         <ChevronDown size={12} aria-hidden="true" />
       </span>
@@ -2198,7 +2202,7 @@ function PrivateTableCell({
       <span className="private-sheet-editor">
         <input
           autoFocus
-          type={column === "watchedAt" ? "date" : "text"}
+          type={column === "releaseDate" || column === "watchedAt" ? "date" : "text"}
           value={draft}
           disabled={pending}
           onChange={(event) => onDraftChange(event.target.value)}
@@ -2224,7 +2228,7 @@ function PrivateTableCell({
 function estimatePrivateColumnWidth(column: PrivateColumnId, items: MediaItem[]) {
   const sample = items.slice(0, 100).map((item) => {
     if (column === "identity") return privateIdentityLabel(item) || "-";
-    if (column === "rating") return item.rating ? Number(item.rating).toFixed(1) : "-";
+    if (column === "rating") return item.rating ? `${privateStarsFromRating(item.rating)} 星` : "-";
     if (column === "favorite") return privateFavoriteLevel(item);
     return privateCellValue(item, column) || "-";
   });
@@ -2246,7 +2250,7 @@ function PrivateNewSpreadsheetRow({ columns, draft, busy, error, knownTags, onCh
     onChange({ ...draft, ...next });
   }
 
-  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>) {
+  function handleKeyDown(event: React.KeyboardEvent<HTMLElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
       onSubmit();
@@ -2258,11 +2262,12 @@ function PrivateNewSpreadsheetRow({ columns, draft, busy, error, knownTags, onCh
 
   function cell(column: PrivateColumnId) {
     if (column === "identity") return <span className="private-new-identity-editor"><input autoFocus value={draft.code} onChange={(event) => patch({ code: event.target.value })} onKeyDown={handleKeyDown} placeholder="輸入番號" aria-label="新資料番號" /><input value={draft.title} onChange={(event) => patch({ title: event.target.value })} onKeyDown={handleKeyDown} placeholder="片名可留空" aria-label="新資料片名" /></span>;
-    if (column === "rating") return <input value={draft.rating} onChange={(event) => patch({ rating: event.target.value })} onKeyDown={handleKeyDown} inputMode="decimal" aria-label="新資料評分" />;
-    if (column === "favorite") return <select value={draft.collection} onChange={(event) => patch({ collection: event.target.value as CollectionLevel })} onKeyDown={handleKeyDown} aria-label="新資料收藏">{collectionLevels.map((value) => <option key={value} value={value}>{collectionLevelLabels[value]}</option>)}</select>;
+    if (column === "rating") return <PrivateStarRating value={privateRatingFromStars(draft.rating)} compact label="新資料評分" onChange={(rating) => patch({ rating: rating === null ? "" : String(privateStarsFromRating(rating)) })} onKeyDown={handleKeyDown} />;
+    if (column === "favorite") return <select value={draft.collection} onChange={(event) => patch({ collection: event.target.value as PrivateCollectionLevel })} onKeyDown={handleKeyDown} aria-label="新資料收藏">{privateCollectionLevels.map((value) => <option key={value} value={value}>{privateCollectionLevelLabels[value]}</option>)}</select>;
     if (column === "actress") return <input value={draft.actress} onChange={(event) => patch({ actress: event.target.value })} onKeyDown={handleKeyDown} placeholder="多人用逗號分隔" aria-label="新資料女優" />;
     if (column === "maker") return <input value={draft.maker} onChange={(event) => patch({ maker: event.target.value })} onKeyDown={handleKeyDown} placeholder="片商" aria-label="新資料片商" />;
     if (column === "tags") return <input value={draft.tags} onChange={(event) => patch({ tags: event.target.value })} onKeyDown={handleKeyDown} placeholder="標籤以逗號分隔" list="private-sheet-known-tags" aria-label="新資料標籤" />;
+    if (column === "releaseDate") return <input type="date" value={draft.releaseDate} onChange={(event) => patch({ releaseDate: event.target.value })} onKeyDown={handleKeyDown} aria-label="新資料發行日期" />;
     if (column === "watchedAt") return <input type="date" value={draft.watchedAt} onChange={(event) => patch({ watchedAt: event.target.value })} onKeyDown={handleKeyDown} aria-label="新資料紀錄日" />;
     return <input value={draft.summary} onChange={(event) => patch({ summary: event.target.value })} onKeyDown={handleKeyDown} placeholder="快速筆記" aria-label="新資料快速筆記" />;
   }
@@ -2314,7 +2319,8 @@ function PrivateMobileCard({ item, onSelect, desktop = false, selected = false, 
         <PrivateBadge tone="favorite">{privateFavoriteLevel(item)}</PrivateBadge>
       </div>
       <p>{item.platform || "-"} / {item.maker || details.studio}</p>
-      <p>{details.performers}</p>
+      <p>{details.performers === "-" ? PRIVATE_DEFAULT_ACTRESS : details.performers}</p>
+      {(item.release_date || item.watched_at) && <p className="private-card-dates">{item.release_date ? `發行 ${item.release_date.slice(0, 10)}` : ""}{item.release_date && item.watched_at ? " · " : ""}{item.watched_at ? `紀錄 ${item.watched_at.slice(0, 10)}` : ""}</p>}
       {item.quick_note && <p className="private-card-note">{item.quick_note}</p>}
       <div className="private-card-bottom">
         <PrivateTags tags={item.tags} />
@@ -2324,14 +2330,15 @@ function PrivateMobileCard({ item, onSelect, desktop = false, selected = false, 
 }
 
 function PrivateRating({ item }: { item: MediaItem }) {
-  if (!item.rating) return <span className="private-muted-cell">-</span>;
-  return <span className="private-rating"><Star size={14} fill="currentColor" />{Number(item.rating).toFixed(1)}</span>;
+  return <PrivateStarDisplay value={item.rating} />;
 }
 
 function PrivateFavoriteMark({ level }: { level: string }) {
   const normalized = level === "已刪" || level === "已刪除" || level === "淘汰" ? "淘汰" : level;
   if (normalized === "未分類") return <span className="private-favorite-unset" aria-label="收藏：未分類">—</span>;
-  const icon = normalized === "神作"
+  const icon = normalized === "已使用"
+    ? <Check size={14} />
+    : normalized === "神作"
     ? <Star size={14} fill="currentColor" />
     : normalized === "淘汰" || normalized === "雷片"
       ? <CircleSlash2 size={14} />
@@ -2407,7 +2414,7 @@ function PrivateEmptyState({ onClear, onAdd }: { onClear: () => void; onAdd: () 
 }
 
 function privateFavoriteLevel(item: MediaItem) {
-  return collectionLevelLabels[normalizeCollectionLevel(item.collection_level ?? item.favorite_level)];
+  return privateCollectionLevelLabels[privateCollectionLevel(item)];
 }
 
 function privateDisplayTitle(title: string, code: string) {
@@ -2569,12 +2576,13 @@ function SimpleAddModal({
     code: "",
     title: "",
     rating: "",
-    collection: "unset" as CollectionLevel,
-    actress: "",
+    collection: "unset" as PrivateCollectionLevel,
+    actress: PRIVATE_DEFAULT_ACTRESS,
     platform: "",
     maker: "",
     summary: "",
     tags: [] as string[],
+    release_date: "",
     watched_at: todayDate()
   });
   const canSubmit = privateMode ? Boolean(draft.code.trim() || draft.title.trim()) : Boolean(draft.title.trim());
@@ -2605,12 +2613,14 @@ function SimpleAddModal({
         <div className="simple-add-grid">
           {privateMode && <Field label="番號" value={draft.code} onChange={(value) => patch({ code: value })} />}
           <Field label={privateMode ? "片名" : "標題"} value={draft.title} onChange={(value) => patch({ title: value })} required={!privateMode} />
-          <Field label="評分" value={draft.rating} onChange={(value) => patch({ rating: value })} inputMode="decimal" />
+          {privateMode
+            ? <label className="private-star-field">評分<PrivateStarRating value={privateRatingFromStars(draft.rating)} label="私密評分" onChange={(rating) => patch({ rating: rating === null ? "" : String(privateStarsFromRating(rating)) })} /></label>
+            : <Field label="評分" value={draft.rating} onChange={(value) => patch({ rating: value })} inputMode="decimal" />}
           {privateMode && (
             <label>
               收藏
-              <select value={draft.collection} onChange={(event) => patch({ collection: event.target.value as CollectionLevel })}>
-                {collectionLevels.map((value) => <option key={value} value={value}>{collectionLevelLabels[value]}</option>)}
+              <select value={draft.collection} onChange={(event) => patch({ collection: event.target.value as PrivateCollectionLevel })}>
+                {privateCollectionLevels.map((value) => <option key={value} value={value}>{privateCollectionLevelLabels[value]}</option>)}
               </select>
             </label>
           )}
@@ -2618,6 +2628,7 @@ function SimpleAddModal({
           {privateMode && <Field label="平台" value={draft.platform} onChange={(value) => patch({ platform: value })} />}
           {privateMode && <Field label="片商" value={draft.maker} onChange={(value) => patch({ maker: value })} />}
           <TagEditor tags={draft.tags} knownTags={knownTags} maxSuggestions={privateMode ? 0 : 16} onChange={(tags) => patch({ tags })} placeholder={privateMode ? "輸入標籤，按 Enter 分隔" : "輸入標籤後按 Enter"} />
+          {privateMode && <Field label="發行日期" value={draft.release_date} onChange={(value) => patch({ release_date: value })} type="date" />}
           <Field label={privateMode ? "紀錄日" : "觀看日"} value={draft.watched_at} onChange={(value) => patch({ watched_at: value })} type="date" />
           {privateMode && <label className="wide">快速筆記<input value={draft.summary} onChange={(event) => patch({ summary: event.target.value })} /></label>}
         </div>
@@ -2653,21 +2664,21 @@ function Field({
   );
 }
 
-function simpleDraftToInput(draft: { code: string; title: string; rating: string; collection: CollectionLevel; actress: string; platform: string; maker: string; summary: string; tags: string[]; watched_at: string }, privateMode: boolean): ItemInput {
+function simpleDraftToInput(draft: { code: string; title: string; rating: string; collection: PrivateCollectionLevel; actress: string; platform: string; maker: string; summary: string; tags: string[]; release_date: string; watched_at: string }, privateMode: boolean): ItemInput {
   const code = draft.code.trim();
   const title = draft.title.trim();
   const tags = normalizeTags(draft.tags);
-  const rating = numberOrNull(draft.rating);
   if (privateMode) {
     return privateRowDraftToInput({
       code,
       title,
-      rating: rating === null ? "" : String(rating),
+      rating: draft.rating,
       collection: draft.collection,
       actress: draft.actress,
       platform: draft.platform,
       maker: draft.maker,
       tags: tags.join(", "),
+      releaseDate: draft.release_date,
       watchedAt: draft.watched_at,
       summary: draft.summary
     });
@@ -2675,7 +2686,7 @@ function simpleDraftToInput(draft: { code: string; title: string; rating: string
   return {
     raw_title: title,
     watched_at: draft.watched_at || null,
-    rating,
+    rating: numberOrNull(draft.rating),
     tags,
     status: "raw"
   };
@@ -2807,6 +2818,7 @@ function emptyItem(): Partial<MediaItem> {
     maker: null,
     series: null,
     release_year: null,
+    release_date: null,
     year: null,
     watched_at: null,
     started_at: null,

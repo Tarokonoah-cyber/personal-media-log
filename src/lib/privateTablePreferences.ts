@@ -1,4 +1,4 @@
-export type PrivateColumnId = "identity" | "rating" | "favorite" | "actress" | "maker" | "tags" | "watchedAt" | "summary";
+export type PrivateColumnId = "identity" | "rating" | "favorite" | "actress" | "maker" | "tags" | "releaseDate" | "watchedAt" | "summary";
 
 export type PrivateColumnDefinition = {
   id: PrivateColumnId;
@@ -24,17 +24,19 @@ type PrivateTablePreferencesInput = {
   pageSize?: number;
 };
 
-export const PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v4";
+export const PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v5";
+export const LEGACY_V4_PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v4";
 export const LEGACY_V3_PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v3";
 export const LEGACY_PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v2";
 
 export const privateColumnDefinitions: PrivateColumnDefinition[] = [
   { id: "identity", label: "作品代號 / 標題", width: 520, minWidth: 320, maxWidth: 900, required: true },
-  { id: "rating", label: "評分", width: 68, minWidth: 62, maxWidth: 100 },
-  { id: "favorite", label: "收藏", width: 88, minWidth: 76, maxWidth: 130 },
+  { id: "rating", label: "評分", width: 112, minWidth: 106, maxWidth: 138 },
+  { id: "favorite", label: "收藏", width: 96, minWidth: 84, maxWidth: 138 },
   { id: "actress", label: "女優", width: 176, minWidth: 110, maxWidth: 360 },
   { id: "maker", label: "片商", width: 108, minWidth: 88, maxWidth: 300 },
   { id: "tags", label: "標籤", width: 168, minWidth: 128, maxWidth: 420 },
+  { id: "releaseDate", label: "發行日期", width: 112, minWidth: 104, maxWidth: 150 },
   { id: "watchedAt", label: "紀錄日", width: 112, minWidth: 104, maxWidth: 150 },
   { id: "summary", label: "快速筆記", width: 280, minWidth: 160, maxWidth: 520 }
 ];
@@ -60,6 +62,10 @@ export function normalizePrivateTablePreferences(value?: PrivateTablePreferences
   const defaults = defaultPrivateTablePreferences();
   const requestedOrder = value?.order || [];
   const migratedOrder = requestedOrder.map((id) => id === "code" || id === "title" ? "identity" : id).filter((id) => id !== "platform");
+  if (requestedOrder.length > 0 && !migratedOrder.includes("releaseDate")) {
+    const watchedAtIndex = migratedOrder.indexOf("watchedAt");
+    migratedOrder.splice(watchedAtIndex >= 0 ? watchedAtIndex : migratedOrder.length, 0, "releaseDate");
+  }
   const order = [
     "identity" as const,
     ...migratedOrder.filter((id, index): id is PrivateColumnId => id !== "identity" && privateColumnIds.includes(id as PrivateColumnId) && migratedOrder.indexOf(id) === index),
@@ -94,6 +100,10 @@ export function migratePrivateTablePreferencesV3(value?: PrivateTablePreferences
   return normalizePrivateTablePreferences(value);
 }
 
+export function migratePrivateTablePreferencesV4(value?: PrivateTablePreferencesInput | null) {
+  return normalizePrivateTablePreferences(value);
+}
+
 export function migratePrivateTablePreferencesV2(value?: PrivateTablePreferencesInput | null) {
   return normalizePrivateTablePreferences(value);
 }
@@ -103,13 +113,16 @@ export function readPrivateTablePreferences(storage: Pick<Storage, "getItem" | "
   try {
     const current = storage.getItem(PRIVATE_TABLE_PREFERENCES_KEY);
     if (current) return normalizePrivateTablePreferences(JSON.parse(current));
+    const legacyV4 = storage.getItem(LEGACY_V4_PRIVATE_TABLE_PREFERENCES_KEY);
     const legacyV3 = storage.getItem(LEGACY_V3_PRIVATE_TABLE_PREFERENCES_KEY);
     const legacyV2 = storage.getItem(LEGACY_PRIVATE_TABLE_PREFERENCES_KEY);
-    const migrated = legacyV3
-      ? migratePrivateTablePreferencesV3(JSON.parse(legacyV3))
-      : legacyV2
-        ? migratePrivateTablePreferencesV2(JSON.parse(legacyV2))
-        : null;
+    const migrated = legacyV4
+      ? migratePrivateTablePreferencesV4(JSON.parse(legacyV4))
+      : legacyV3
+        ? migratePrivateTablePreferencesV3(JSON.parse(legacyV3))
+        : legacyV2
+          ? migratePrivateTablePreferencesV2(JSON.parse(legacyV2))
+          : null;
     if (!migrated) return defaultPrivateTablePreferences();
     storage.setItem(PRIVATE_TABLE_PREFERENCES_KEY, JSON.stringify(migrated));
     return migrated;

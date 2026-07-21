@@ -1,10 +1,9 @@
-import { collectionLevels, type CollectionLevel } from "../../shared/privateModel";
-import { privateStatusToFields } from "../../shared/privateStatus";
+import { PRIVATE_DEFAULT_ACTRESS, privateCollectionPatch, privateRatingFromStars, type PrivateCollectionLevel } from "../../shared/privateModel";
 import { privateItemDetails, PRIVATE_LIBRARY_LABEL } from "./privacy";
 import { normalizeTags, parseTagInput } from "./tags";
 import type { ItemInput, MediaItem } from "../types";
 
-export type PrivateEditableColumn = "actress" | "maker" | "tags" | "watchedAt" | "summary";
+export type PrivateEditableColumn = "actress" | "maker" | "tags" | "releaseDate" | "watchedAt" | "summary";
 
 export type PrivateIdentityDraft = {
   code: string;
@@ -15,11 +14,12 @@ export type PrivateRowDraft = {
   code: string;
   title: string;
   rating: string;
-  collection: CollectionLevel;
+  collection: PrivateCollectionLevel;
   actress: string;
   platform: string;
   maker: string;
   tags: string;
+  releaseDate: string;
   watchedAt: string;
   summary: string;
 };
@@ -30,10 +30,11 @@ export function emptyPrivateRowDraft(date = new Date().toISOString().slice(0, 10
     title: "",
     rating: "",
     collection: "unset",
-    actress: "",
+    actress: PRIVATE_DEFAULT_ACTRESS,
     platform: "",
     maker: "",
     tags: "",
+    releaseDate: "",
     watchedAt: date,
     summary: ""
   };
@@ -42,9 +43,9 @@ export function emptyPrivateRowDraft(date = new Date().toISOString().slice(0, 10
 export function privateRowDraftToInput(draft: PrivateRowDraft): ItemInput {
   const code = draft.code.trim();
   const title = draft.title.trim();
-  const ratingValue = draft.rating.trim() ? Number(draft.rating) : null;
-  const rating = ratingValue !== null && Number.isFinite(ratingValue) ? Math.min(10, Math.max(0, ratingValue)) : null;
-  const statusFields = privateStatusToFields("done");
+  const rating = privateRatingFromStars(draft.rating);
+  const collection = privateCollectionPatch(draft.collection);
+  const people = splitPeople(draft.actress);
   return {
     raw_title: title || code,
     official_title: title || null,
@@ -53,34 +54,39 @@ export function privateRowDraftToInput(draft: PrivateRowDraft): ItemInput {
     is_private: true,
     platform: cleanNullable(draft.platform),
     maker: cleanNullable(draft.maker),
+    release_date: cleanNullable(draft.releaseDate),
+    release_year: yearFromDate(draft.releaseDate),
     watched_at: cleanNullable(draft.watchedAt),
     rating,
-    favorite_level: draft.collection === "masterpiece" ? "神作" : draft.collection === "discard" ? "已刪" : "一般",
-    collection_level: collectionLevels.includes(draft.collection) ? draft.collection : "unset",
-    used: statusFields.used,
-    media_status: statusFields.media_status,
+    ...collection,
+    media_status: "已觀看",
     quick_note: cleanNullable(draft.summary),
     tags: normalizeTags(parseTagInput(draft.tags)),
-    people: splitPeople(draft.actress),
-    metadata_json: JSON.stringify({ ...(code ? { code } : {}), ...(title ? { title } : {}), used: true }),
+    people: people.length ? people : [PRIVATE_DEFAULT_ACTRESS],
+    metadata_json: JSON.stringify({ ...(code ? { code } : {}), ...(title ? { title } : {}), used: collection.used }),
     status: "raw"
   };
 }
 
 export function privateCellValue(item: MediaItem, column: PrivateEditableColumn) {
   const details = privateItemDetails(item);
-  if (column === "actress") return details.performers === "-" ? "" : details.performers;
+  if (column === "actress") return details.performers === "-" ? PRIVATE_DEFAULT_ACTRESS : details.performers;
   if (column === "maker") return item.maker || "";
   if (column === "tags") return item.tags.join(", ");
+  if (column === "releaseDate") return item.release_date?.slice(0, 10) || "";
   if (column === "watchedAt") return item.watched_at?.slice(0, 10) || "";
   return item.quick_note || "";
 }
 
 export function privateCellPatch(_item: MediaItem, column: PrivateEditableColumn, value: string): Partial<ItemInput> {
   const clean = value.trim();
-  if (column === "actress") return { people: splitPeople(value) };
+  if (column === "actress") {
+    const people = splitPeople(value);
+    return { people: people.length ? people : [PRIVATE_DEFAULT_ACTRESS] };
+  }
   if (column === "maker") return { maker: clean || null };
   if (column === "tags") return { tags: normalizeTags(parseTagInput(value)) };
+  if (column === "releaseDate") return { release_date: clean || null, release_year: yearFromDate(clean) };
   if (column === "watchedAt") return { watched_at: clean || null };
   return { quick_note: clean || null };
 }
@@ -111,6 +117,11 @@ export function privateIdentityPatch(draft: PrivateIdentityDraft): Partial<ItemI
 
 function cleanNullable(value: string) {
   return value.trim() || null;
+}
+
+function yearFromDate(value: string) {
+  const match = /^(\d{4})-\d{2}-\d{2}$/.exec(value.trim());
+  return match ? Number(match[1]) : null;
 }
 
 function splitPeople(value: string) {

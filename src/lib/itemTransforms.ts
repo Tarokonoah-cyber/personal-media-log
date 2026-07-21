@@ -12,6 +12,7 @@ export function toItemInput(item: MediaItem): ItemInput {
     maker: item.maker,
     series: item.series,
     release_year: item.release_year,
+    release_date: item.release_date,
     year: item.year,
     watched_at: item.watched_at,
     started_at: item.started_at,

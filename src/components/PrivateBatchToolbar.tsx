@@ -1,6 +1,6 @@
 import { Check, Tags, Trash2, X } from "lucide-react";
 import { useState } from "react";
-import { collectionLevelLabels, collectionLevels, type CollectionLevel } from "../../shared/privateModel";
+import { privateCollectionLevelLabels, privateCollectionLevels, type PrivateCollectionLevel } from "../../shared/privateModel";
 import type { BatchOperationResult } from "../lib/privateBatch";
 
 export function PrivateBatchToolbar({
@@ -15,12 +15,12 @@ export function PrivateBatchToolbar({
   selectedCount: number;
   knownTags: string[];
   busy: boolean;
-  onCollection: (collection: CollectionLevel) => Promise<BatchOperationResult>;
+  onCollection: (collection: PrivateCollectionLevel) => Promise<BatchOperationResult>;
   onTags: (input: string, mode: "add" | "remove") => Promise<BatchOperationResult>;
   onDelete: () => Promise<BatchOperationResult>;
   onClear: () => void;
 }) {
-  const [collection, setCollection] = useState<CollectionLevel | "">("");
+  const [collection, setCollection] = useState<PrivateCollectionLevel | "">("");
   const [tagMode, setTagMode] = useState<"add" | "remove">("add");
   const [tagInput, setTagInput] = useState("");
 
@@ -28,9 +28,9 @@ export function PrivateBatchToolbar({
     <div className="private-batch-toolbar" role="region" aria-label="批次整理">
       <strong>{selectedCount} 筆已選</strong>
       <div className="private-batch-group">
-        <select value={collection} onChange={(event) => setCollection(event.target.value as CollectionLevel | "")} disabled={busy} aria-label="批次收藏">
+        <select value={collection} onChange={(event) => setCollection(event.target.value as PrivateCollectionLevel | "")} disabled={busy} aria-label="批次收藏">
           <option value="">設定收藏</option>
-          {collectionLevels.map((value) => <option key={value} value={value}>{collectionLevelLabels[value]}</option>)}
+          {privateCollectionLevels.map((value) => <option key={value} value={value}>{privateCollectionLevelLabels[value]}</option>)}
         </select>
         <button disabled={busy || !collection} onClick={() => collection && void onCollection(collection)}><Check size={14} />套用</button>
       </div>
