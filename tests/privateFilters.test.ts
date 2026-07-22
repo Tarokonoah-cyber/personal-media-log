@@ -19,7 +19,7 @@ describe("private filter state", () => {
     expect(state).toMatchObject({ platformFilters: "FC2", favoriteLevelFilters: "normal", personFilters: "女優 A", query: "needle", ratingMin: "8", hasNote: "yes", page: 1 });
   });
 
-  it("supports same-category OR serialization and cancellation", () => {
+  it("keeps legacy serialized values readable while accepting a single replacement", () => {
     expect(mergePrivateFilters(base(), { platformFilters: "FC2,JAV" }).platformFilters).toBe("FC2,JAV");
     expect(mergePrivateFilters(base(), { platformFilters: "JAV" }).platformFilters).toBe("JAV");
   });

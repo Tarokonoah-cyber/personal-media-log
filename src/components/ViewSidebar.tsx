@@ -129,21 +129,27 @@ export function ViewSidebar({
     if (mobileOpen) onCloseMobile();
   };
 
-  const patchMulti = (key: "platformFilters" | "makerFilters" | "favoriteLevelFilters" | "personFilters", value: string) => {
-    const current = filterValues(filters[key]);
-    const next = current.includes(value) ? current.filter((entry) => entry !== value) : [...current, value];
-    applyPrivateFilter({ [key]: next.join(","), ...(key === "platformFilters" ? { platform: "" } : {}) });
+  const selectSingleFacet = (key: "platformFilters" | "favoriteLevelFilters" | "personFilters", value: string) => {
+    if (key === "platformFilters") {
+      applyPrivateFilter({ platformFilters: value, platform: "", makerFilters: "", maker: "", studio: "" });
+      return;
+    }
+    if (key === "favoriteLevelFilters") {
+      applyPrivateFilter({ favoriteLevelFilters: value, favoriteLevel: "all", collectionLevel: "" });
+      return;
+    }
+    applyPrivateFilter({ personFilters: value, person: "" });
   };
 
   const clearPrivateFilters = () => applyPrivateFilter(clearPrivateSidebarFilters(filters));
 
-  const toggleJavMaker = (maker: string) => {
-    const next = makerFilters.includes(maker) ? makerFilters.filter((entry) => entry !== maker) : [...makerFilters, maker];
+  const selectJavMaker = (maker: string) => {
     applyPrivateFilter({
-      makerFilters: next.join(","),
+      makerFilters: maker,
       platformFilters: "JAV",
       platform: "",
-      maker: ""
+      maker: "",
+      studio: ""
     });
   };
 
@@ -168,8 +174,8 @@ export function ViewSidebar({
           </NavSection>
 
           <PrivateNavSection title="平台" open={platformOpen} showText={showText} onToggle={() => setPlatformOpen((value) => !value)}>
-            <PrivateFilterButton label="FC2" count={facetCount(privateFacets?.source, "FC2")} active={platformFilters.includes("FC2")} showText={showText} icon={<Clapperboard size={15} />} onClick={() => patchMulti("platformFilters", "FC2")} />
-            <PrivateFilterButton label="JAV" count={facetCount(privateFacets?.source, "JAV")} active={platformFilters.includes("JAV")} showText={showText} icon={<Clapperboard size={15} />} onClick={() => patchMulti("platformFilters", "JAV")} />
+            <PrivateFilterButton label="FC2" count={facetCount(privateFacets?.source, "FC2")} active={platformFilters.includes("FC2")} showText={showText} icon={<Clapperboard size={15} />} onClick={() => selectSingleFacet("platformFilters", "FC2")} />
+            <PrivateFilterButton label="JAV" count={facetCount(privateFacets?.source, "JAV")} active={platformFilters.includes("JAV")} showText={showText} icon={<Clapperboard size={15} />} onClick={() => selectSingleFacet("platformFilters", "JAV")} />
             {showText && (privateFacets?.javMaker?.length || 0) > 0 && (
               <div className="private-nav-subfilters" aria-label="JAV 片商">
                 {privateFacets?.javMaker.map((maker) => (
@@ -181,7 +187,7 @@ export function ViewSidebar({
                     showText
                     icon={<Building2 size={13} />}
                     nested
-                    onClick={() => toggleJavMaker(maker.value)}
+                    onClick={() => selectJavMaker(maker.value)}
                   />
                 ))}
               </div>
@@ -196,7 +202,7 @@ export function ViewSidebar({
               { label: "已使用", value: "used" },
               { label: "淘汰", value: "discard" }
             ].map((entry) => (
-              <PrivateFilterButton key={entry.value} label={entry.label} count={facetCount(privateFacets?.favoriteLevel, entry.value)} active={favoriteFilters.includes(entry.value)} showText={showText} icon={<Heart size={15} />} onClick={() => patchMulti("favoriteLevelFilters", entry.value)} />
+              <PrivateFilterButton key={entry.value} label={entry.label} count={facetCount(privateFacets?.favoriteLevel, entry.value)} active={favoriteFilters.includes(entry.value)} showText={showText} icon={<Heart size={15} />} onClick={() => selectSingleFacet("favoriteLevelFilters", entry.value)} />
             ))}
           </PrivateNavSection>
 
@@ -206,7 +212,7 @@ export function ViewSidebar({
               {actressLoading ? (showText && <em>搜尋中...</em>) : actressError ? (showText && <em role="alert">{actressError}</em>) : actressItems.length === 0 ? (
                 showText && <em>沒有女優資料</em>
               ) : actressItems.map((actress) => (
-                <PrivateFilterButton key={actress.value} label={actress.value} count={actress.count} active={personFilters.includes(actress.value)} showText={showText} onClick={() => patchMulti("personFilters", actress.value)} />
+                <PrivateFilterButton key={actress.value} label={actress.value} count={actress.count} active={personFilters.includes(actress.value)} showText={showText} onClick={() => selectSingleFacet("personFilters", actress.value)} />
               ))}
             </div>
           </PrivateNavSection>
