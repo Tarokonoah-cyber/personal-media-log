@@ -1464,7 +1464,7 @@ function PrivateWorkbenchV3({
       <div className="private-toolbar">
         <label className="private-search-field">
           <Search size={16} />
-          <input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="搜尋作品代號、女優、平台、片商、標籤、心得" />
+          <input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="搜尋番號、片名、女優或標籤" />
         </label>
         <div className="private-toolbar-actions">
           <button className="filter-toggle advanced-filter" onClick={onOpenAdvanced}><SlidersHorizontal size={16} />進階篩選</button>
@@ -2350,6 +2350,9 @@ function PrivateCardList({ items, onSelect }: { items: MediaItem[]; onSelect: (i
 function PrivateMobileCard({ item, onSelect, desktop = false, selected = false, onToggleSelected }: { item: MediaItem; onSelect: (item: MediaItem) => void; desktop?: boolean; selected?: boolean; onToggleSelected?: (id: string) => void }) {
   const details = privateItemDetails(item);
   const title = details.title !== "-" && details.title !== details.code ? details.title : "";
+  const source = Array.from(new Set([item.platform, item.maker || details.studio].map((value) => (value || "").trim()).filter((value) => value && value !== "-"))).join(" · ");
+  const performers = details.performers === "-" ? PRIVATE_DEFAULT_ACTRESS : details.performers;
+  const releaseDate = item.release_date?.slice(0, 10) || "";
   return (
     <article className={`${desktop ? "private-mobile-card private-desktop-card" : "private-mobile-card"}${selected ? " selected" : ""}`} onClick={() => onSelect(item)}>
       <div className="private-card-head">
@@ -2360,18 +2363,19 @@ function PrivateMobileCard({ item, onSelect, desktop = false, selected = false, 
             {title && <span>{title}</span>}
           </span>
         </span>
-        <span className="private-card-actions"><PrivateRating item={item} /><Pencil size={16} aria-hidden="true" /></span>
+        <button type="button" className="private-card-open" onClick={(event) => { event.stopPropagation(); onSelect(item); }} aria-label={`編輯 ${details.code}`}><Pencil size={16} aria-hidden="true" /></button>
       </div>
-      <div className="private-card-badges">
+      <div className="private-card-summary">
+        <PrivateRating item={item} />
         <PrivateBadge tone="favorite">{privateFavoriteLevel(item)}</PrivateBadge>
       </div>
-      <p>{item.platform || "-"} / {item.maker || details.studio}</p>
-      <p>{details.performers === "-" ? PRIVATE_DEFAULT_ACTRESS : details.performers}</p>
-      {(item.release_date || item.watched_at) && <p className="private-card-dates">{item.release_date ? `發行 ${item.release_date.slice(0, 10)}` : ""}{item.release_date && item.watched_at ? " · " : ""}{item.watched_at ? `紀錄 ${item.watched_at.slice(0, 10)}` : ""}</p>}
-      {item.quick_note && <p className="private-card-note">{item.quick_note}</p>}
-      <div className="private-card-bottom">
-        <PrivateTags tags={item.tags} />
+      <div className="private-card-meta">
+        {source && <span>{source}</span>}
+        <span>{performers}</span>
+        {releaseDate && <time dateTime={releaseDate}>{releaseDate}</time>}
       </div>
+      {item.quick_note && <p className="private-card-note">{item.quick_note}</p>}
+      {item.tags.length > 0 && <div className="private-card-bottom"><PrivateTags tags={item.tags} /></div>}
     </article>
   );
 }
