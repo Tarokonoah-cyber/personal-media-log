@@ -1,7 +1,12 @@
 /* global self, caches, fetch, URL, Response */
 
-const CACHE_NAME = "media-database-shell-v1";
+const CACHE_NAME = "media-database-shell-v2";
 const APP_SHELL = ["/", "/index.html", "/manifest.webmanifest", "/pwa-icon.svg"];
+
+function canCache(response) {
+  if (!response.ok || !response.url) return false;
+  return new URL(response.url).origin === self.location.origin;
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -26,8 +31,10 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          void caches.open(CACHE_NAME).then((cache) => cache.put("/index.html", copy));
+          if (canCache(response)) {
+            const copy = response.clone();
+            void caches.open(CACHE_NAME).then((cache) => cache.put("/index.html", copy));
+          }
           return response;
         })
         .catch(async () => (await caches.match("/index.html")) || Response.error())
@@ -39,7 +46,7 @@ self.addEventListener("fetch", (event) => {
     caches.match(request).then((cached) => {
       if (cached) return cached;
       return fetch(request).then((response) => {
-        if (response.ok) {
+        if (canCache(response)) {
           const copy = response.clone();
           void caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
         }
