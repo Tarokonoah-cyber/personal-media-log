@@ -237,7 +237,6 @@ function PrivateForm({
           <Field label="女優 / 演員" value={form.private_performers} onChange={(value) => setForm({ ...form, private_performers: value, people: value })} />
           <Field label="平台" value={form.private_platform} onChange={(value) => setForm({ ...form, private_platform: value, platform: value })} />
           <Field label="片商" value={form.private_studio} onChange={(value) => setForm({ ...form, private_studio: value })} />
-          <Field label="發售年份" value={form.release_year} onChange={(value) => setForm({ ...form, release_year: value })} inputMode="numeric" />
           <Field label="類型" value={form.private_type} onChange={(value) => setForm({ ...form, private_type: value, category: value })} />
         </div>
       </section>
@@ -251,7 +250,6 @@ function PrivateForm({
           <Field label="紀錄日" value={form.watched_at} onChange={(value) => setForm({ ...form, watched_at: value })} type="date" />
           <TagEditor tags={form.tags} knownTags={knownTags} onChange={(tags) => setForm({ ...form, tags })} />
           <label className="wide">快速筆記<textarea value={form.quick_note} onChange={(event) => setForm({ ...form, quick_note: event.target.value })} rows={3} /></label>
-          <label className="wide">完整心得<textarea value={form.long_note} onChange={(event) => setForm({ ...form, long_note: event.target.value })} rows={6} /></label>
         </div>
       </section>
     </div>

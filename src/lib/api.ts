@@ -14,8 +14,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       details?: { inputCode?: string; normalizedCode?: string; existing?: { code?: string; title?: string } };
     };
     if (response.status === 409 && body.details?.normalizedCode) {
-      const existing = body.details.existing;
-      throw new Error(`${body.error || "作品代號衝突"}：輸入「${body.details.inputCode || "-"}」，正規化為「${body.details.normalizedCode}」；既有「${existing?.code || "-"}」${existing?.title ? `（${existing.title}）` : ""}`);
+      throw new Error(formatDuplicateCodeError(body.details));
     }
     throw new Error(body.error || response.statusText);
   }
@@ -29,6 +28,11 @@ export function listItems(filters: ListFilters) {
     if (value !== "" && value !== false && value !== null && value !== undefined) params.set(key, String(value));
   });
   return request<ItemListResponse>(`/api/items?${params.toString()}`);
+}
+
+export function formatDuplicateCodeError(details: { inputCode?: string; normalizedCode?: string; existing?: { code?: string; title?: string } }) {
+  const code = details.existing?.code || details.normalizedCode || details.inputCode || "此番號";
+  return `番號「${code}」已有其他紀錄；請確認是否為重複作品。`;
 }
 
 export function listPrivateItems(filters: ListFilters) {

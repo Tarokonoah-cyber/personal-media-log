@@ -773,12 +773,14 @@ export async function createItem(env: Env, actor: Actor, input: ItemInput) {
 }
 
 export async function updateItem(env: Env, actor: Actor, id: string, input: ItemInput) {
-  await getItem(env, id);
+  const current = await getItem(env, id);
   const rawTitle = cleanString(input.raw_title);
   if (!rawTitle) throw new HttpError(400, "raw_title is required");
   if (input.collection_level !== undefined && !isCollectionLevel(input.collection_level)) throw new HttpError(400, "Invalid collection_level");
   const normalized = normalizeInput(input);
-  await assertUniqueNormalizedCode(env, normalized.normalized_code, id, input.code);
+  if (shouldValidateNormalizedCode(current.normalized_code, normalized.normalized_code)) {
+    await assertUniqueNormalizedCode(env, normalized.normalized_code, id, input.code);
+  }
   const status = normalized.status || inferStatus(normalized);
 
   await env.MEDIA_LOG_DB.batch([
@@ -1288,6 +1290,10 @@ function normalizeInput(input: ItemInput): NormalizedInput {
     ...normalized,
     search_text: buildSearchText(normalized)
   };
+}
+
+export function shouldValidateNormalizedCode(currentCode: string | null | undefined, nextCode: string | null | undefined) {
+  return (currentCode || null) !== (nextCode || null);
 }
 
 export async function quickUpdateItem(env: Env, actor: Actor, id: string, field: string, value: unknown) {

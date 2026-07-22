@@ -1579,3 +1579,583 @@
     min-height: 34px;
   }
 }
+
+/* Neutral worksheet palette and mobile PWA experience. */
+.private-app-shell {
+  --bg: #f2f4f6;
+  --panel: #ffffff;
+  --panel-soft: #edf0f3;
+  --field: #ffffff;
+  --text: #202428;
+  --muted: #5f6871;
+  --faint: #858d95;
+  --line: #d6dbe0;
+  --line-strong: #b9c0c7;
+  --hover: #edf2f6;
+  --accent: #2f6f9f;
+  --accent-soft: #e5eff7;
+  --private-ui-font: "Noto Sans TC Variable", "Noto Sans TC", "Microsoft JhengHei UI", sans-serif;
+  font-weight: 400;
+  font-synthesis: none;
+  letter-spacing: 0;
+}
+
+:root[data-theme="dark"] .private-app-shell {
+  --bg: #17191c;
+  --panel: #1d2023;
+  --panel-soft: #24282c;
+  --field: #1d2023;
+  --text: #eef1f3;
+  --muted: #b0b7bd;
+  --faint: #818991;
+  --line: #373d43;
+  --line-strong: #505860;
+  --hover: #272c31;
+  --accent: #72a9d2;
+  --accent-soft: #22313d;
+}
+
+.private-app-shell button,
+.private-app-shell input,
+.private-app-shell select,
+.private-app-shell textarea,
+.private-app-shell table {
+  font-family: inherit;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.private-app-shell .private-shell-title strong,
+.private-app-shell .private-sidebar .sidebar-group p,
+.private-app-shell .private-workbench-v4 .private-dense-table th {
+  font-weight: 600;
+}
+
+.private-app-shell .private-shell-topbar,
+.private-app-shell .private-sidebar,
+.private-app-shell .private-workbench-v4 .private-toolbar,
+.private-app-shell .private-workbench-v4 .private-table-footer {
+  background: var(--panel);
+}
+
+:root[data-theme="dark"] .private-app-shell .private-shell-topbar,
+:root[data-theme="dark"] .private-app-shell .private-sidebar,
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-toolbar,
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-table-footer {
+  background: var(--panel);
+}
+
+.private-app-shell .private-sidebar .sidebar-group button.active,
+.private-app-shell .private-nav-filter.active {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+  color: var(--accent) !important;
+}
+
+:root[data-theme="dark"] .private-app-shell .private-sidebar .sidebar-group button.active,
+:root[data-theme="dark"] .private-app-shell .private-nav-filter.active {
+  color: #a8cee9 !important;
+}
+
+.private-app-shell .private-workbench-v4 .private-toolbar-actions button {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-weight: 500;
+}
+
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-toolbar-actions button {
+  border-color: var(--line);
+  background: var(--panel-soft);
+  color: var(--muted);
+}
+
+.private-app-shell .private-workbench-v4 .private-toolbar-actions .primary,
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-toolbar-actions .primary,
+.private-app-shell .private-mobile-dock .primary {
+  border-color: #2f6f9f;
+  background: #2f6f9f;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.private-app-shell .private-workbench-v4 .private-toolbar-actions .primary:hover,
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-toolbar-actions .primary:hover,
+.private-app-shell .private-mobile-dock .primary:hover {
+  border-color: #285f88;
+  background: #285f88;
+  color: #ffffff;
+}
+
+.private-app-shell .private-workbench-v4 .private-dense-table th,
+.private-app-shell .private-workbench-v4 .private-dense-table th.private-sticky-column,
+.private-app-shell .private-workbench-v4 .private-dense-table th.private-open-column {
+  border-right-color: #c7cdd3;
+  border-bottom-color: #aab2ba;
+  background: #e4e8ec;
+  color: #343a40;
+}
+
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-dense-table th,
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-dense-table th.private-sticky-column,
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-dense-table th.private-open-column {
+  border-right-color: #4a5158;
+  border-bottom-color: #5b646c;
+  background: #292d31;
+  color: #dce1e5;
+}
+
+.private-app-shell .private-workbench-v4 .private-dense-table td,
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-dense-table td {
+  border-color: var(--line);
+  background: var(--panel);
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+.private-app-shell .private-workbench-v4 .private-dense-table tbody tr:hover,
+.private-app-shell .private-workbench-v4 .private-dense-table tbody tr.selected {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.private-app-shell .private-workbench-v4 .private-dense-table tbody tr:hover td,
+.private-app-shell .private-workbench-v4 .private-dense-table tbody tr:hover td.private-sticky-column,
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-dense-table tbody tr:hover td,
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-dense-table tbody tr:hover td.private-sticky-column {
+  background: var(--hover);
+}
+
+.private-app-shell .private-workbench-v4 .private-dense-table tbody tr.selected td,
+.private-app-shell .private-workbench-v4 .private-dense-table tbody tr.selected td.private-sticky-column,
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-dense-table tbody tr.selected td,
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-dense-table tbody tr.selected td.private-sticky-column {
+  background: var(--accent-soft);
+}
+
+.private-app-shell .private-workbench-v4 .private-identity-value,
+.private-app-shell .private-workbench-v4 .private-identity-title,
+.private-app-shell .private-workbench-v4 .private-sheet-value {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+.private-app-shell .private-workbench-v4 .private-identity-value strong,
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-identity-value strong,
+.private-app-shell .private-workbench-v4 .private-sheet-code,
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-sheet-code {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.private-app-shell .private-workbench-v4 .private-sheet-tags,
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-sheet-tags {
+  color: var(--muted);
+}
+
+.private-app-shell .private-workbench-v4 .private-identity-value:focus-visible,
+.private-app-shell .private-workbench-v4 .private-identity-editor,
+.private-app-shell .private-workbench-v4 .private-new-identity-editor,
+.private-app-shell .private-workbench-v4 .private-dense-table td.is-active-cell,
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-dense-table td.is-active-cell,
+.private-app-shell .private-workbench-v4 .private-dense-table td:focus,
+.private-app-shell .private-workbench-v4 .private-sheet-editor input,
+.private-app-shell .private-workbench-v4 .private-sheet-select:focus {
+  outline-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.private-app-shell .private-workbench-v4 .private-identity-editor input:focus,
+.private-app-shell .private-workbench-v4 .private-new-identity-editor input:focus,
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-identity-editor input:focus,
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-new-identity-editor input:focus {
+  background: var(--accent-soft);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.private-app-shell .private-workbench-v4 .private-sheet-feedback.is-success,
+:root[data-theme="dark"] .private-app-shell .private-workbench-v4 .private-sheet-feedback.is-success {
+  color: var(--accent);
+}
+
+.private-app-shell .private-badge.favorite.已使用,
+.private-app-shell .private-favorite-mark.已使用 {
+  border-color: #8bb3d0;
+  background: #e5eff7;
+  color: #2f6f9f;
+}
+
+:root[data-theme="dark"] .private-app-shell .private-badge.favorite.已使用,
+:root[data-theme="dark"] .private-app-shell .private-favorite-mark.已使用 {
+  border-color: #4f7692;
+  background: #22313d;
+  color: #a8cee9;
+}
+
+.private-app-shell .private-drawer .drawer-actions .primary {
+  border-color: #2f6f9f;
+  background: #2f6f9f;
+  color: #ffffff;
+}
+
+.private-app-shell .private-mobile-dock {
+  display: none;
+}
+
+.private-app-shell .pwa-offline-banner {
+  position: fixed;
+  top: 48px;
+  left: 50%;
+  z-index: 42;
+  width: min(520px, calc(100vw - 24px));
+  padding: 8px 12px;
+  border: 1px solid #b8862f;
+  border-radius: 4px;
+  background: #fff6df;
+  color: #6d4b0c;
+  font-size: 12px;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+:root[data-theme="dark"] .private-app-shell .pwa-offline-banner {
+  background: #332b1c;
+  color: #f0cf8a;
+}
+
+@media (max-width: 819px) {
+  .private-app-shell {
+    min-height: 100dvh;
+    grid-template-rows: calc(44px + env(safe-area-inset-top)) minmax(0, 1fr);
+  }
+
+  .private-app-shell .private-shell-topbar {
+    min-height: calc(44px + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .private-app-shell .database-main {
+    padding: 0;
+  }
+
+  .private-app-shell .private-workbench-v4 {
+    gap: 0;
+  }
+
+  .private-app-shell .private-workbench-v4 .private-toolbar {
+    position: relative;
+    z-index: 8;
+    width: 100%;
+    height: 50px;
+    min-height: 50px;
+    flex-basis: 50px;
+    display: block;
+    padding: 8px;
+    border-width: 0 0 1px;
+    border-radius: 0;
+  }
+
+  .private-app-shell .private-workbench-v4 .private-search-field {
+    height: 34px;
+    min-height: 34px;
+  }
+
+  .private-app-shell .private-workbench-v4 .private-search-field input {
+    font-size: 16px;
+  }
+
+  .private-app-shell .private-workbench-v4 .private-toolbar-actions {
+    display: none;
+  }
+
+  .private-app-shell .private-filter-chip-row {
+    min-height: 0;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    scrollbar-width: none;
+  }
+
+  .private-app-shell .private-filter-chip-row:empty {
+    display: none;
+  }
+
+  .private-app-shell .private-filter-chip-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .private-app-shell .private-filter-chip {
+    min-height: 32px;
+    flex: 0 0 auto;
+  }
+
+  .private-app-shell .private-batch-toolbar {
+    border-width: 0 0 1px;
+    border-radius: 0;
+  }
+
+  .private-app-shell .private-workbench-v4 .private-list-region {
+    min-height: 0;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow: hidden;
+    padding-bottom: calc(70px + env(safe-area-inset-bottom));
+  }
+
+  .private-app-shell .private-workbench-v4 .private-data-table-wrap {
+    display: none !important;
+  }
+
+  .private-app-shell .private-workbench-v4 .private-mobile-list {
+    min-height: 0;
+    display: grid !important;
+    flex: 1 1 auto;
+    align-content: start;
+    gap: 0;
+    overflow-y: auto;
+    padding: 0 8px;
+    background: var(--bg);
+    overscroll-behavior: contain;
+  }
+
+  .private-app-shell .private-mobile-card {
+    min-width: 0;
+    display: grid;
+    gap: 8px;
+    padding: 13px 4px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    cursor: pointer;
+  }
+
+  .private-app-shell .private-mobile-card.selected {
+    margin-inline: -8px;
+    padding-inline: 12px;
+    background: var(--accent-soft);
+  }
+
+  .private-app-shell .private-card-head {
+    align-items: flex-start;
+  }
+
+  .private-app-shell .private-card-title {
+    min-width: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+  }
+
+  .private-app-shell .private-card-title > input {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    margin: 1px 0 0;
+  }
+
+  .private-app-shell .private-card-identity {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+  }
+
+  .private-app-shell .private-card-identity strong {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .private-app-shell .private-card-identity > span {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .private-app-shell .private-card-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--faint);
+  }
+
+  .private-app-shell .private-mobile-card p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+
+  .private-app-shell .private-mobile-card .private-card-note {
+    display: -webkit-box;
+    overflow: hidden;
+    color: var(--text);
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .private-app-shell .private-card-badges,
+  .private-app-shell .private-card-bottom {
+    justify-content: flex-start;
+  }
+
+  .private-app-shell .private-workbench-v4 .private-table-footer {
+    min-height: 48px;
+    flex: 0 0 48px;
+    padding: 4px 8px;
+    border-width: 1px 0 0;
+    border-radius: 0;
+  }
+
+  .private-app-shell .private-workbench-v4 .private-table-footer-status {
+    flex: 1 1 auto;
+  }
+
+  .private-app-shell .private-workbench-v4 .private-table-footer .private-pagination {
+    width: auto;
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 2px;
+  }
+
+  .private-app-shell .private-workbench-v4 .private-table-footer .private-pagination button {
+    min-width: 44px;
+    height: 40px;
+    min-height: 40px;
+    padding-inline: 6px;
+  }
+
+  .private-app-shell .private-workbench-v4 .private-table-footer .private-pagination select {
+    display: none;
+  }
+
+  .private-app-shell .private-mobile-dock {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 30;
+    min-height: calc(64px + env(safe-area-inset-bottom));
+    display: grid;
+    grid-template-columns: 1fr 1.3fr;
+    gap: 8px;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line-strong);
+    background: color-mix(in srgb, var(--panel) 96%, transparent);
+    backdrop-filter: blur(12px);
+  }
+
+  .private-app-shell .private-mobile-dock button {
+    min-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    background: var(--panel);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .private-app-shell .private-mobile-dock button.is-active {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  .private-app-shell .pwa-offline-banner {
+    top: calc(48px + env(safe-area-inset-top));
+  }
+
+  .private-app-shell .private-drawer {
+    width: 100%;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .private-app-shell .private-drawer .drawer-head {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    padding-top: calc(12px + env(safe-area-inset-top));
+    background: var(--panel);
+  }
+
+  .private-app-shell .private-drawer .form-grid.nested {
+    grid-template-columns: 1fr;
+  }
+
+  .private-app-shell .private-drawer input,
+  .private-app-shell .private-drawer select,
+  .private-app-shell .private-drawer textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  .private-app-shell .private-drawer .drawer-actions {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    background: var(--panel);
+  }
+
+  .private-app-shell .simple-add-backdrop {
+    padding: 0;
+  }
+
+  .private-app-shell .simple-add-modal {
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    overflow: hidden;
+    padding-top: calc(14px + env(safe-area-inset-top));
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+    border: 0;
+    border-radius: 0;
+  }
+
+  .private-app-shell .simple-add-grid {
+    min-height: 0;
+    grid-template-columns: 1fr;
+    align-content: start;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+
+  .private-app-shell .simple-add-actions {
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+  }
+
+  .private-app-shell .simple-add-modal input,
+  .private-app-shell .simple-add-modal select {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  .private-app-shell .filter-sheet-panel {
+    max-height: calc(92dvh - env(safe-area-inset-top));
+    overflow-y: auto;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+
+  .private-app-shell .private-sidebar.mobile-open {
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+}

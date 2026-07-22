@@ -134,6 +134,7 @@ export default function App() {
   });
   const [organizerPrivateMode, setOrganizerPrivateMode] = useState(false);
   const [dark, setDark] = useState(() => localStorage.getItem("theme") !== "light");
+  const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
   const privateView = isPrivateWorkspaceView(activeView);
   const includePrivate = privateView && !safeMode;
   const privateActive = privateView && includePrivate;
@@ -147,6 +148,16 @@ export default function App() {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
     localStorage.setItem("theme", dark ? "dark" : "light");
   }, [dark]);
+
+  useEffect(() => {
+    const updateConnection = () => setOnline(navigator.onLine);
+    window.addEventListener("online", updateConnection);
+    window.addEventListener("offline", updateConnection);
+    return () => {
+      window.removeEventListener("online", updateConnection);
+      window.removeEventListener("offline", updateConnection);
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("sidebarCollapsed", String(sidebarCollapsed));
@@ -704,6 +715,7 @@ export default function App() {
         />
 
         <section className="database-main">
+          {privateActive && !online && <div className="pwa-offline-banner" role="status">目前離線，可瀏覽已開啟內容；重新連線後再新增或修改資料。</div>}
           {tab === "log" && (
             <>
               {privateActive ? (
@@ -721,6 +733,7 @@ export default function App() {
                   onClearFilters={resetFilters}
                   onRetry={() => void loadItems()}
                   onOpenAdvanced={() => setFiltersOpen(true)}
+                  onOpenSimpleAdd={() => setSimpleAddOpen(true)}
                   onCreate={quickCreateFromTable}
                   onSelect={(item) => void openItemDetail(item)}
                   onCellUpdate={quickUpdate}
@@ -1224,6 +1237,7 @@ function PrivateWorkbenchV3({
   onClearFilters,
   onRetry,
   onOpenAdvanced,
+  onOpenSimpleAdd,
   onCreate,
   onSelect,
   onCellUpdate,
@@ -1245,6 +1259,7 @@ function PrivateWorkbenchV3({
   onClearFilters: () => void;
   onRetry: () => void;
   onOpenAdvanced: () => void;
+  onOpenSimpleAdd: () => void;
   onCreate: (input: ItemInput) => Promise<void>;
   onSelect: (item: MediaItem) => void;
   onCellUpdate: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
@@ -1553,6 +1568,17 @@ function PrivateWorkbenchV3({
           </div>
         </div>
       </div>
+
+      <nav className="private-mobile-dock" aria-label="私密工作台快捷操作">
+        <button type="button" onClick={onOpenAdvanced} className={hasPrivateFilters(filters) ? "is-active" : ""}>
+          <SlidersHorizontal size={19} />
+          <span>{hasPrivateFilters(filters) ? "篩選中" : "篩選"}</span>
+        </button>
+        <button type="button" className="primary" onClick={onOpenSimpleAdd}>
+          <Plus size={20} />
+          <span>新增</span>
+        </button>
+      </nav>
     </section>
   );
 }
@@ -2314,14 +2340,18 @@ function PrivateCardList({ items, onSelect }: { items: MediaItem[]; onSelect: (i
 
 function PrivateMobileCard({ item, onSelect, desktop = false, selected = false, onToggleSelected }: { item: MediaItem; onSelect: (item: MediaItem) => void; desktop?: boolean; selected?: boolean; onToggleSelected?: (id: string) => void }) {
   const details = privateItemDetails(item);
+  const title = details.title !== "-" && details.title !== details.code ? details.title : "";
   return (
     <article className={`${desktop ? "private-mobile-card private-desktop-card" : "private-mobile-card"}${selected ? " selected" : ""}`} onClick={() => onSelect(item)}>
       <div className="private-card-head">
         <span className="private-card-title">
           {onToggleSelected && <input type="checkbox" checked={selected} onChange={() => onToggleSelected(item.id)} onClick={(event) => event.stopPropagation()} aria-label={`選取 ${details.code}`} />}
-          <strong>{details.code}</strong>
+          <span className="private-card-identity">
+            <strong>{details.code}</strong>
+            {title && <span>{title}</span>}
+          </span>
         </span>
-        <PrivateRating item={item} />
+        <span className="private-card-actions"><PrivateRating item={item} /><Pencil size={16} aria-hidden="true" /></span>
       </div>
       <div className="private-card-badges">
         <PrivateBadge tone="favorite">{privateFavoriteLevel(item)}</PrivateBadge>
