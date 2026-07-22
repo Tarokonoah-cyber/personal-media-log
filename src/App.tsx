@@ -1,6 +1,6 @@
 ﻿import { Bookmark, Check, CircleSlash2, Columns3, Home, Menu, Moon, Plus, Save, Search, SlidersHorizontal, Star, Sun, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, Pencil, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, CircleAlert, Pencil, X } from "lucide-react";
 import { FilterSheet } from "./components/FilterSheet";
 import { HomeDashboard } from "./components/HomeDashboard";
 import { ImportExport } from "./components/ImportExport";
@@ -333,6 +333,7 @@ export default function App() {
 
   async function submitSimpleAdd(input: ItemInput) {
     setActionLoading(true);
+    setError("");
     try {
       const nextInput = withPrivatePageDefaults(input, privateRecommendedActive);
       await createItem(nextInput);
@@ -344,7 +345,9 @@ export default function App() {
       setFilters((current) => ({ ...current, status: "all", page: 1 }));
       await refreshVisibleData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "新增紀錄失敗");
+      const message = err instanceof Error ? err.message : "新增紀錄失敗";
+      setError(message);
+      throw new Error(message);
     } finally {
       setActionLoading(false);
     }
@@ -1357,6 +1360,7 @@ function PrivateWorkbenchV3({
   function beginNewRow() {
     setNewRow(emptyPrivateRowDraft());
     setNewRowError("");
+    setSheetFeedback(null);
     setAddingRow(true);
   }
 
@@ -1368,7 +1372,9 @@ function PrivateWorkbenchV3({
 
   async function submitNewRow() {
     if (!newRow.code.trim()) {
-      setNewRowError("番號不能空白");
+      const message = "無法新增：番號不能空白。";
+      setNewRowError(message);
+      setSheetFeedback({ message, tone: "error" });
       return;
     }
     setNewRowBusy(true);
@@ -1377,8 +1383,11 @@ function PrivateWorkbenchV3({
       await onCreate(privateRowDraftToInput(newRow));
       setAddingRow(false);
       setNewRow(emptyPrivateRowDraft());
+      setSheetFeedback({ message: "新增完成", tone: "success" });
     } catch (err) {
-      setNewRowError(err instanceof Error ? err.message : "新增失敗");
+      const message = err instanceof Error ? err.message : "新增失敗";
+      setNewRowError(message);
+      setSheetFeedback({ message, tone: "error" });
     } finally {
       setNewRowBusy(false);
     }
@@ -2311,11 +2320,11 @@ function PrivateNewSpreadsheetRow({ columns, draft, busy, error, knownTags, onCh
       <td className="private-select-column" aria-hidden="true">+</td>
       {columns.map((column) => <td key={column.id} className={column.id === "identity" ? "private-sticky-column" : undefined}>{cell(column.id)}</td>)}
       <td className="private-open-column">
-        <span className="private-new-row-actions" title={error || undefined}>
+        <span className="private-new-row-actions">
           <button type="button" onClick={onSubmit} disabled={busy || !draft.code.trim()} title="儲存新資料" aria-label="儲存新資料"><Check size={14} /></button>
           <button type="button" onClick={onCancel} disabled={busy} title="取消新增" aria-label="取消新增"><X size={14} /></button>
+          {error && <span className="private-new-row-error" role="alert"><CircleAlert size={15} aria-hidden="true" /><span>{error}</span></span>}
         </span>
-        {error && <em role="alert">!</em>}
         <datalist id="private-sheet-known-tags">{knownTags.slice(0, 40).map((tag) => <option key={tag} value={tag} />)}</datalist>
       </td>
     </tr>
@@ -2623,15 +2632,22 @@ function SimpleAddModal({
     release_date: "",
     watched_at: todayDate()
   });
+  const [submitError, setSubmitError] = useState("");
   const canSubmit = privateMode ? Boolean(draft.code.trim() || draft.title.trim()) : Boolean(draft.title.trim());
 
   function patch(patch: Partial<typeof draft>) {
+    if (submitError) setSubmitError("");
     setDraft((current) => ({ ...current, ...patch }));
   }
 
-  function submit() {
+  async function submit() {
     if (!canSubmit) return;
-    void onSubmit(simpleDraftToInput(draft, privateMode));
+    setSubmitError("");
+    try {
+      await onSubmit(simpleDraftToInput(draft, privateMode));
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "無法新增這筆資料，請檢查內容後再試一次。");
+    }
   }
 
   function handleBackdropClick(event: React.MouseEvent<HTMLDivElement>) {
@@ -2665,14 +2681,16 @@ function SimpleAddModal({
           {privateMode && <Field label="女優" value={draft.actress} onChange={(value) => patch({ actress: value })} />}
           {privateMode && <Field label="平台" value={draft.platform} onChange={(value) => patch({ platform: value })} />}
           {privateMode && <Field label="片商" value={draft.maker} onChange={(value) => patch({ maker: value })} />}
-          <TagEditor tags={draft.tags} knownTags={knownTags} maxSuggestions={privateMode ? 0 : 16} onChange={(tags) => patch({ tags })} placeholder={privateMode ? "輸入標籤，按 Enter 分隔" : "輸入標籤後按 Enter"} />
           {privateMode && <Field label="發行日期" value={draft.release_date} onChange={(value) => patch({ release_date: value })} type="date" />}
-          <Field label={privateMode ? "紀錄日" : "觀看日"} value={draft.watched_at} onChange={(value) => patch({ watched_at: value })} type="date" />
+          {!privateMode && <TagEditor tags={draft.tags} knownTags={knownTags} maxSuggestions={16} onChange={(tags) => patch({ tags })} placeholder="輸入標籤後按 Enter" />}
+          {!privateMode && <Field label="觀看日" value={draft.watched_at} onChange={(value) => patch({ watched_at: value })} type="date" />}
           {privateMode && <label className="wide">快速筆記<input value={draft.summary} onChange={(event) => patch({ summary: event.target.value })} /></label>}
+          {privateMode && <TagEditor tags={draft.tags} knownTags={knownTags} maxSuggestions={0} onChange={(tags) => patch({ tags })} placeholder="輸入標籤，按 Enter 分隔" />}
         </div>
+        {submitError && <div className="simple-add-error" role="alert" aria-live="assertive"><CircleAlert size={17} aria-hidden="true" /><span>{submitError}</span></div>}
         <footer className="simple-add-actions">
           <button onClick={onClose}>取消</button>
-          <button className="primary" onClick={submit} disabled={loading || !canSubmit}>新增</button>
+          <button className="primary" onClick={() => void submit()} disabled={loading || !canSubmit}>新增</button>
         </footer>
       </section>
     </div>

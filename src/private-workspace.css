@@ -747,6 +747,7 @@
 }
 
 .private-app-shell .private-workbench-v4 .private-new-row-actions {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
   height: var(--private-row-height);
@@ -764,6 +765,52 @@
 
 .private-app-shell .private-workbench-v4 .private-new-row-actions button:first-child {
   color: var(--accent);
+}
+
+.private-app-shell .private-workbench-v4 .private-new-row-error {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 4px;
+  z-index: 30;
+  width: min(340px, calc(100vw - 24px));
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 72%, var(--line));
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--danger);
+  box-shadow: 0 8px 22px rgba(20, 24, 22, 0.16);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 520;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+}
+
+.private-app-shell .private-workbench-v4 .private-new-row-error svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.private-app-shell .simple-add-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 66%, var(--line));
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--danger) 7%, var(--panel));
+  color: var(--danger);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.private-app-shell .simple-add-error svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
 }
 
 .private-app-shell .private-workbench-v4 .private-table-footer {
