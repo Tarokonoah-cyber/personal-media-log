@@ -1,6 +1,6 @@
 import { HttpError } from "./http";
 import { inboxWhereSql } from "./organization";
-import { hasPrivateSignalValues, isPrivateMarker as isPrivateMarkerValue, privateItemWhereSql, publicItemWhereSql } from "./privacy";
+import { isPrivateMarker as isPrivateMarkerValue, privateItemWhereSql, publicItemWhereSql } from "./privacy";
 import { newId, nowIso } from "./ids";
 import { isCollectionLevel, normalizeCollectionLevel, normalizePlatform as normalizePrivatePlatform, normalizeWorkCode, validateQuickEdit } from "../../shared/privateModel";
 import { privateStatusToFields } from "../../shared/privateStatus";
@@ -1271,7 +1271,7 @@ function normalizeInput(input: ItemInput): NormalizedInput {
     collection_level: collectionLevel,
     normalized_code: normalizedCode || null,
     used: Boolean(used),
-    is_private: Boolean(input.is_private) || hasPrivateSignal(input),
+    is_private: Boolean(input.is_private),
     status: input.status || "raw",
     media_status: mediaStatus,
     quick_note: quickNote,
@@ -1335,32 +1335,6 @@ async function assertUniqueNormalizedCode(env: Env, normalizedCode: string | nul
       title: nullableString(existing.official_title) || String(existing.raw_title || "")
     }
   });
-}
-
-function hasPrivateSignal(input: ItemInput) {
-  const genres = (input as { genres?: any }).genres;
-  return hasPrivateSignalValues([
-    input.type,
-    input.category,
-    input.platform,
-    input.metadata_json,
-    ...(input.tags || []),
-    ...(Array.isArray(genres) ? genres.map(String) : typeof genres === "string" ? [genres] : [])
-  ]);
-  const text = [
-    input.type,
-    input.category,
-    input.platform,
-    input.metadata_json,
-    ...(input.tags || []),
-    ...(Array.isArray(genres) ? genres.map(String) : typeof genres === "string" ? [genres] : [])
-  ].filter(Boolean).join(" ").toLowerCase();
-  return ["adult", "nsfw", "private", "?犖", "蝘?"].some((term) => text.includes(term.toLowerCase()));
-}
-
-function isPrivateMarker(value: string) {
-  const text = value.trim().toLowerCase();
-  return text === "adult" || text === "nsfw" || text === "private" || text === "成人" || text === "私密";
 }
 
 function inferStatus(input: Required<ItemInput>): ItemStatus {

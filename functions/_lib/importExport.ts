@@ -1,5 +1,5 @@
 import type { ItemInput } from "./types";
-import { hasPrivateSignalValues, isPrivateMarker as isPrivateMarkerValue } from "./privacy";
+import { isPrivateMarker as isPrivateMarkerValue } from "./privacy";
 
 export function parseJsonItems(content: string): ItemInput[] {
   const parsed = JSON.parse(content) as unknown;
@@ -126,7 +126,7 @@ function normalizeExternalRow(value: unknown): ItemInput {
     favorite: asBoolean(row.favorite),
     favorite_level: asFavoriteLevel(row.favorite_level ?? row.collection_level),
     used: asBoolean(row.used),
-    is_private: asBoolean(row.is_private) || hasPrivateSignalValues([row.type, row.category, row.platform, row.metadata_json, row.genres, row.tags]),
+    is_private: asBoolean(row.is_private),
     status: asStatus(row.status),
     media_status: asMediaStatus(row.media_status),
     quick_note: asString(row.quick_note ?? row.note),
@@ -139,23 +139,6 @@ function normalizeExternalRow(value: unknown): ItemInput {
     people: asList(row.people),
     collections: asList(row.collections)
   };
-}
-
-function hasPrivateSignal(row: Record<string, unknown>) {
-  const text = [
-    row.type,
-    row.category,
-    row.platform,
-    row.metadata_json,
-    row.genres,
-    row.tags
-  ].flatMap((value) => Array.isArray(value) ? value : [value]).filter(Boolean).join(" ").toLowerCase();
-  return ["adult", "nsfw", "private", "成人", "私密"].some((term) => text.includes(term.toLowerCase()));
-}
-
-function isPrivateMarker(value: string) {
-  const text = value.trim().toLowerCase();
-  return text === "adult" || text === "nsfw" || text === "private" || text === "成人" || text === "私密";
 }
 
 function asString(value: unknown) {

@@ -18,7 +18,7 @@ import { TagEditor } from "./components/TagEditor";
 import { Toast } from "./components/Toast";
 import { ViewSidebar } from "./components/ViewSidebar";
 import { PrivateQualityCenter } from "./components/PrivateQualityCenter";
-import { applyMetadata, createItem, deleteItem, getItem, getPrivateFacets, listItems, parseSmartAdd, quickUpdateItem as quickUpdateItemApi, searchMetadata, updateItem } from "./lib/api";
+import { applyMetadata, createItem, deleteItem, getItem, getPrivateFacets, listItems, listPrivateItems, parseSmartAdd, quickUpdateItem as quickUpdateItemApi, searchMetadata, updateItem } from "./lib/api";
 import { privateBatchTagPatch, retainVisibleSelection, runLimitedBatch, togglePageItemSelection, togglePageSelection, type BatchOperationResult } from "./lib/privateBatch";
 import { mergePrivateFilters } from "./lib/privateFilters";
 import { PRIVATE_DEFAULT_ACTRESS, isPrivateCollectionLevel, privateCollectionLevel, privateCollectionLevelLabels, privateCollectionLevels, privateCollectionPatch, privateRatingFromStars, privateStarsFromRating, type PrivateCollectionLevel } from "../shared/privateModel";
@@ -235,12 +235,20 @@ export default function App() {
   async function loadItems() {
     const requestId = ++loadRequestId.current;
     const loadScope = includePrivate ? "private" : "public";
+    const scopeChanged = loadScopeRef.current !== loadScope;
     const hasExistingRows = loadScopeRef.current === loadScope && items.length > 0;
-    setInitialLoading(!hasExistingRows);
+    if (scopeChanged) {
+      setItems([]);
+      setTotal(0);
+      setPrivateSummary(null);
+    }
+    setInitialLoading(scopeChanged || !hasExistingRows);
     setRefreshing(hasExistingRows);
     setError("");
     try {
-      const result = await listItems({ ...filters, includePrivate, privateOnly: includePrivate, includeFacets: false });
+      const result = includePrivate
+        ? await listPrivateItems({ ...filters, includeFacets: false })
+        : await listItems({ ...filters, includePrivate: false, privateOnly: false, includeFacets: false });
       if (requestId !== loadRequestId.current) return;
       setItems(result.items);
       setTotal(result.total);

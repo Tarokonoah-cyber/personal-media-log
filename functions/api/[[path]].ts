@@ -20,6 +20,15 @@ export const onRequest: PagesFunction<Env, "path"> = async (context) => {
       return json({ ok: true });
     }
 
+    if (method === "GET" && path.length === 2 && path[0] === "private" && path[1] === "items") {
+      return json(await listItems(context.env, {
+        ...getListParams(url),
+        includePrivate: true,
+        privateOnly: true,
+        includeFacets: false
+      }), { headers: { "cache-control": "private, no-store" } });
+    }
+
     if (path[0] === "items") {
       if (method === "GET" && path.length === 1) return json(await listItems(context.env, getListParams(url)));
       if (method === "POST" && path.length === 1) return json(await createItem(context.env, actor, await readJson<ItemInput>(context.request)), { status: 201 });

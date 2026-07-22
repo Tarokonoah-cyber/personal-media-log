@@ -17,9 +17,6 @@ export function classifyItem(item: MediaItem) {
   const haystack = normalize(`${item.type || ""} ${item.category || ""} ${item.platform || ""} ${item.tags.join(" ")}`);
   const category = normalize(item.category || "");
 
-  if (includesAny(haystack, ["adult", "nsfw", "jav", "av ", "18+", "r18", "xxx", "adult content", "成人", "私密"])) {
-    return { type: PRIVATE_LIBRARY_LABEL, category: "" };
-  }
   if (includesAny(haystack, ["沙雕动画", "沙雕動畫", "b站", "bilibili", "宗门食神", "宗門食神", "回档修仙", "回檔修仙", "修仙"])) {
     return { type: "沙雕动画", category: "" };
   }

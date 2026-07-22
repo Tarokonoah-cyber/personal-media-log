@@ -43,13 +43,7 @@ export function isPrivateLibraryLabel(label: string) {
 }
 
 export function isPrivateItem(item: MediaItem) {
-  if (item.is_private) return true;
-  return hasPrivateSignal([item.type, item.category, item.platform, item.metadata_json, ...item.tags]);
-}
-
-export function hasPrivateSignal(values: unknown[]) {
-  const text = values.flatMap(flattenValue).filter(Boolean).join(" ");
-  return hasPrivateSignalText(text);
+  return item.is_private === true;
 }
 
 export function isPrivateMarker(value: string) {
@@ -81,21 +75,8 @@ function titleIfNotCode(value: string | null, code: string) {
   return value;
 }
 
-function hasPrivateSignalText(value: string) {
-  const normalized = normalize(value);
-  const padded = ` ${normalized.replace(/[^a-z0-9\u4e00-\u9fff+]+/g, " ")} `;
-  return PRIVATE_CONTAINS_TERMS.some((term) => normalized.includes(term)) || PRIVATE_TOKEN_TERMS.some((term) => padded.includes(` ${term} `));
-}
-
 function normalize(value: unknown) {
   return String(value || "").trim().toLowerCase();
-}
-
-function flattenValue(value: unknown): string[] {
-  if (value === null || value === undefined) return [];
-  if (Array.isArray(value)) return value.flatMap(flattenValue);
-  if (typeof value === "object") return Object.values(value as Record<string, unknown>).flatMap(flattenValue);
-  return [String(value)];
 }
 
 function parseMetadata(value: string | null): MetadataRecord {

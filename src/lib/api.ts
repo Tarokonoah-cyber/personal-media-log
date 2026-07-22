@@ -31,6 +31,14 @@ export function listItems(filters: ListFilters) {
   return request<ItemListResponse>(`/api/items?${params.toString()}`);
 }
 
+export function listPrivateItems(filters: ListFilters) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== "" && value !== false && value !== null && value !== undefined) params.set(key, String(value));
+  });
+  return request<ItemListResponse>(`/api/private/items?${params.toString()}`);
+}
+
 export function getItem(id: string) {
   return request<MediaItem>(`/api/items/${id}`);
 }
