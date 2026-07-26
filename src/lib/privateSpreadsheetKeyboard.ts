@@ -80,8 +80,8 @@ export function privateClipboardUpdate(item: MediaItem, column: PrivateColumnId,
   if (column === "favorite") {
     return { kind: "quick", field: "collection_level", value: parseCollectionLevel(value) };
   }
-  if ((column === "releaseDate" || column === "watchedAt") && value && !isValidIsoDate(value)) {
-    throw new Error(`${column === "releaseDate" ? "發行日期" : "紀錄日"}格式必須是 YYYY-MM-DD`);
+  if (column === "releaseDate" && value && !isValidIsoDate(value)) {
+    throw new Error("發行日期格式必須是 YYYY-MM-DD");
   }
   return { kind: "patch", patch: privateCellPatch(item, column as PrivateEditableColumn, value) };
 }

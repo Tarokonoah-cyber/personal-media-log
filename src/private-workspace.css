@@ -552,13 +552,8 @@
   color: #8fc9ac;
 }
 
-.private-app-shell .private-workbench-v4 .private-sheet-rating,
-.private-app-shell .private-workbench-v4 .private-sheet-watchedAt {
+.private-app-shell .private-workbench-v4 .private-sheet-rating {
   font-variant-numeric: tabular-nums;
-}
-
-.private-app-shell .private-workbench-v4 .private-sheet-watchedAt {
-  color: var(--muted);
 }
 
 .private-app-shell .private-workbench-v4 .private-sheet-tags {
@@ -744,6 +739,46 @@
 
 .private-app-shell .private-workbench-v4 .private-new-sheet-row input::placeholder {
   color: var(--faint);
+}
+
+.private-app-shell .private-workbench-v4 .private-new-tag-editor {
+  position: relative;
+  width: 100%;
+  height: var(--private-row-height);
+  display: block;
+}
+
+.private-app-shell .private-workbench-v4 .private-new-tag-suggestions {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 2px;
+  z-index: 35;
+  width: min(330px, calc(100vw - 32px));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--panel);
+  box-shadow: 0 8px 22px rgba(20, 24, 22, 0.14);
+}
+
+.private-app-shell .private-workbench-v4 .private-new-tag-suggestions button {
+  min-height: 26px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--text);
+  background: var(--panel-soft);
+  font-size: 11.5px;
+}
+
+.private-app-shell .private-workbench-v4 .private-new-tag-suggestions button:hover,
+.private-app-shell .private-workbench-v4 .private-new-tag-suggestions button:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .private-app-shell .private-workbench-v4 .private-new-row-actions {
@@ -2239,7 +2274,7 @@
     width: 100%;
     height: 100dvh;
     max-height: 100dvh;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
     overflow: hidden;
     padding-top: calc(14px + env(safe-area-inset-top));
     padding-bottom: calc(14px + env(safe-area-inset-bottom));
@@ -2259,6 +2294,16 @@
     padding-top: 10px;
     border-top: 1px solid var(--line);
     background: var(--panel);
+  }
+
+  .private-app-shell .simple-add-draft-status {
+    min-height: 36px;
+    padding: 5px 4px 5px 8px;
+  }
+
+  .private-app-shell .simple-add-clear-draft {
+    min-height: 34px;
+    padding-inline: 8px;
   }
 
   .private-app-shell .simple-add-modal input,

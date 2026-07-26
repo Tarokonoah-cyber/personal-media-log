@@ -1,4 +1,4 @@
-export type PrivateColumnId = "identity" | "rating" | "favorite" | "actress" | "maker" | "tags" | "releaseDate" | "watchedAt" | "summary";
+export type PrivateColumnId = "identity" | "rating" | "favorite" | "actress" | "maker" | "tags" | "releaseDate" | "summary";
 
 export type PrivateColumnDefinition = {
   id: PrivateColumnId;
@@ -37,7 +37,6 @@ export const privateColumnDefinitions: PrivateColumnDefinition[] = [
   { id: "maker", label: "片商", width: 108, minWidth: 88, maxWidth: 300 },
   { id: "tags", label: "標籤", width: 168, minWidth: 128, maxWidth: 420 },
   { id: "releaseDate", label: "發行日期", width: 112, minWidth: 104, maxWidth: 150 },
-  { id: "watchedAt", label: "紀錄日", width: 112, minWidth: 104, maxWidth: 150 },
   { id: "summary", label: "快速筆記", width: 280, minWidth: 160, maxWidth: 520 }
 ];
 
@@ -61,10 +60,12 @@ export function defaultPrivateTablePreferences(): PrivateTablePreferences {
 export function normalizePrivateTablePreferences(value?: PrivateTablePreferencesInput | Partial<PrivateTablePreferences> | null): PrivateTablePreferences {
   const defaults = defaultPrivateTablePreferences();
   const requestedOrder = value?.order || [];
-  const migratedOrder = requestedOrder.map((id) => id === "code" || id === "title" ? "identity" : id).filter((id) => id !== "platform");
+  const migratedOrder = requestedOrder
+    .map((id) => id === "code" || id === "title" ? "identity" : id === "watchedAt" ? "releaseDate" : id)
+    .filter((id) => id !== "platform");
   if (requestedOrder.length > 0 && !migratedOrder.includes("releaseDate")) {
-    const watchedAtIndex = migratedOrder.indexOf("watchedAt");
-    migratedOrder.splice(watchedAtIndex >= 0 ? watchedAtIndex : migratedOrder.length, 0, "releaseDate");
+    const summaryIndex = migratedOrder.indexOf("summary");
+    migratedOrder.splice(summaryIndex >= 0 ? summaryIndex : migratedOrder.length, 0, "releaseDate");
   }
   const order = [
     "identity" as const,

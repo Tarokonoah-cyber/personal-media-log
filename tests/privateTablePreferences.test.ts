@@ -19,16 +19,17 @@ describe("private table preference migration", () => {
     expect(defaults.widths.identity).toBe(520);
     expect(defaults.visible.identity).toBe(true);
     expect(defaults.order).not.toContain("platform");
-    expect(defaults.order.indexOf("releaseDate")).toBeLessThan(defaults.order.indexOf("watchedAt"));
+    expect(defaults.order).not.toContain("watchedAt");
   });
 
-  it("adds release date before record date when migrating v4 preferences", () => {
+  it("adds release date and removes record date when migrating v4 preferences", () => {
     const migrated = migratePrivateTablePreferencesV4({
       order: ["identity", "rating", "watchedAt", "summary"],
       widths: { identity: 600, watchedAt: 120 },
       pageSize: 100
     });
-    expect(migrated.order).toEqual(["identity", "rating", "releaseDate", "watchedAt", "summary", "favorite", "actress", "maker", "tags"]);
+    expect(migrated.order).toEqual(["identity", "rating", "releaseDate", "summary", "favorite", "actress", "maker", "tags"]);
+    expect(migrated.order).not.toContain("watchedAt");
     expect(migrated.widths.identity).toBe(600);
     expect(migrated.visible.releaseDate).toBe(true);
   });
@@ -40,7 +41,7 @@ describe("private table preference migration", () => {
       visible: { title: false, summary: false },
       pageSize: 50
     });
-    expect(migrated.order.slice(0, 3)).toEqual(["identity", "summary", "tags"]);
+    expect(migrated.order.slice(0, 4)).toEqual(["identity", "releaseDate", "summary", "tags"]);
     expect(migrated.order).not.toContain("platform");
     expect(migrated.widths.identity).toBe(520);
     expect(migrated.visible.identity).toBe(true);
@@ -83,7 +84,8 @@ describe("private table preference migration", () => {
       setItem: vi.fn()
     };
     const result = readPrivateTablePreferences(storage);
-    expect(result.order.slice(0, 3)).toEqual(["identity", "releaseDate", "watchedAt"]);
+    expect(result.order.slice(0, 3)).toEqual(["identity", "releaseDate", "tags"]);
+    expect(result.order).not.toContain("watchedAt");
     expect(result.pageSize).toBe(200);
     expect(storage.setItem).toHaveBeenCalledWith(PRIVATE_TABLE_PREFERENCES_KEY, expect.any(String));
   });

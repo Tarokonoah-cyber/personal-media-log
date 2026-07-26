@@ -71,11 +71,17 @@ export function ViewSidebar({
   const [platformOpen, setPlatformOpen] = useState(true);
   const [favoriteOpen, setFavoriteOpen] = useState(true);
   const [actressOpen, setActressOpen] = useState(true);
+  const [tagOpen, setTagOpen] = useState(true);
   const [actressQuery, setActressQuery] = useState("");
   const [actressResults, setActressResults] = useState(privateFacets?.actress || []);
   const [actressLoading, setActressLoading] = useState(false);
   const [actressError, setActressError] = useState("");
+  const [tagQuery, setTagQuery] = useState("");
+  const [tagResults, setTagResults] = useState(privateFacets?.tags || []);
+  const [tagLoading, setTagLoading] = useState(false);
+  const [tagError, setTagError] = useState("");
   const actressRequestId = useRef(0);
+  const tagRequestId = useRef(0);
   const closeMobileRef = useRef(onCloseMobile);
   closeMobileRef.current = onCloseMobile;
   const platformFilters = filterValues(filters.platformFilters);
@@ -83,6 +89,7 @@ export function ViewSidebar({
   const makerFilters = filterValues(filters.makerFilters);
   const personFilters = filterValues(filters.personFilters);
   const actressItems = useMemo(() => actressResults.length ? actressResults : privateFacets?.actress || [], [actressResults, privateFacets?.actress]);
+  const tagItems = useMemo(() => tagResults.length ? tagResults : privateFacets?.tags || [], [tagResults, privateFacets?.tags]);
 
   useEffect(() => {
     if (!privateMode) return;
@@ -108,6 +115,31 @@ export function ViewSidebar({
       controller.abort();
     };
   }, [actressQuery, privateMode]);
+
+  useEffect(() => {
+    if (!privateMode) return;
+    const requestId = ++tagRequestId.current;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setTagLoading(true);
+      setTagError("");
+      void searchPrivateFacet("tag", tagQuery, 30, controller.signal)
+        .then((result) => {
+          if (requestId === tagRequestId.current) setTagResults(result.items);
+        })
+        .catch((error) => {
+          if (controller.signal.aborted || requestId !== tagRequestId.current) return;
+          setTagError(error instanceof Error ? error.message : "標籤搜尋失敗");
+        })
+        .finally(() => {
+          if (requestId === tagRequestId.current) setTagLoading(false);
+        });
+    }, 300);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [privateMode, tagQuery]);
 
   useEffect(() => {
     if (!mobileOpen) return;
@@ -151,6 +183,10 @@ export function ViewSidebar({
       maker: "",
       studio: ""
     });
+  };
+
+  const selectTagFacet = (tag: string) => {
+    applyPrivateFilter({ tag, excludeTag: "" });
   };
 
   if (privateMode) {
@@ -213,6 +249,17 @@ export function ViewSidebar({
                 showText && <em>沒有女優資料</em>
               ) : actressItems.map((actress) => (
                 <PrivateFilterButton key={actress.value} label={actress.value} count={actress.count} active={personFilters.includes(actress.value)} showText={showText} onClick={() => selectSingleFacet("personFilters", actress.value)} />
+              ))}
+            </div>
+          </PrivateNavSection>
+
+          <PrivateNavSection title="標籤" open={tagOpen} showText={showText} onToggle={() => setTagOpen((value) => !value)}>
+            {showText && <input className="private-nav-search" value={tagQuery} onChange={(event) => setTagQuery(event.target.value)} placeholder="搜尋標籤" aria-label="搜尋標籤" />}
+            <div className="private-nav-actress-list private-nav-tag-list">
+              {tagLoading ? (showText && <em>搜尋中...</em>) : tagError ? (showText && <em role="alert">{tagError}</em>) : tagItems.length === 0 ? (
+                showText && <em>沒有標籤資料</em>
+              ) : tagItems.map((tag) => (
+                <PrivateFilterButton key={tag.value} label={tag.value} count={tag.count} active={filters.tag === tag.value} showText={showText} icon={<Hash size={14} />} onClick={() => selectTagFacet(tag.value)} />
               ))}
             </div>
           </PrivateNavSection>

@@ -13,7 +13,7 @@ const privateFacets = {
   series: [],
   actress: [{ value: "女優 A", count: 5 }, { value: "女優 B", count: 4 }],
   javMaker: [{ value: "SOD", count: 4 }, { value: "S1", count: 3 }, { value: "FALENO", count: 2 }],
-  tags: [],
+  tags: [{ value: "中出", count: 8 }, { value: "白虎", count: 4 }],
   ratingBuckets: [],
   favoriteLevel: [{ value: "unset", count: 17 }],
   used: [],
@@ -53,4 +53,13 @@ it("keeps sidebar favorites and actresses single-select", () => {
   screen.getByRole("button", { name: /女優 B/ }).click();
   expect(onPrivateFilter).toHaveBeenNthCalledWith(1, expect.objectContaining({ favoriteLevelFilters: "masterpiece" }));
   expect(onPrivateFilter).toHaveBeenNthCalledWith(2, expect.objectContaining({ personFilters: "女優 B" }));
+});
+
+it("renders searchable private tags and replaces the selected tag", () => {
+  const { onPrivateFilter } = renderPrivateSidebar({ tag: "中出" });
+  const tagSection = screen.getByText("標籤").closest(".sidebar-private-facet") as HTMLElement;
+  expect(within(tagSection).getByRole("button", { name: /中出/ })).toHaveAttribute("aria-pressed", "true");
+  within(tagSection).getByRole("button", { name: /白虎/ }).click();
+  expect(onPrivateFilter).toHaveBeenCalledWith(expect.objectContaining({ tag: "白虎", excludeTag: "" }));
+  expect(within(tagSection).getByLabelText("搜尋標籤")).toBeVisible();
 });

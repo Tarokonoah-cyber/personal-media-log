@@ -5,7 +5,8 @@ export const privateSidebarFilterKeys = [
   "makerFilters",
   "favoriteLevelFilters",
   "personFilters",
-  "missingPeople"
+  "missingPeople",
+  "tag"
 ] as const;
 
 export function mergePrivateFilters(current: ListFilters, patch: Partial<ListFilters>): ListFilters {
@@ -23,6 +24,8 @@ export function clearPrivateSidebarFilters(current: ListFilters): ListFilters {
     platform: "",
     maker: "",
     person: "",
+    tag: "",
+    excludeTag: "",
     page: 1
   };
 }

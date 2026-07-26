@@ -25,7 +25,7 @@ describe("private filter state", () => {
   });
 
   it("clears only sidebar facets for All", () => {
-    const state = clearPrivateSidebarFilters({ ...base(), platformFilters: "FC2", favoriteLevelFilters: "normal", personFilters: "A" });
-    expect(state).toMatchObject({ platformFilters: "", favoriteLevelFilters: "", personFilters: "", query: "needle", ratingMin: "8", hasNote: "yes", page: 1 });
+    const state = clearPrivateSidebarFilters({ ...base(), platformFilters: "FC2", favoriteLevelFilters: "normal", personFilters: "A", tag: "劇情" });
+    expect(state).toMatchObject({ platformFilters: "", favoriteLevelFilters: "", personFilters: "", tag: "", query: "needle", ratingMin: "8", hasNote: "yes", page: 1 });
   });
 });

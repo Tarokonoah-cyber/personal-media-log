@@ -27,12 +27,25 @@ import { toItemInput } from "./lib/itemTransforms";
 import { emptyPrivateRowDraft, privateCellPatch, privateCellValue, privateIdentityLabel, privateIdentityPatch, privateIdentityValue, privateRowDraftToInput, type PrivateEditableColumn, type PrivateIdentityDraft, type PrivateRowDraft } from "./lib/privateSpreadsheet";
 import { movePrivateCell, privateCellKey, privateClipboardUpdate, privateClipboardValue, type PrivateCellMovement, type PrivateCellPosition } from "./lib/privateSpreadsheetKeyboard";
 import { isPrivateStatus, privateStatusToFields } from "./lib/privateStatus";
+import {
+  clearPrivateSimpleAddDraft,
+  emptyPrivateSimpleAddDraft,
+  hasMeaningfulPrivateDraft,
+  readPrivateSimpleAddDraft,
+  savePrivateSimpleAddDraft,
+  type PrivateSimpleAddDraft
+} from "./lib/privateSimpleAddDraft";
+import {
+  popPrivateSimpleAddHistoryEntry,
+  pushPrivateSimpleAddHistoryEntry,
+  removeStalePrivateSimpleAddHistoryEntry
+} from "./lib/privateSimpleAddHistory";
 import { defaultPrivateTablePreferences, normalizePrivateTablePreferences, privateColumnDefinitions, privateColumnMap, readPrivateTablePreferences, savePrivateTablePreferences, type PrivateColumnDefinition, type PrivateColumnId, type PrivateTablePreferences } from "./lib/privateTablePreferences";
 import { isPrivateItem, isPrivateLibraryLabel, privateItemDetails, PRIVATE_LIBRARY_LABEL, PRIVATE_RECOMMENDED_LABEL, PRIVATE_RECOMMENDED_TAG } from "./lib/privacy";
 import { parseQuickEntry } from "./lib/quickParse";
 import { collectionLevelOptions } from "./lib/reflection";
 import { tagPresetsForScope } from "./lib/tagPresets";
-import { normalizeTags } from "./lib/tags";
+import { addTags, normalizeTags, parseTagInput } from "./lib/tags";
 import { classifyItem, libraryTree } from "./lib/taxonomy";
 import { getWatchStatus, updateWatchProgress } from "./lib/watch";
 import type { ItemInput, ListFilters, MediaItem, PrivateFacets, PrivateSummary, SmartAddResponse, TmdbCandidate } from "./types";
@@ -143,6 +156,10 @@ export default function App() {
   const currentDisplayView = privateActive ? "table" : displayView;
   const effectiveSidebarCollapsed = privateActive ? privateSidebarCollapsed : sidebarCollapsed;
   const loading = initialLoading || refreshing || actionLoading;
+
+  useEffect(() => {
+    removeStalePrivateSimpleAddHistoryEntry();
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -337,13 +354,16 @@ export default function App() {
     try {
       const nextInput = withPrivatePageDefaults(input, privateRecommendedActive);
       await createItem(nextInput);
-      setSimpleAddOpen(false);
       setToast(nextInput.is_private ? "已新增私密紀錄" : "已新增紀錄");
       setTab("log");
       if (nextInput.is_private && !privateRecommendedActive) setActiveView(PRIVATE_LIBRARY_LABEL);
       setActiveCategory("");
       setFilters((current) => ({ ...current, status: "all", page: 1 }));
-      await refreshVisibleData();
+      try {
+        await refreshVisibleData();
+      } catch {
+        setError("資料已新增，但列表重新整理失敗，請稍後重新整理頁面。");
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "新增紀錄失敗";
       setError(message);
@@ -2245,7 +2265,7 @@ function PrivateTableCell({
       <span className="private-sheet-editor">
         <input
           autoFocus
-          type={column === "releaseDate" || column === "watchedAt" ? "date" : "text"}
+          type={column === "releaseDate" ? "date" : "text"}
           value={draft}
           disabled={pending}
           onChange={(event) => onDraftChange(event.target.value)}
@@ -2309,9 +2329,8 @@ function PrivateNewSpreadsheetRow({ columns, draft, busy, error, knownTags, onCh
     if (column === "favorite") return <select value={draft.collection} onChange={(event) => patch({ collection: event.target.value as PrivateCollectionLevel })} onKeyDown={handleKeyDown} aria-label="新資料收藏">{privateCollectionLevels.map((value) => <option key={value} value={value}>{privateCollectionLevelLabels[value]}</option>)}</select>;
     if (column === "actress") return <input value={draft.actress} onChange={(event) => patch({ actress: event.target.value })} onKeyDown={handleKeyDown} placeholder="多人用逗號分隔" aria-label="新資料女優" />;
     if (column === "maker") return <input value={draft.maker} onChange={(event) => patch({ maker: event.target.value })} onKeyDown={handleKeyDown} placeholder="片商" aria-label="新資料片商" />;
-    if (column === "tags") return <input value={draft.tags} onChange={(event) => patch({ tags: event.target.value })} onKeyDown={handleKeyDown} placeholder="標籤以逗號分隔" list="private-sheet-known-tags" aria-label="新資料標籤" />;
+    if (column === "tags") return <PrivateNewRowTagEditor value={draft.tags} knownTags={knownTags} onChange={(tags) => patch({ tags })} onKeyDown={handleKeyDown} />;
     if (column === "releaseDate") return <input type="date" value={draft.releaseDate} onChange={(event) => patch({ releaseDate: event.target.value })} onKeyDown={handleKeyDown} aria-label="新資料發行日期" />;
-    if (column === "watchedAt") return <input type="date" value={draft.watchedAt} onChange={(event) => patch({ watchedAt: event.target.value })} onKeyDown={handleKeyDown} aria-label="新資料紀錄日" />;
     return <input value={draft.summary} onChange={(event) => patch({ summary: event.target.value })} onKeyDown={handleKeyDown} placeholder="快速筆記" aria-label="新資料快速筆記" />;
   }
 
@@ -2325,9 +2344,57 @@ function PrivateNewSpreadsheetRow({ columns, draft, busy, error, knownTags, onCh
           <button type="button" onClick={onCancel} disabled={busy} title="取消新增" aria-label="取消新增"><X size={14} /></button>
           {error && <span className="private-new-row-error" role="alert"><CircleAlert size={15} aria-hidden="true" /><span>{error}</span></span>}
         </span>
-        <datalist id="private-sheet-known-tags">{knownTags.slice(0, 40).map((tag) => <option key={tag} value={tag} />)}</datalist>
       </td>
     </tr>
+  );
+}
+
+function PrivateNewRowTagEditor({
+  value,
+  knownTags,
+  onChange,
+  onKeyDown
+}: {
+  value: string;
+  knownTags: string[];
+  onChange: (value: string) => void;
+  onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedTags = useMemo(() => parseTagInput(value), [value]);
+  const selectedKeys = useMemo(() => new Set(selectedTags.map((tag) => tag.toLocaleLowerCase())), [selectedTags]);
+  const suggestions = useMemo(
+    () => normalizeTags(knownTags).filter((tag) => !selectedKeys.has(tag.toLocaleLowerCase())).slice(0, 12),
+    [knownTags, selectedKeys]
+  );
+
+  function addTag(tag: string) {
+    onChange(addTags(selectedTags, tag).join(", "));
+  }
+
+  return (
+    <span
+      className="private-new-tag-editor"
+      onFocus={() => setOpen(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
+      }}
+    >
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder="輸入或點選標籤"
+        aria-label="新資料標籤"
+      />
+      {open && suggestions.length > 0 && (
+        <span className="private-new-tag-suggestions" aria-label="常用標籤">
+          {suggestions.map((tag) => (
+            <button key={tag} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => addTag(tag)}>#{tag}</button>
+          ))}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -2610,7 +2677,7 @@ function densityLabel(density: string) {
   return labels[density] || density;
 }
 
-function SimpleAddModal({
+export function SimpleAddModal({
   privateMode,
   knownTags = [],
   loading,
@@ -2623,25 +2690,76 @@ function SimpleAddModal({
   onClose: () => void;
   onSubmit: (input: ItemInput) => Promise<void>;
 }) {
-  const [draft, setDraft] = useState({
-    code: "",
-    title: "",
-    rating: "",
-    collection: "unset" as PrivateCollectionLevel,
-    actress: PRIVATE_DEFAULT_ACTRESS,
-    platform: "",
-    maker: "",
-    summary: "",
-    tags: [] as string[],
-    release_date: "",
-    watched_at: todayDate()
-  });
+  const [restoredDraft] = useState(() => privateMode ? readPrivateSimpleAddDraft() : null);
+  const [draft, setDraft] = useState<PrivateSimpleAddDraft>(() => restoredDraft?.draft ?? emptyPrivateSimpleAddDraft(todayDate()));
+  const [draftStatus, setDraftStatus] = useState<"idle" | "restored" | "saving" | "saved" | "error" | "cleared">(
+    restoredDraft ? "restored" : "idle"
+  );
+  const [draftSavedAt, setDraftSavedAt] = useState(restoredDraft?.savedAt || "");
   const [submitError, setSubmitError] = useState("");
+  const draftRef = useRef(draft);
+  const saveTimerRef = useRef<number | null>(null);
+  const submittedRef = useRef(false);
+  const historyEntryActiveRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const canSubmit = privateMode ? Boolean(draft.code.trim() || draft.title.trim()) : Boolean(draft.title.trim());
+  const hasDraft = privateMode && hasMeaningfulPrivateDraft(draft);
+  const draftMessage = privateMode ? privateDraftStatusMessage(draftStatus, draftSavedAt) : "";
+
+  useEffect(() => {
+    if (!privateMode) return;
+    if (!historyEntryActiveRef.current) {
+      historyEntryActiveRef.current = pushPrivateSimpleAddHistoryEntry();
+    }
+    const handlePopState = () => {
+      if (!historyEntryActiveRef.current) return;
+      historyEntryActiveRef.current = false;
+      onCloseRef.current();
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [privateMode]);
+
+  useEffect(() => {
+    if (!privateMode) return;
+    const flushDraft = () => {
+      if (submittedRef.current) return;
+      savePrivateSimpleAddDraft(draftRef.current);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flushDraft();
+    };
+    window.addEventListener("pagehide", flushDraft);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+      window.removeEventListener("pagehide", flushDraft);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      flushDraft();
+    };
+  }, [privateMode]);
 
   function patch(patch: Partial<typeof draft>) {
     if (submitError) setSubmitError("");
-    setDraft((current) => ({ ...current, ...patch }));
+    const nextDraft = { ...draftRef.current, ...patch };
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
+    if (!privateMode) return;
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+    setDraftStatus("saving");
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      const saved = savePrivateSimpleAddDraft(draftRef.current);
+      if (!saved) {
+        setDraftStatus("error");
+        return;
+      }
+      setDraftSavedAt(saved.savedAt);
+      setDraftStatus(hasMeaningfulPrivateDraft(draftRef.current) ? "saved" : "idle");
+    }, 250);
   }
 
   async function submit() {
@@ -2649,13 +2767,42 @@ function SimpleAddModal({
     setSubmitError("");
     try {
       await onSubmit(simpleDraftToInput(draft, privateMode));
+      if (privateMode) {
+        submittedRef.current = true;
+        if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+        clearPrivateSimpleAddDraft();
+      }
+      closePreservingDraft();
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "無法新增這筆資料，請檢查內容後再試一次。");
     }
   }
 
+  function closePreservingDraft() {
+    if (privateMode && historyEntryActiveRef.current) {
+      historyEntryActiveRef.current = false;
+      popPrivateSimpleAddHistoryEntry();
+    }
+    onClose();
+  }
+
+  function clearDraft() {
+    if (!window.confirm("確定要清除這份尚未新增的草稿嗎？")) return;
+    if (!clearPrivateSimpleAddDraft()) {
+      setDraftStatus("error");
+      return;
+    }
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+    const nextDraft = emptyPrivateSimpleAddDraft(todayDate());
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
+    setSubmitError("");
+    setDraftSavedAt("");
+    setDraftStatus("cleared");
+  }
+
   function handleBackdropClick(event: React.MouseEvent<HTMLDivElement>) {
-    if (event.target === event.currentTarget) onClose();
+    if (event.target === event.currentTarget) closePreservingDraft();
   }
 
   return (
@@ -2666,7 +2813,7 @@ function SimpleAddModal({
             <p className="eyebrow">簡單新增</p>
             <h2>{privateMode ? "新增私密資料" : "核心欄位"}</h2>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="關閉">×</button>
+          <button className="icon-button" onClick={closePreservingDraft} aria-label={privateMode ? "關閉並保留草稿" : "關閉"}>×</button>
         </header>
         <div className="simple-add-grid">
           {privateMode && <Field label="番號" value={draft.code} onChange={(value) => patch({ code: value })} />}
@@ -2689,11 +2836,21 @@ function SimpleAddModal({
           {!privateMode && <TagEditor tags={draft.tags} knownTags={knownTags} maxSuggestions={16} onChange={(tags) => patch({ tags })} placeholder="輸入標籤後按 Enter" />}
           {!privateMode && <Field label="觀看日" value={draft.watched_at} onChange={(value) => patch({ watched_at: value })} type="date" />}
           {privateMode && <label className="wide">快速筆記<input value={draft.summary} onChange={(event) => patch({ summary: event.target.value })} /></label>}
-          {privateMode && <TagEditor tags={draft.tags} knownTags={knownTags} maxSuggestions={0} onChange={(tags) => patch({ tags })} placeholder="輸入標籤，按 Enter 分隔" />}
+          {privateMode && <TagEditor tags={draft.tags} knownTags={knownTags} maxSuggestions={12} onChange={(tags) => patch({ tags })} placeholder="輸入或直接點選常用標籤" />}
         </div>
-        {submitError && <div className="simple-add-error" role="alert" aria-live="assertive"><CircleAlert size={17} aria-hidden="true" /><span>{submitError}</span></div>}
+        {(privateMode || submitError) && (
+          <div className="simple-add-feedback">
+            {privateMode && (
+              <div className={`simple-add-draft-status ${draftStatus === "error" ? "error" : ""}`} role={draftStatus === "error" ? "alert" : "status"} aria-live="polite">
+                <span>{draftMessage}</span>
+                {hasDraft && <button type="button" className="simple-add-clear-draft" onClick={clearDraft}><Trash2 size={14} aria-hidden="true" />清除草稿</button>}
+              </div>
+            )}
+            {submitError && <div className="simple-add-error" role="alert" aria-live="assertive"><CircleAlert size={17} aria-hidden="true" /><span>{submitError}</span></div>}
+          </div>
+        )}
         <footer className="simple-add-actions">
-          <button onClick={onClose}>取消</button>
+          <button onClick={closePreservingDraft}>{privateMode ? "稍後繼續" : "取消"}</button>
           <button className="primary" onClick={() => void submit()} disabled={loading || !canSubmit}>新增</button>
         </footer>
       </section>
@@ -2750,6 +2907,29 @@ function simpleDraftToInput(draft: { code: string; title: string; rating: string
     tags,
     status: "raw"
   };
+}
+
+function privateDraftStatusMessage(
+  status: "idle" | "restored" | "saving" | "saved" | "error" | "cleared",
+  savedAt: string
+) {
+  if (status === "restored") return `已恢復 ${formatDraftSavedAt(savedAt)} 的未完成草稿`;
+  if (status === "saving") return "正在保存草稿...";
+  if (status === "saved") return "草稿已自動儲存";
+  if (status === "error") return "無法自動保存草稿，請勿離開此頁";
+  if (status === "cleared") return "草稿已清除";
+  return "輸入內容會自動保存在這台裝置";
+}
+
+function formatDraftSavedAt(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "上次";
+  return new Intl.DateTimeFormat("zh-TW", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
 }
 
 function todayDate() {

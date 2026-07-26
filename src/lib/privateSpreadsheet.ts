@@ -3,7 +3,7 @@ import { privateItemDetails, PRIVATE_LIBRARY_LABEL } from "./privacy";
 import { normalizeTags, parseTagInput } from "./tags";
 import type { ItemInput, MediaItem } from "../types";
 
-export type PrivateEditableColumn = "actress" | "maker" | "tags" | "releaseDate" | "watchedAt" | "summary";
+export type PrivateEditableColumn = "actress" | "maker" | "tags" | "releaseDate" | "summary";
 
 export type PrivateIdentityDraft = {
   code: string;
@@ -74,7 +74,6 @@ export function privateCellValue(item: MediaItem, column: PrivateEditableColumn)
   if (column === "maker") return item.maker || "";
   if (column === "tags") return item.tags.join(", ");
   if (column === "releaseDate") return item.release_date?.slice(0, 10) || "";
-  if (column === "watchedAt") return item.watched_at?.slice(0, 10) || "";
   return item.quick_note || "";
 }
 
@@ -87,7 +86,6 @@ export function privateCellPatch(_item: MediaItem, column: PrivateEditableColumn
   if (column === "maker") return { maker: clean || null };
   if (column === "tags") return { tags: normalizeTags(parseTagInput(value)) };
   if (column === "releaseDate") return { release_date: clean || null, release_year: yearFromDate(clean) };
-  if (column === "watchedAt") return { watched_at: clean || null };
   return { quick_note: clean || null };
 }
 

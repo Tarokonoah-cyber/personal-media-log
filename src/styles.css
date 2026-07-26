@@ -2255,6 +2255,53 @@ h2 {
   justify-content: flex-end;
 }
 
+.simple-add-feedback {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.simple-add-draft-status {
+  min-width: 0;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  background: var(--panel-soft);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.simple-add-draft-status.error {
+  border-color: color-mix(in srgb, var(--danger) 66%, var(--line));
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 7%, var(--panel));
+}
+
+.simple-add-clear-draft {
+  flex: 0 0 auto;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 6px;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  font-size: 12px;
+}
+
+.simple-add-clear-draft:hover,
+.simple-add-clear-draft:focus-visible {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+
 .column-manager-backdrop {
   position: fixed;
   inset: 0;
