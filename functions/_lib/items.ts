@@ -1323,23 +1323,31 @@ export async function quickUpdateItem(env: Env, actor: Actor, id: string, field:
   return getItem(env, id);
 }
 
-async function assertUniqueNormalizedCode(env: Env, normalizedCode: string | null, currentId?: string, inputCode?: unknown) {
-  if (!normalizedCode) return;
+export async function findNormalizedCodeConflict(env: Env, code: unknown, currentId?: string) {
+  const normalizedCode = normalizeWorkCode(code);
+  if (!normalizedCode) return null;
   const existing = await env.MEDIA_LOG_DB.prepare(`
     SELECT id, code, raw_title, official_title
     FROM items
     WHERE normalized_code = ? AND status != 'deleted' ${currentId ? "AND id != ?" : ""}
     LIMIT 1
   `).bind(normalizedCode, ...(currentId ? [currentId] : [])).first<Row>();
+  if (!existing) return null;
+  return {
+    id: String(existing.id),
+    code: nullableString(existing.code) || normalizedCode,
+    title: nullableString(existing.official_title) || String(existing.raw_title || "")
+  };
+}
+
+async function assertUniqueNormalizedCode(env: Env, normalizedCode: string | null, currentId?: string, inputCode?: unknown) {
+  if (!normalizedCode) return;
+  const existing = await findNormalizedCodeConflict(env, normalizedCode, currentId);
   if (!existing) return;
   throw new HttpError(409, "作品代號已存在", {
     inputCode: typeof inputCode === "string" ? inputCode : "",
     normalizedCode,
-    existing: {
-      id: String(existing.id),
-      code: nullableString(existing.code),
-      title: nullableString(existing.official_title) || String(existing.raw_title || "")
-    }
+    existing
   });
 }
 

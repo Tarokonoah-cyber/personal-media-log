@@ -80,6 +80,16 @@ export interface PrivateFacetSearchResponse {
   items: PrivateFacetItem[];
 }
 
+export interface PrivateCodeConflict {
+  id: string;
+  code: string;
+  title: string;
+}
+
+export interface PrivateCodeConflictResponse {
+  conflict: PrivateCodeConflict | null;
+}
+
 export type PrivateIssueType = "duplicate_code" | "unknown_platform" | "missing_title" | "missing_people" | "missing_tags" | "unrated" | "unset_collection" | "invalid_collection" | "invalid_code";
 export interface PrivateQualitySummaryItem { type: PrivateIssueType; label: string; count: number; }
 export interface PrivateQualityIssue {

@@ -10,6 +10,7 @@ import { CalendarView } from "./components/CalendarView";
 import { MetadataLookupModal } from "./components/MetadataLookupModal";
 import { PrivateBatchToolbar } from "./components/PrivateBatchToolbar";
 import { PrivateFilterChips } from "./components/PrivateFilterChips";
+import { PrivateQuickAddModal } from "./components/PrivateQuickAddModal";
 import { PrivateStarDisplay, PrivateStarRating } from "./components/PrivateStarRating";
 import { QuickCapture } from "./components/QuickCapture";
 import { SmartOrganizer } from "./components/SmartOrganizer";
@@ -18,6 +19,7 @@ import { TagEditor } from "./components/TagEditor";
 import { Toast } from "./components/Toast";
 import { ViewSidebar } from "./components/ViewSidebar";
 import { PrivateQualityCenter } from "./components/PrivateQualityCenter";
+import { usePrivateCodeConflict } from "./hooks/usePrivateCodeConflict";
 import { applyMetadata, createItem, deleteItem, getItem, getPrivateFacets, listItems, listPrivateItems, parseSmartAdd, quickUpdateItem as quickUpdateItemApi, searchMetadata, updateItem } from "./lib/api";
 import { privateBatchTagPatch, retainVisibleSelection, runLimitedBatch, togglePageItemSelection, togglePageSelection, type BatchOperationResult } from "./lib/privateBatch";
 import { mergePrivateFilters } from "./lib/privateFilters";
@@ -40,6 +42,7 @@ import {
   pushPrivateSimpleAddHistoryEntry,
   removeStalePrivateSimpleAddHistoryEntry
 } from "./lib/privateSimpleAddHistory";
+import { privateAddDefaultsForCode } from "./lib/privateQuickAdd";
 import { defaultPrivateTablePreferences, normalizePrivateTablePreferences, privateColumnDefinitions, privateColumnMap, readPrivateTablePreferences, savePrivateTablePreferences, type PrivateColumnDefinition, type PrivateColumnId, type PrivateTablePreferences } from "./lib/privateTablePreferences";
 import { isPrivateItem, isPrivateLibraryLabel, privateItemDetails, PRIVATE_LIBRARY_LABEL, PRIVATE_RECOMMENDED_LABEL, PRIVATE_RECOMMENDED_TAG } from "./lib/privacy";
 import { parseQuickEntry } from "./lib/quickParse";
@@ -160,6 +163,19 @@ export default function App() {
   useEffect(() => {
     removeStalePrivateSimpleAddHistoryEntry();
   }, []);
+
+  useEffect(() => {
+    if (!privateActive || simpleAddOpen) return;
+    const openPrivateAdd = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || event.key.toLocaleLowerCase() !== "n") return;
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.matches("input, textarea, select, [contenteditable='true']") || target.closest("[role='dialog']"))) return;
+      event.preventDefault();
+      setSimpleAddOpen(true);
+    };
+    window.addEventListener("keydown", openPrivateAdd);
+    return () => window.removeEventListener("keydown", openPrivateAdd);
+  }, [privateActive, simpleAddOpen]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -353,17 +369,16 @@ export default function App() {
     setError("");
     try {
       const nextInput = withPrivatePageDefaults(input, privateRecommendedActive);
-      await createItem(nextInput);
+      const created = await createItem(nextInput);
       setToast(nextInput.is_private ? "已新增私密紀錄" : "已新增紀錄");
       setTab("log");
       if (nextInput.is_private && !privateRecommendedActive) setActiveView(PRIVATE_LIBRARY_LABEL);
       setActiveCategory("");
       setFilters((current) => ({ ...current, status: "all", page: 1 }));
-      try {
-        await refreshVisibleData();
-      } catch {
+      void refreshVisibleData().catch(() => {
         setError("資料已新增，但列表重新整理失敗，請稍後重新整理頁面。");
-      }
+      });
+      return created;
     } catch (err) {
       const message = err instanceof Error ? err.message : "新增紀錄失敗";
       setError(message);
@@ -495,6 +510,16 @@ export default function App() {
       return result;
     } finally {
       setActionLoading(false);
+    }
+  }
+
+  async function openPrivateItemById(id: string) {
+    setSimpleAddOpen(false);
+    setError("");
+    try {
+      setSelected(await getItem(id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "載入既有資料失敗");
     }
   }
 
@@ -896,9 +921,11 @@ export default function App() {
         <SimpleAddModal
           privateMode={includePrivate}
           knownTags={includePrivate ? privateTagSuggestions : publicTagSuggestions}
-          loading={loading}
+          privateFacets={includePrivate ? privateFacets : null}
+          loading={actionLoading}
           onClose={() => setSimpleAddOpen(false)}
           onSubmit={submitSimpleAdd}
+          onOpenExisting={(id) => void openPrivateItemById(id)}
         />
       )}
       {selected && <ItemEditor item={selected} privateMode={privateActive} knownTags={privateActive || isPrivateItem(selected) ? privateTagSuggestions : publicTagSuggestions} onClose={() => setSelected(null)} onSave={saveItem} onDelete={removeItem} />}
@@ -2309,14 +2336,31 @@ function PrivateNewSpreadsheetRow({ columns, draft, busy, error, knownTags, onCh
   onSubmit: () => void;
   onCancel: () => void;
 }) {
+  const [touchedAutofill, setTouchedAutofill] = useState({ actress: false, maker: false });
+  const duplicate = usePrivateCodeConflict(draft.code);
+  const duplicateMessage = duplicate.status === "conflict" && duplicate.conflict
+    ? `番號「${duplicate.conflict.code}」已存在`
+    : "";
+  const visibleError = duplicateMessage || error;
+
   function patch(next: Partial<PrivateRowDraft>) {
     onChange({ ...draft, ...next });
+  }
+
+  function changeCode(value: string, normalize = false) {
+    const defaults = privateAddDefaultsForCode(value);
+    patch({
+      code: normalize ? defaults.code : value,
+      platform: defaults.platform === "unknown" ? "" : defaults.platform,
+      maker: touchedAutofill.maker ? draft.maker : defaults.maker,
+      actress: touchedAutofill.actress ? draft.actress : defaults.actress
+    });
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
-      onSubmit();
+      if (!duplicateMessage) onSubmit();
     } else if (event.key === "Escape") {
       event.preventDefault();
       onCancel();
@@ -2324,11 +2368,11 @@ function PrivateNewSpreadsheetRow({ columns, draft, busy, error, knownTags, onCh
   }
 
   function cell(column: PrivateColumnId) {
-    if (column === "identity") return <span className="private-new-identity-editor"><input autoFocus value={draft.code} onChange={(event) => patch({ code: event.target.value })} onKeyDown={handleKeyDown} placeholder="輸入番號" aria-label="新資料番號" /><input value={draft.title} onChange={(event) => patch({ title: event.target.value })} onKeyDown={handleKeyDown} placeholder="片名可留空" aria-label="新資料片名" /></span>;
+    if (column === "identity") return <span className="private-new-identity-editor"><input autoFocus value={draft.code} onChange={(event) => changeCode(event.target.value)} onBlur={(event) => changeCode(event.target.value, true)} onKeyDown={handleKeyDown} placeholder="輸入番號" aria-label="新資料番號" /><input value={draft.title} onChange={(event) => patch({ title: event.target.value })} onKeyDown={handleKeyDown} placeholder="片名可留空" aria-label="新資料片名" /></span>;
     if (column === "rating") return <PrivateStarRating value={privateRatingFromStars(draft.rating)} compact label="新資料評分" onChange={(rating) => patch({ rating: rating === null ? "" : String(privateStarsFromRating(rating)) })} onKeyDown={handleKeyDown} />;
     if (column === "favorite") return <select value={draft.collection} onChange={(event) => patch({ collection: event.target.value as PrivateCollectionLevel })} onKeyDown={handleKeyDown} aria-label="新資料收藏">{privateCollectionLevels.map((value) => <option key={value} value={value}>{privateCollectionLevelLabels[value]}</option>)}</select>;
-    if (column === "actress") return <input value={draft.actress} onChange={(event) => patch({ actress: event.target.value })} onKeyDown={handleKeyDown} placeholder="多人用逗號分隔" aria-label="新資料女優" />;
-    if (column === "maker") return <input value={draft.maker} onChange={(event) => patch({ maker: event.target.value })} onKeyDown={handleKeyDown} placeholder="片商" aria-label="新資料片商" />;
+    if (column === "actress") return <input value={draft.actress} onChange={(event) => { setTouchedAutofill((current) => ({ ...current, actress: true })); patch({ actress: event.target.value }); }} onKeyDown={handleKeyDown} placeholder="多人用逗號分隔" aria-label="新資料女優" />;
+    if (column === "maker") return <input value={draft.maker} onChange={(event) => { setTouchedAutofill((current) => ({ ...current, maker: true })); patch({ maker: event.target.value }); }} onKeyDown={handleKeyDown} placeholder="片商" aria-label="新資料片商" />;
     if (column === "tags") return <PrivateNewRowTagEditor value={draft.tags} knownTags={knownTags} onChange={(tags) => patch({ tags })} onKeyDown={handleKeyDown} />;
     if (column === "releaseDate") return <input type="date" value={draft.releaseDate} onChange={(event) => patch({ releaseDate: event.target.value })} onKeyDown={handleKeyDown} aria-label="新資料發行日期" />;
     return <input value={draft.summary} onChange={(event) => patch({ summary: event.target.value })} onKeyDown={handleKeyDown} placeholder="快速筆記" aria-label="新資料快速筆記" />;
@@ -2340,9 +2384,9 @@ function PrivateNewSpreadsheetRow({ columns, draft, busy, error, knownTags, onCh
       {columns.map((column) => <td key={column.id} className={column.id === "identity" ? "private-sticky-column" : undefined}>{cell(column.id)}</td>)}
       <td className="private-open-column">
         <span className="private-new-row-actions">
-          <button type="button" onClick={onSubmit} disabled={busy || !draft.code.trim()} title="儲存新資料" aria-label="儲存新資料"><Check size={14} /></button>
+          <button type="button" onClick={onSubmit} disabled={busy || !draft.code.trim() || Boolean(duplicateMessage)} title="儲存新資料" aria-label="儲存新資料"><Check size={14} /></button>
           <button type="button" onClick={onCancel} disabled={busy} title="取消新增" aria-label="取消新增"><X size={14} /></button>
-          {error && <span className="private-new-row-error" role="alert"><CircleAlert size={15} aria-hidden="true" /><span>{error}</span></span>}
+          {visibleError && <span className="private-new-row-error" role="alert"><CircleAlert size={15} aria-hidden="true" /><span>{visibleError}</span></span>}
         </span>
       </td>
     </tr>
@@ -2677,19 +2721,39 @@ function densityLabel(density: string) {
   return labels[density] || density;
 }
 
-export function SimpleAddModal({
+type SimpleAddModalProps = {
+  privateMode: boolean;
+  knownTags?: string[];
+  privateFacets?: PrivateFacets | null;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (input: ItemInput) => Promise<unknown>;
+  onOpenExisting?: (id: string) => void;
+};
+
+export function SimpleAddModal(props: SimpleAddModalProps) {
+  if (props.privateMode) {
+    return (
+      <PrivateQuickAddModal
+        knownTags={props.knownTags}
+        facets={props.privateFacets}
+        loading={props.loading}
+        onClose={props.onClose}
+        onSubmit={props.onSubmit}
+        onOpenExisting={props.onOpenExisting}
+      />
+    );
+  }
+  return <LegacySimpleAddModal {...props} />;
+}
+
+function LegacySimpleAddModal({
   privateMode,
   knownTags = [],
   loading,
   onClose,
   onSubmit
-}: {
-  privateMode: boolean;
-  knownTags?: string[];
-  loading: boolean;
-  onClose: () => void;
-  onSubmit: (input: ItemInput) => Promise<void>;
-}) {
+}: SimpleAddModalProps) {
   const [restoredDraft] = useState(() => privateMode ? readPrivateSimpleAddDraft() : null);
   const [draft, setDraft] = useState<PrivateSimpleAddDraft>(() => restoredDraft?.draft ?? emptyPrivateSimpleAddDraft(todayDate()));
   const [draftStatus, setDraftStatus] = useState<"idle" | "restored" | "saving" | "saved" | "error" | "cleared">(

@@ -5,7 +5,8 @@ import {
 } from "../../shared/privateModel";
 import { normalizeTags } from "./tags";
 
-export const PRIVATE_SIMPLE_ADD_DRAFT_KEY = "private-simple-add-draft-v1";
+export const PRIVATE_SIMPLE_ADD_DRAFT_KEY = "private-simple-add-draft-v2";
+export const PRIVATE_SIMPLE_ADD_LEGACY_DRAFT_KEY = "private-simple-add-draft-v1";
 
 export type PrivateSimpleAddDraft = {
   code: string;
@@ -22,7 +23,7 @@ export type PrivateSimpleAddDraft = {
 };
 
 export type PrivateSimpleAddDraftEnvelope = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   savedAt: string;
   draft: PrivateSimpleAddDraft;
 };
@@ -65,15 +66,22 @@ export function readPrivateSimpleAddDraft(
 ): PrivateSimpleAddDraftEnvelope | null {
   if (!storage) return null;
   try {
-    const parsed = JSON.parse(storage.getItem(PRIVATE_SIMPLE_ADD_DRAFT_KEY) || "null") as unknown;
-    if (!isDraftEnvelope(parsed)) return null;
+    const current = parseDraftEnvelope(storage.getItem(PRIVATE_SIMPLE_ADD_DRAFT_KEY));
+    const legacy = current ? null : parseDraftEnvelope(storage.getItem(PRIVATE_SIMPLE_ADD_LEGACY_DRAFT_KEY));
+    const parsed = current || legacy;
+    if (!parsed) return null;
     const draft = normalizeDraft(parsed.draft);
     if (!hasMeaningfulPrivateDraft(draft)) return null;
-    return {
-      schemaVersion: 1,
+    const envelope: PrivateSimpleAddDraftEnvelope = {
+      schemaVersion: 2,
       savedAt: parsed.savedAt,
       draft
     };
+    if (legacy) {
+      storage.setItem(PRIVATE_SIMPLE_ADD_DRAFT_KEY, JSON.stringify(envelope));
+      storage.removeItem(PRIVATE_SIMPLE_ADD_LEGACY_DRAFT_KEY);
+    }
+    return envelope;
   } catch {
     return null;
   }
@@ -88,14 +96,15 @@ export function savePrivateSimpleAddDraft(
   try {
     if (!hasMeaningfulPrivateDraft(draft)) {
       storage.removeItem(PRIVATE_SIMPLE_ADD_DRAFT_KEY);
+      storage.removeItem(PRIVATE_SIMPLE_ADD_LEGACY_DRAFT_KEY);
       return {
-        schemaVersion: 1,
+        schemaVersion: 2,
         savedAt,
         draft: normalizeDraft(draft)
       };
     }
     const envelope: PrivateSimpleAddDraftEnvelope = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       savedAt,
       draft: normalizeDraft(draft)
     };
@@ -112,6 +121,7 @@ export function clearPrivateSimpleAddDraft(
   if (!storage) return false;
   try {
     storage.removeItem(PRIVATE_SIMPLE_ADD_DRAFT_KEY);
+    storage.removeItem(PRIVATE_SIMPLE_ADD_LEGACY_DRAFT_KEY);
     return true;
   } catch {
     return false;
@@ -137,16 +147,27 @@ function normalizeDraft(value: unknown): PrivateSimpleAddDraft {
   };
 }
 
-function isDraftEnvelope(value: unknown): value is {
-  schemaVersion: 1;
+function parseDraftEnvelope(value: string | null): {
+  schemaVersion: 1 | 2;
   savedAt: string;
   draft: unknown;
-} {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const envelope = value as Record<string, unknown>;
-  return envelope.schemaVersion === 1
-    && typeof envelope.savedAt === "string"
-    && Boolean(envelope.draft && typeof envelope.draft === "object" && !Array.isArray(envelope.draft));
+} | null {
+  if (!value) return null;
+  const parsed = JSON.parse(value) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const envelope = parsed as Record<string, unknown>;
+  if ((envelope.schemaVersion !== 1 && envelope.schemaVersion !== 2)
+    || typeof envelope.savedAt !== "string"
+    || !envelope.draft
+    || typeof envelope.draft !== "object"
+    || Array.isArray(envelope.draft)) {
+    return null;
+  }
+  return {
+    schemaVersion: envelope.schemaVersion,
+    savedAt: envelope.savedAt,
+    draft: envelope.draft
+  };
 }
 
 function stringValue(value: unknown, fallback = "") {

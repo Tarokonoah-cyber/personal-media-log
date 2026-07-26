@@ -1,7 +1,7 @@
 import { createBackup, listBackups, restoreBackup } from "../_lib/backup";
 import { error, handleError, json, noContent, notFound, readJson, requireAccess } from "../_lib/http";
 import { parseCsv, parseJsonItems, toCsv } from "../_lib/importExport";
-import { createItem, exportItems, getItem, getPrivateFacetsForFilters, getStats, importItems, isLikelyDuplicate, listItems, quickUpdateItem, searchPrivateFacet, softDeleteItem, updateItem } from "../_lib/items";
+import { createItem, exportItems, findNormalizedCodeConflict, getItem, getPrivateFacetsForFilters, getStats, importItems, isLikelyDuplicate, listItems, quickUpdateItem, searchPrivateFacet, softDeleteItem, updateItem } from "../_lib/items";
 import { parseSmartAdd } from "../_lib/smartAdd";
 import { applyTmdbMetadata, searchTmdb } from "../_lib/tmdb";
 import { getPrivateQuality, ignorePrivateIssue, isPrivateIssueType, unignorePrivateIssue } from "../_lib/privateQuality";
@@ -27,6 +27,15 @@ export const onRequest: PagesFunction<Env, "path"> = async (context) => {
         privateOnly: true,
         includeFacets: false
       }), { headers: { "cache-control": "private, no-store" } });
+    }
+
+    if (method === "GET" && path.length === 2 && path[0] === "private" && path[1] === "code-conflict") {
+      const code = optional(url.searchParams.get("code"));
+      if (!code) return error(400, "code is required");
+      return json(
+        { conflict: await findNormalizedCodeConflict(context.env, code) },
+        { headers: { "cache-control": "private, no-store" } }
+      );
     }
 
     if (path[0] === "items") {

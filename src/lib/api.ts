@@ -1,4 +1,4 @@
-import type { BackupJob, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, PrivateFacetSearchResponse, PrivateFacets, PrivateIssueType, PrivateQualityResponse, SmartAddResponse, StatsResponse, TmdbSearchResponse } from "../types";
+import type { BackupJob, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, PrivateCodeConflictResponse, PrivateFacetSearchResponse, PrivateFacets, PrivateIssueType, PrivateQualityResponse, SmartAddResponse, StatsResponse, TmdbSearchResponse } from "../types";
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -58,6 +58,11 @@ export function getPrivateFacets(filters: ListFilters) {
 export function searchPrivateFacet(facet: "actress" | "tag" | "studio", query = "", limit = 30, signal?: AbortSignal) {
   const params = new URLSearchParams({ facet, q: query.trim(), limit: String(Math.min(50, Math.max(1, limit))) });
   return request<PrivateFacetSearchResponse>(`/api/private/facets?${params}`, { signal });
+}
+
+export function checkPrivateCodeConflict(code: string, signal?: AbortSignal) {
+  const params = new URLSearchParams({ code: code.trim() });
+  return request<PrivateCodeConflictResponse>(`/api/private/code-conflict?${params}`, { signal });
 }
 
 export function getPrivateQuality(issueType?: PrivateIssueType, page = 1, pageSize = 50, ignored = false) {

@@ -15,6 +15,10 @@ describe("private simple-add draft experience", () => {
   beforeEach(() => {
     window.localStorage.clear();
     window.history.replaceState({}, "", "/");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ conflict: null }), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    })));
   });
 
   afterEach(() => {
@@ -22,6 +26,7 @@ describe("private simple-add draft experience", () => {
     window.localStorage.clear();
     window.history.replaceState({}, "", "/");
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("restores an unfinished draft and identifies when it was saved", () => {
@@ -89,6 +94,59 @@ describe("private simple-add draft experience", () => {
     expect(screen.getByText("草稿已清除")).toBeVisible();
     expect(window.localStorage.getItem(PRIVATE_SIMPLE_ADD_DRAFT_KEY)).toBeNull();
   });
+
+  it("submits a typical FC2 entry without exposing low-value fields", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    renderPrivateModal({ onSubmit, knownTags: ["中出", "白虎"] });
+
+    fireEvent.change(screen.getByLabelText("番號"), { target: { value: "fc2 ppv 4851113" } });
+    await userEvent.click(screen.getByRole("radio", { name: "4 星" }));
+    await userEvent.click(screen.getByRole("button", { name: "神作" }));
+    fireEvent.change(screen.getByLabelText("快速筆記"), { target: { value: "快速完成一筆" } });
+    await userEvent.click(screen.getByRole("button", { name: "#中出" }));
+    await userEvent.click(screen.getByRole("button", { name: "新增" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      code: "FC2-PPV-4851113",
+      platform: "FC2",
+      maker: "FC2",
+      rating: 8,
+      quick_note: "快速完成一筆",
+      tags: ["中出"],
+      people: ["素人"]
+    }));
+  });
+
+  it("keeps the modal open and resets record fields after add-and-continue", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    renderPrivateModal({ onSubmit });
+    fireEvent.change(screen.getByLabelText("番號"), { target: { value: "FC2-PPV-100" } });
+    fireEvent.change(screen.getByLabelText("快速筆記"), { target: { value: "第一筆" } });
+
+    await userEvent.click(screen.getByRole("button", { name: "新增並繼續" }));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("番號")).toHaveValue("");
+    expect(screen.getByLabelText("快速筆記")).toHaveValue("");
+    expect(screen.getByRole("dialog", { name: "快速新增私密資料" })).toBeVisible();
+  });
+
+  it("warns about an existing code before submit and opens the existing item", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      conflict: { id: "item-existing", code: "FC2-PPV-200", title: "既有作品" }
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    })));
+    const onOpenExisting = vi.fn();
+    renderPrivateModal({ onOpenExisting });
+    fireEvent.change(screen.getByLabelText("番號"), { target: { value: "FC2-PPV-200" } });
+
+    expect(await screen.findByText("這個番號已存在")).toBeVisible();
+    expect(screen.getByRole("button", { name: "新增" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "開啟" }));
+    expect(onOpenExisting).toHaveBeenCalledWith("item-existing");
+  });
 });
 
 function PrivateAddHarness() {
@@ -100,18 +158,23 @@ function PrivateAddHarness() {
 
 function renderPrivateModal({
   onClose = vi.fn(),
-  onSubmit = vi.fn().mockResolvedValue(undefined)
+  onSubmit = vi.fn().mockResolvedValue(undefined),
+  onOpenExisting,
+  knownTags = []
 }: {
   onClose?: () => void;
   onSubmit?: (input: ItemInput) => Promise<void>;
+  onOpenExisting?: (id: string) => void;
+  knownTags?: string[];
 } = {}) {
   return render(
     <SimpleAddModal
       privateMode
-      knownTags={[]}
+      knownTags={knownTags}
       loading={false}
       onClose={onClose}
       onSubmit={onSubmit}
+      onOpenExisting={onOpenExisting}
     />
   );
 }

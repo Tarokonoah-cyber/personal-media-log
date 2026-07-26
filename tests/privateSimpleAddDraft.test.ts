@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { PRIVATE_DEFAULT_ACTRESS } from "../shared/privateModel";
 import {
+  PRIVATE_SIMPLE_ADD_LEGACY_DRAFT_KEY,
   PRIVATE_SIMPLE_ADD_DRAFT_KEY,
   clearPrivateSimpleAddDraft,
   emptyPrivateSimpleAddDraft,
@@ -30,7 +31,7 @@ describe("private simple-add draft storage", () => {
 
     expect(saved?.savedAt).toBe("2026-07-23T12:00:00.000Z");
     expect(readPrivateSimpleAddDraft(storage)).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       savedAt: "2026-07-23T12:00:00.000Z",
       draft: { ...draft, tags: ["人妻", "短髮"] }
     });
@@ -44,12 +45,28 @@ describe("private simple-add draft storage", () => {
     })).toBe(false);
   });
 
+  it("migrates a valid v1 draft to v2 without losing content", () => {
+    const storage = memoryStorage();
+    storage.setItem(PRIVATE_SIMPLE_ADD_LEGACY_DRAFT_KEY, JSON.stringify({
+      schemaVersion: 1,
+      savedAt: "2026-07-23T12:00:00.000Z",
+      draft: { code: "FC2-PPV-123", summary: "保留內容", tags: ["中出"] }
+    }));
+
+    expect(readPrivateSimpleAddDraft(storage)).toMatchObject({
+      schemaVersion: 2,
+      draft: { code: "FC2-PPV-123", summary: "保留內容", tags: ["中出"] }
+    });
+    expect(storage.getItem(PRIVATE_SIMPLE_ADD_DRAFT_KEY)).not.toBeNull();
+    expect(storage.getItem(PRIVATE_SIMPLE_ADD_LEGACY_DRAFT_KEY)).toBeNull();
+  });
+
   it("ignores invalid JSON and unknown schema versions", () => {
     const storage = memoryStorage();
     storage.setItem(PRIVATE_SIMPLE_ADD_DRAFT_KEY, "{broken");
     expect(readPrivateSimpleAddDraft(storage)).toBeNull();
     storage.setItem(PRIVATE_SIMPLE_ADD_DRAFT_KEY, JSON.stringify({
-      schemaVersion: 2,
+      schemaVersion: 3,
       savedAt: "2026-07-23T12:00:00.000Z",
       draft: { code: "FC2-PPV-123" }
     }));
