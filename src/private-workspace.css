@@ -1883,12 +1883,25 @@
 }
 
 .private-app-shell .private-workbench-v4 .private-identity-title {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   color: #46514b;
   font-size: inherit;
   font-weight: 400;
   line-height: inherit;
+  text-overflow: ellipsis;
+}
+
+.private-app-shell .private-workbench-v4 .private-identity-context {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 400;
   text-overflow: ellipsis;
 }
 
@@ -1910,6 +1923,11 @@
   background: var(--panel);
   outline: 2px solid #2d6a4f;
   outline-offset: -2px;
+}
+
+.private-app-shell .private-workbench-v4 .private-identity-editor.is-code-only,
+.private-app-shell .private-workbench-v4 .private-new-identity-editor.is-code-only {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .private-app-shell .private-workbench-v4 .private-identity-editor input,

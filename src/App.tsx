@@ -23,7 +23,7 @@ import { usePrivateCodeConflict } from "./hooks/usePrivateCodeConflict";
 import { applyMetadata, createItem, deleteItem, getItem, getPrivateFacets, listItems, listPrivateItems, parseSmartAdd, quickUpdateItem as quickUpdateItemApi, searchMetadata, updateItem } from "./lib/api";
 import { privateBatchTagPatch, retainVisibleSelection, runLimitedBatch, togglePageItemSelection, togglePageSelection, type BatchOperationResult } from "./lib/privateBatch";
 import { mergePrivateFilters } from "./lib/privateFilters";
-import { PRIVATE_DEFAULT_ACTRESS, isPrivateCollectionLevel, privateCollectionLevel, privateCollectionLevelLabels, privateCollectionLevels, privateCollectionPatch, privateRatingFromStars, privateStarsFromRating, type PrivateCollectionLevel } from "../shared/privateModel";
+import { PRIVATE_DEFAULT_ACTRESS, isPrivateCollectionLevel, normalizePlatform, privateCollectionLevel, privateCollectionLevelLabels, privateCollectionLevels, privateCollectionPatch, privateRatingFromStars, privateStarsFromRating, type PrivateCollectionLevel } from "../shared/privateModel";
 import { createSavedView, readSavedViews, savedViewSignature, writeSavedViews, type SavedPrivateView } from "./lib/savedViews";
 import { toItemInput } from "./lib/itemTransforms";
 import { emptyPrivateRowDraft, privateCellPatch, privateCellValue, privateIdentityLabel, privateIdentityPatch, privateIdentityValue, privateRowDraftToInput, type PrivateEditableColumn, type PrivateIdentityDraft, type PrivateRowDraft } from "./lib/privateSpreadsheet";
@@ -43,7 +43,21 @@ import {
   removeStalePrivateSimpleAddHistoryEntry
 } from "./lib/privateSimpleAddHistory";
 import { privateAddDefaultsForCode } from "./lib/privateQuickAdd";
-import { defaultPrivateTablePreferences, normalizePrivateTablePreferences, privateColumnDefinitions, privateColumnMap, readPrivateTablePreferences, savePrivateTablePreferences, type PrivateColumnDefinition, type PrivateColumnId, type PrivateTablePreferences } from "./lib/privateTablePreferences";
+import {
+  defaultPrivateTablePreferences,
+  normalizePrivateTablePreferences,
+  privateColumnDefinitions,
+  privateColumnLabel,
+  privateColumnMap,
+  privateTableModeFromPlatformFilters,
+  readPrivateTablePreferenceProfiles,
+  savePrivateTablePreferenceProfiles,
+  type PrivateColumnDefinition,
+  type PrivateColumnId,
+  type PrivateTableMode,
+  type PrivateTablePreferenceProfiles,
+  type PrivateTablePreferences
+} from "./lib/privateTablePreferences";
 import { isPrivateItem, isPrivateLibraryLabel, privateItemDetails, PRIVATE_LIBRARY_LABEL, PRIVATE_RECOMMENDED_LABEL, PRIVATE_RECOMMENDED_TAG } from "./lib/privacy";
 import { parseQuickEntry } from "./lib/quickParse";
 import { collectionLevelOptions } from "./lib/reflection";
@@ -105,7 +119,7 @@ const displayDensities: DisplayDensity[] = ["comfortable", "standard", "compact"
 const quickStatusViews = ["home", "watching", "plan_to_watch", "completed"];
 
 function initialPrivatePageSize() {
-  return readPrivateTablePreferences().pageSize;
+  return readPrivateTablePreferenceProfiles().all.pageSize;
 }
 
 export default function App() {
@@ -922,6 +936,7 @@ export default function App() {
           privateMode={includePrivate}
           knownTags={includePrivate ? privateTagSuggestions : publicTagSuggestions}
           privateFacets={includePrivate ? privateFacets : null}
+          privateTableMode={privateActive ? privateTableModeFromPlatformFilters(filters.platformFilters) : "all"}
           loading={actionLoading}
           onClose={() => setSimpleAddOpen(false)}
           onSubmit={submitSimpleAdd}
@@ -1318,9 +1333,10 @@ function PrivateWorkbenchV3({
   onBatchDelete: (items: MediaItem[]) => Promise<BatchOperationResult>;
   onApplyFilters: (filters: Partial<ListFilters>) => void;
 }) {
+  const tableMode = privateTableModeFromPlatformFilters(filters.platformFilters);
   const [searchDraft, setSearchDraft] = useState(filters.query);
   const [columnsOpen, setColumnsOpen] = useState(false);
-  const [columnPreferences, setColumnPreferences] = useState<PrivateTablePreferences>(() => readPrivateTablePreferences());
+  const [preferenceProfiles, setPreferenceProfiles] = useState<PrivateTablePreferenceProfiles>(() => readPrivateTablePreferenceProfiles());
   const [savedViews, setSavedViews] = useState<SavedPrivateView<PrivateTablePreferences>[]>(() => readSavedViews<PrivateTablePreferences>());
   const [savedViewsOpen, setSavedViewsOpen] = useState(false);
   const [savedViewName, setSavedViewName] = useState("");
@@ -1328,10 +1344,11 @@ function PrivateWorkbenchV3({
   const [savedViewError, setSavedViewError] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [addingRow, setAddingRow] = useState(false);
-  const [newRow, setNewRow] = useState<PrivateRowDraft>(() => emptyPrivateRowDraft());
+  const [newRow, setNewRow] = useState<PrivateRowDraft>(() => emptyPrivateRowDraftForMode(tableMode));
   const [newRowBusy, setNewRowBusy] = useState(false);
   const [newRowError, setNewRowError] = useState("");
   const [sheetFeedback, setSheetFeedback] = useState<PrivateSheetFeedback | null>(null);
+  const columnPreferences = preferenceProfiles[tableMode];
   const visibleColumns = useMemo(
     () => columnPreferences.order.filter((id) => columnPreferences.visible[id]).map((id) => privateColumnMap[id]),
     [columnPreferences]
@@ -1357,8 +1374,14 @@ function PrivateWorkbenchV3({
   }, [filters.query, onPatchFilters, searchDraft]);
 
   useEffect(() => {
-    savePrivateTablePreferences({ ...columnPreferences, pageSize: filters.pageSize });
-  }, [columnPreferences, filters.pageSize]);
+    savePrivateTablePreferenceProfiles(preferenceProfiles);
+  }, [preferenceProfiles]);
+
+  useEffect(() => {
+    setAddingRow(false);
+    setNewRow(emptyPrivateRowDraftForMode(tableMode));
+    setNewRowError("");
+  }, [tableMode]);
 
   useEffect(() => {
     if (!sheetFeedback) return;
@@ -1367,8 +1390,22 @@ function PrivateWorkbenchV3({
   }, [sheetFeedback]);
 
   function updatePageSize(pageSize: number) {
-    setColumnPreferences((current) => normalizePrivateTablePreferences({ ...current, pageSize }));
+    setPreferenceProfiles((current) => ({
+      all: normalizePrivateTablePreferences({ ...current.all, pageSize }, "all"),
+      fc2: normalizePrivateTablePreferences({ ...current.fc2, pageSize }, "fc2"),
+      jav: normalizePrivateTablePreferences({ ...current.jav, pageSize }, "jav")
+    }));
     onPatchFilters({ pageSize, page: 1 });
+  }
+
+  function setColumnPreferences(next: PrivateTablePreferences | ((current: PrivateTablePreferences) => PrivateTablePreferences)) {
+    setPreferenceProfiles((current) => {
+      const resolved = typeof next === "function" ? next(current[tableMode]) : next;
+      return {
+        ...current,
+        [tableMode]: normalizePrivateTablePreferences(resolved, tableMode)
+      };
+    });
   }
 
   function toggleColumn(id: PrivateColumnId) {
@@ -1376,11 +1413,14 @@ function PrivateWorkbenchV3({
     setColumnPreferences((current) => normalizePrivateTablePreferences({
       ...current,
       visible: { ...current.visible, [id]: !current.visible[id] }
-    }));
+    }, tableMode));
   }
 
   function resetColumns() {
-    setColumnPreferences(defaultPrivateTablePreferences());
+    setColumnPreferences({
+      ...defaultPrivateTablePreferences(tableMode),
+      pageSize: filters.pageSize
+    });
   }
 
   function moveConfiguredColumn(id: PrivateColumnId, offset: -1 | 1) {
@@ -1390,7 +1430,7 @@ function PrivateWorkbenchV3({
       if (index < 0 || target < 0 || target >= current.order.length) return current;
       const order = [...current.order];
       [order[index], order[target]] = [order[target], order[index]];
-      return normalizePrivateTablePreferences({ ...current, order });
+      return normalizePrivateTablePreferences({ ...current, order }, tableMode);
     });
   }
 
@@ -1405,7 +1445,7 @@ function PrivateWorkbenchV3({
   }
 
   function beginNewRow() {
-    setNewRow(emptyPrivateRowDraft());
+    setNewRow(emptyPrivateRowDraftForMode(tableMode));
     setNewRowError("");
     setSheetFeedback(null);
     setAddingRow(true);
@@ -1429,7 +1469,7 @@ function PrivateWorkbenchV3({
     try {
       await onCreate(privateRowDraftToInput(newRow));
       setAddingRow(false);
-      setNewRow(emptyPrivateRowDraft());
+      setNewRow(emptyPrivateRowDraftForMode(tableMode));
       setSheetFeedback({ message: "新增完成", tone: "success" });
     } catch (err) {
       const message = err instanceof Error ? err.message : "新增失敗";
@@ -1469,7 +1509,8 @@ function PrivateWorkbenchV3({
   }
 
   function applySavedView(view: SavedPrivateView<PrivateTablePreferences>) {
-    const preferences = normalizePrivateTablePreferences(view.tablePreferences);
+    const savedMode = privateTableModeFromPlatformFilters(view.filters.platformFilters);
+    const preferences = normalizePrivateTablePreferences(view.tablePreferences, savedMode);
     const restoredFilters = {
       ...view.filters,
       privateStatus: "all",
@@ -1480,7 +1521,13 @@ function PrivateWorkbenchV3({
       page: 1,
       pageSize: preferences.pageSize
     } as Partial<ListFilters>;
-    setColumnPreferences(preferences); onApplyFilters(restoredFilters); setSearchDraft(String(view.filters.query || "")); setActiveSavedView(view.id); setSavedViewsOpen(false);
+    setPreferenceProfiles((current) => ({
+      all: normalizePrivateTablePreferences({ ...current.all, pageSize: preferences.pageSize }, "all"),
+      fc2: normalizePrivateTablePreferences({ ...current.fc2, pageSize: preferences.pageSize }, "fc2"),
+      jav: normalizePrivateTablePreferences({ ...current.jav, pageSize: preferences.pageSize }, "jav"),
+      [savedMode]: preferences
+    }));
+    onApplyFilters(restoredFilters); setSearchDraft(String(view.filters.query || "")); setActiveSavedView(view.id); setSavedViewsOpen(false);
   }
 
   function updateSavedView(view: SavedPrivateView<PrivateTablePreferences>) {
@@ -1520,7 +1567,7 @@ function PrivateWorkbenchV3({
             <button className="filter-toggle column-toggle" onClick={() => setColumnsOpen((value) => !value)}><Columns3 size={16} />欄位</button>
             {columnsOpen && (
               <div className="private-columns-popover" role="dialog" aria-label="欄位設定">
-                <strong>資料表欄位</strong>
+                <strong>{tableMode === "all" ? "全部資料欄位" : `${tableMode === "fc2" ? "FC2" : "JAV"} 欄位`}</strong>
                 <p>勾選顯示，使用箭頭調整順序；表頭邊緣可拖曳欄寬。</p>
                 {columnPreferences.order.map((id, index) => {
                   const column = privateColumnMap[id];
@@ -1528,10 +1575,10 @@ function PrivateWorkbenchV3({
                     <div key={column.id} className="private-column-option">
                       <label>
                         <input type="checkbox" checked={columnPreferences.visible[column.id]} disabled={column.required} onChange={() => toggleColumn(column.id)} />
-                        <span>{column.label}</span>
+                        <span>{privateColumnLabel(column.id, tableMode)}</span>
                       </label>
-                      <button type="button" className="icon-button" onClick={() => moveConfiguredColumn(column.id, -1)} disabled={index === 0} title="上移" aria-label={`${column.label}上移`}><ArrowUp size={13} /></button>
-                      <button type="button" className="icon-button" onClick={() => moveConfiguredColumn(column.id, 1)} disabled={index === columnPreferences.order.length - 1} title="下移" aria-label={`${column.label}下移`}><ArrowDown size={13} /></button>
+                      <button type="button" className="icon-button" onClick={() => moveConfiguredColumn(column.id, -1)} disabled={index === 0} title="上移" aria-label={`${privateColumnLabel(column.id, tableMode)}上移`}><ArrowUp size={13} /></button>
+                      <button type="button" className="icon-button" onClick={() => moveConfiguredColumn(column.id, 1)} disabled={index === columnPreferences.order.length - 1} title="下移" aria-label={`${privateColumnLabel(column.id, tableMode)}下移`}><ArrowDown size={13} /></button>
                     </div>
                   );
                 })}
@@ -1583,6 +1630,7 @@ function PrivateWorkbenchV3({
             <PrivateMobileCards items={items} selectedIds={selectedIds} onToggleSelected={(id) => setSelectedIds((current) => togglePageItemSelection(current, id))} onSelect={onSelect} />
             <PrivateDataTable
               items={items}
+              tableMode={tableMode}
               columns={visibleColumns}
               preferences={columnPreferences}
               sort={filters.sort || ""}
@@ -1656,6 +1704,7 @@ type PrivateSheetFeedback = {
 
 function PrivateDataTable({
   items,
+  tableMode,
   columns,
   preferences,
   sort,
@@ -1681,6 +1730,7 @@ function PrivateDataTable({
   onStatusChange
 }: {
   items: MediaItem[];
+  tableMode: PrivateTableMode;
   columns: PrivateColumnDefinition[];
   preferences: PrivateTablePreferences;
   sort: ListFilters["sort"];
@@ -1773,7 +1823,7 @@ function PrivateDataTable({
     onPreferencesChange((current) => normalizePrivateTablePreferences({
       ...current,
       widths: { ...current.widths, [column.id]: Math.min(column.maxWidth, Math.max(column.minWidth, width)) }
-    }));
+    }, tableMode));
   }
 
   function startResize(column: PrivateColumnDefinition, event: React.MouseEvent<HTMLSpanElement>) {
@@ -1801,7 +1851,7 @@ function PrivateDataTable({
       const order = current.order.filter((id) => id !== dragColumn);
       const targetIndex = order.indexOf(target);
       order.splice(targetIndex < 0 ? order.length : targetIndex, 0, dragColumn);
-      return normalizePrivateTablePreferences({ ...current, order });
+      return normalizePrivateTablePreferences({ ...current, order }, tableMode);
     });
     setDragColumn(null);
   }
@@ -1937,7 +1987,8 @@ function PrivateDataTable({
   function handleIdentityKeyDown(event: React.KeyboardEvent<HTMLInputElement>, item: MediaItem) {
     const position = { itemId: item.id, column: "identity" } satisfies PrivateCellPosition;
     const activeField = event.currentTarget.getAttribute("aria-label") === "編輯片名" ? "title" : "code";
-    if (event.key === "Tab" && ((activeField === "code" && !event.shiftKey) || (activeField === "title" && event.shiftKey))) {
+    const hasTitleField = Boolean(event.currentTarget.parentElement?.querySelector('input[aria-label="編輯片名"]'));
+    if (hasTitleField && event.key === "Tab" && ((activeField === "code" && !event.shiftKey) || (activeField === "title" && event.shiftKey))) {
       event.preventDefault();
       event.stopPropagation();
       const targetLabel = activeField === "code" ? "編輯片名" : "編輯番號";
@@ -2101,11 +2152,11 @@ function PrivateDataTable({
                     event.preventDefault();
                     onSortTitle();
                   }}>
-                    <span>{column.label}</span>
+                    <span>{privateColumnLabel(column.id, tableMode)}</span>
                     <span className="private-sort-direction" aria-hidden="true">{sort === "displayName" ? order === "desc" ? <ArrowDown size={13} /> : <ArrowUp size={13} /> : null}</span>
                   </button>
                 ) : (
-                  <span>{column.label}</span>
+                  <span>{privateColumnLabel(column.id, tableMode)}</span>
                 )}
                 <span className="private-column-resize" onMouseDown={(event) => startResize(column, event)} onDoubleClick={() => autosize(column)} title="拖曳調整寬度，雙擊自動寬度" />
               </th>
@@ -2116,6 +2167,7 @@ function PrivateDataTable({
         <tbody>
           {addingRow && (
             <PrivateNewSpreadsheetRow
+              tableMode={tableMode}
               columns={columns}
               draft={newRow}
               busy={newRowBusy}
@@ -2156,6 +2208,7 @@ function PrivateDataTable({
                       onPaste={(event) => handleCellPaste(event, item, column.id)}
                     >
                       <PrivateTableCell
+                        tableMode={tableMode}
                         column={column.id}
                         item={item}
                         active={isActive}
@@ -2190,6 +2243,7 @@ function PrivateDataTable({
 }
 
 function PrivateTableCell({
+  tableMode,
   column,
   item,
   active,
@@ -2207,6 +2261,7 @@ function PrivateTableCell({
   onIdentityKeyDown,
   onCommit
 }: {
+  tableMode: PrivateTableMode;
   column: PrivateColumnId;
   item: MediaItem;
   active: boolean;
@@ -2227,9 +2282,11 @@ function PrivateTableCell({
 }) {
   if (column === "identity") {
     const identity = privateIdentityValue(item);
+    const showTitle = tableMode !== "fc2";
+    const context = tableMode === "all" ? privateJavIdentityContext(item) : "";
     if (editing) {
       return (
-        <span className="private-identity-editor" onBlur={onIdentityBlur}>
+        <span className={`private-identity-editor${showTitle ? "" : " is-code-only"}`} onBlur={onIdentityBlur}>
           <input
             autoFocus
             value={identityDraft.code}
@@ -2239,14 +2296,16 @@ function PrivateTableCell({
             placeholder="番號"
             aria-label="編輯番號"
           />
-          <input
-            value={identityDraft.title}
-            disabled={pending}
-            onChange={(event) => onIdentityDraftChange({ ...identityDraft, title: event.target.value })}
-            onKeyDown={onIdentityKeyDown}
-            placeholder="片名可留空"
-            aria-label="編輯片名"
-          />
+          {showTitle && (
+            <input
+              value={identityDraft.title}
+              disabled={pending}
+              onChange={(event) => onIdentityDraftChange({ ...identityDraft, title: event.target.value })}
+              onKeyDown={onIdentityKeyDown}
+              placeholder="片名可留空"
+              aria-label="編輯片名"
+            />
+          )}
           {error && <em role="alert">{error}</em>}
         </span>
       );
@@ -2254,11 +2313,12 @@ function PrivateTableCell({
     return (
       <span
         className={`private-identity-value${pending ? " is-saving" : ""}`}
-        title={privateIdentityLabel(item) || "雙擊編輯"}
+        title={[showTitle ? privateIdentityLabel(item) : identity.code, context].filter(Boolean).join(" · ") || "雙擊編輯"}
         onDoubleClick={onBeginEdit}
       >
         <strong>{identity.code}</strong>
-        {identity.title && <><span className="private-identity-separator">—</span><span className="private-identity-title">{identity.title}</span></>}
+        {showTitle && identity.title && <><span className="private-identity-separator">—</span><span className="private-identity-title">{identity.title}</span></>}
+        {context && <span className="private-identity-context">{context}</span>}
       </span>
     );
   }
@@ -2326,7 +2386,28 @@ function estimatePrivateColumnWidth(column: PrivateColumnId, items: MediaItem[])
   return maxLength * 8 + 34;
 }
 
-function PrivateNewSpreadsheetRow({ columns, draft, busy, error, knownTags, onChange, onSubmit, onCancel }: {
+function emptyPrivateRowDraftForMode(mode: PrivateTableMode): PrivateRowDraft {
+  const draft = emptyPrivateRowDraft();
+  if (mode === "fc2") {
+    return {
+      ...draft,
+      actress: PRIVATE_DEFAULT_ACTRESS,
+      platform: "FC2",
+      maker: "FC2"
+    };
+  }
+  if (mode === "jav") {
+    return {
+      ...draft,
+      actress: PRIVATE_DEFAULT_ACTRESS,
+      platform: "JAV"
+    };
+  }
+  return draft;
+}
+
+function PrivateNewSpreadsheetRow({ tableMode, columns, draft, busy, error, knownTags, onChange, onSubmit, onCancel }: {
+  tableMode: PrivateTableMode;
   columns: PrivateColumnDefinition[];
   draft: PrivateRowDraft;
   busy: boolean;
@@ -2349,11 +2430,13 @@ function PrivateNewSpreadsheetRow({ columns, draft, busy, error, knownTags, onCh
 
   function changeCode(value: string, normalize = false) {
     const defaults = privateAddDefaultsForCode(value);
+    const modePlatform = tableMode === "fc2" ? "FC2" : tableMode === "jav" ? "JAV" : defaults.platform === "unknown" ? "" : defaults.platform;
     patch({
       code: normalize ? defaults.code : value,
-      platform: defaults.platform === "unknown" ? "" : defaults.platform,
-      maker: touchedAutofill.maker ? draft.maker : defaults.maker,
-      actress: touchedAutofill.actress ? draft.actress : defaults.actress
+      title: tableMode === "fc2" ? "" : draft.title,
+      platform: modePlatform,
+      maker: touchedAutofill.maker ? draft.maker : tableMode === "fc2" ? "FC2" : tableMode === "jav" ? draft.maker : defaults.maker,
+      actress: touchedAutofill.actress ? draft.actress : PRIVATE_DEFAULT_ACTRESS
     });
   }
 
@@ -2368,7 +2451,7 @@ function PrivateNewSpreadsheetRow({ columns, draft, busy, error, knownTags, onCh
   }
 
   function cell(column: PrivateColumnId) {
-    if (column === "identity") return <span className="private-new-identity-editor"><input autoFocus value={draft.code} onChange={(event) => changeCode(event.target.value)} onBlur={(event) => changeCode(event.target.value, true)} onKeyDown={handleKeyDown} placeholder="輸入番號" aria-label="新資料番號" /><input value={draft.title} onChange={(event) => patch({ title: event.target.value })} onKeyDown={handleKeyDown} placeholder="片名可留空" aria-label="新資料片名" /></span>;
+    if (column === "identity") return <span className={`private-new-identity-editor${tableMode === "fc2" ? " is-code-only" : ""}`}><input autoFocus value={draft.code} onChange={(event) => changeCode(event.target.value)} onBlur={(event) => changeCode(event.target.value, true)} onKeyDown={handleKeyDown} placeholder="輸入番號" aria-label="新資料番號" />{tableMode !== "fc2" && <input value={draft.title} onChange={(event) => patch({ title: event.target.value })} onKeyDown={handleKeyDown} placeholder="片名可留空" aria-label="新資料片名" />}</span>;
     if (column === "rating") return <PrivateStarRating value={privateRatingFromStars(draft.rating)} compact label="新資料評分" onChange={(rating) => patch({ rating: rating === null ? "" : String(privateStarsFromRating(rating)) })} onKeyDown={handleKeyDown} />;
     if (column === "favorite") return <select value={draft.collection} onChange={(event) => patch({ collection: event.target.value as PrivateCollectionLevel })} onKeyDown={handleKeyDown} aria-label="新資料收藏">{privateCollectionLevels.map((value) => <option key={value} value={value}>{privateCollectionLevelLabels[value]}</option>)}</select>;
     if (column === "actress") return <input value={draft.actress} onChange={(event) => { setTouchedAutofill((current) => ({ ...current, actress: true })); patch({ actress: event.target.value }); }} onKeyDown={handleKeyDown} placeholder="多人用逗號分隔" aria-label="新資料女優" />;
@@ -2460,9 +2543,10 @@ function PrivateCardList({ items, onSelect }: { items: MediaItem[]; onSelect: (i
 
 function PrivateMobileCard({ item, onSelect, desktop = false, selected = false, onToggleSelected }: { item: MediaItem; onSelect: (item: MediaItem) => void; desktop?: boolean; selected?: boolean; onToggleSelected?: (id: string) => void }) {
   const details = privateItemDetails(item);
-  const title = details.title !== "-" && details.title !== details.code ? details.title : "";
-  const source = Array.from(new Set([item.platform, item.maker || details.studio].map((value) => (value || "").trim()).filter((value) => value && value !== "-"))).join(" · ");
-  const performers = details.performers === "-" ? PRIVATE_DEFAULT_ACTRESS : details.performers;
+  const itemMode = privateTableModeForItem(item);
+  const title = itemMode !== "fc2" && details.title !== "-" && details.title !== details.code ? details.title : "";
+  const source = privateCardSource(item, details.studio, itemMode);
+  const performers = itemMode === "fc2" ? "" : details.performers === "-" ? PRIVATE_DEFAULT_ACTRESS : details.performers;
   const releaseDate = item.release_date?.slice(0, 10) || "";
   return (
     <article className={`${desktop ? "private-mobile-card private-desktop-card" : "private-mobile-card"}${selected ? " selected" : ""}`} onClick={() => onSelect(item)}>
@@ -2482,7 +2566,7 @@ function PrivateMobileCard({ item, onSelect, desktop = false, selected = false, 
       </div>
       <div className="private-card-meta">
         {source && <span>{source}</span>}
-        <span>{performers}</span>
+        {performers && <span>{performers}</span>}
         {releaseDate && <time dateTime={releaseDate}>{releaseDate}</time>}
       </div>
       {item.quick_note && <p className="private-card-note">{item.quick_note}</p>}
@@ -2590,6 +2674,39 @@ function privateSourceLabel(item: MediaItem) {
   const maker = (item.maker || "").trim();
   if (platform && maker && platform.toLowerCase() !== maker.toLowerCase()) return `${platform} / ${maker}`;
   return platform || maker;
+}
+
+function privateTableModeForItem(item: MediaItem): PrivateTableMode {
+  const platform = normalizePlatform({
+    code: item.code,
+    title: item.official_title || item.raw_title,
+    platform: item.platform,
+    maker: item.maker
+  });
+  if (platform === "FC2") return "fc2";
+  if (platform === "JAV") return "jav";
+  return "all";
+}
+
+function privateJavIdentityContext(item: MediaItem) {
+  if (privateTableModeForItem(item) !== "jav") return "";
+  const details = privateItemDetails(item);
+  const maker = (item.maker || details.studio || "").trim();
+  return Array.from(new Set([
+    details.performers === "-" ? "" : details.performers,
+    maker.toUpperCase() === "JAV" ? "" : maker
+  ].filter(Boolean))).join(" · ");
+}
+
+function privateCardSource(item: MediaItem, fallbackStudio: string, mode: PrivateTableMode) {
+  if (mode === "fc2") return "";
+  if (mode === "jav") {
+    const maker = (item.maker || fallbackStudio || "").trim();
+    return maker.toUpperCase() === "JAV" ? "" : maker;
+  }
+  return Array.from(new Set([item.platform, item.maker || fallbackStudio]
+    .map((value) => (value || "").trim())
+    .filter((value) => value && value !== "-"))).join(" · ");
 }
 
 function privateFilterSummary(filters: ListFilters) {
@@ -2725,6 +2842,7 @@ type SimpleAddModalProps = {
   privateMode: boolean;
   knownTags?: string[];
   privateFacets?: PrivateFacets | null;
+  privateTableMode?: PrivateTableMode;
   loading: boolean;
   onClose: () => void;
   onSubmit: (input: ItemInput) => Promise<unknown>;
@@ -2737,6 +2855,7 @@ export function SimpleAddModal(props: SimpleAddModalProps) {
       <PrivateQuickAddModal
         knownTags={props.knownTags}
         facets={props.privateFacets}
+        tableMode={props.privateTableMode}
         loading={props.loading}
         onClose={props.onClose}
         onSubmit={props.onSubmit}

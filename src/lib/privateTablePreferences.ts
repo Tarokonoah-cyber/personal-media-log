@@ -1,4 +1,5 @@
 export type PrivateColumnId = "identity" | "rating" | "favorite" | "actress" | "maker" | "tags" | "releaseDate" | "summary";
+export type PrivateTableMode = "all" | "fc2" | "jav";
 
 export type PrivateColumnDefinition = {
   id: PrivateColumnId;
@@ -17,6 +18,8 @@ export type PrivateTablePreferences = {
   pageSize: number;
 };
 
+export type PrivateTablePreferenceProfiles = Record<PrivateTableMode, PrivateTablePreferences>;
+
 type PrivateTablePreferencesInput = {
   order?: string[];
   widths?: Record<string, number>;
@@ -24,7 +27,12 @@ type PrivateTablePreferencesInput = {
   pageSize?: number;
 };
 
-export const PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v5";
+type PrivateTablePreferenceProfilesInput = {
+  profiles?: Partial<Record<PrivateTableMode, PrivateTablePreferencesInput>>;
+};
+
+export const PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v6";
+export const LEGACY_V5_PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v5";
 export const LEGACY_V4_PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v4";
 export const LEGACY_V3_PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v3";
 export const LEGACY_PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v2";
@@ -43,22 +51,64 @@ export const privateColumnDefinitions: PrivateColumnDefinition[] = [
 export const privateColumnMap = Object.fromEntries(privateColumnDefinitions.map((column) => [column.id, column])) as Record<PrivateColumnId, PrivateColumnDefinition>;
 
 const privateColumnIds = privateColumnDefinitions.map((column) => column.id);
+const privateModeOrder: Record<PrivateTableMode, PrivateColumnId[]> = {
+  all: ["identity", "rating", "favorite", "tags", "releaseDate", "summary", "actress", "maker"],
+  fc2: ["identity", "rating", "favorite", "tags", "releaseDate", "summary", "actress", "maker"],
+  jav: ["identity", "rating", "favorite", "actress", "maker", "releaseDate", "tags", "summary"]
+};
+const privateModeVisible: Record<PrivateTableMode, PrivateColumnId[]> = {
+  all: ["identity", "rating", "favorite", "tags", "releaseDate", "summary"],
+  fc2: ["identity", "rating", "favorite", "tags", "releaseDate", "summary"],
+  jav: ["identity", "rating", "favorite", "actress", "maker", "releaseDate", "tags", "summary"]
+};
 const legacySeparatedDefaults = {
   v3: { code: 168, title: 260 },
   v2: { code: 172, title: 300 }
 };
 
-export function defaultPrivateTablePreferences(): PrivateTablePreferences {
+export function privateTableModeFromPlatformFilters(value?: string | null): PrivateTableMode {
+  const platforms = String(value || "")
+    .split(",")
+    .map((entry) => entry.trim().toUpperCase())
+    .filter(Boolean);
+  if (platforms.length !== 1) return "all";
+  if (platforms[0] === "FC2") return "fc2";
+  if (platforms[0] === "JAV") return "jav";
+  return "all";
+}
+
+export function privateColumnLabel(id: PrivateColumnId, mode: PrivateTableMode) {
+  if (id === "identity" && mode === "fc2") return "FC2 番號";
+  if (id === "identity" && mode === "all") return "作品";
+  return privateColumnMap[id].label;
+}
+
+export function defaultPrivateTablePreferences(mode: PrivateTableMode = "all"): PrivateTablePreferences {
+  const visibleColumns = new Set(privateModeVisible[mode]);
   return {
-    order: [...privateColumnIds],
-    widths: Object.fromEntries(privateColumnDefinitions.map((column) => [column.id, column.width])) as Record<PrivateColumnId, number>,
-    visible: Object.fromEntries(privateColumnDefinitions.map((column) => [column.id, !column.defaultHidden])) as Record<PrivateColumnId, boolean>,
+    order: [...privateModeOrder[mode]],
+    widths: Object.fromEntries(privateColumnDefinitions.map((column) => [
+      column.id,
+      column.id === "identity" && mode === "fc2" ? 360 : column.width
+    ])) as Record<PrivateColumnId, number>,
+    visible: Object.fromEntries(privateColumnDefinitions.map((column) => [column.id, visibleColumns.has(column.id)])) as Record<PrivateColumnId, boolean>,
     pageSize: 100
   };
 }
 
-export function normalizePrivateTablePreferences(value?: PrivateTablePreferencesInput | Partial<PrivateTablePreferences> | null): PrivateTablePreferences {
-  const defaults = defaultPrivateTablePreferences();
+export function defaultPrivateTablePreferenceProfiles(): PrivateTablePreferenceProfiles {
+  return {
+    all: defaultPrivateTablePreferences("all"),
+    fc2: defaultPrivateTablePreferences("fc2"),
+    jav: defaultPrivateTablePreferences("jav")
+  };
+}
+
+export function normalizePrivateTablePreferences(
+  value?: PrivateTablePreferencesInput | Partial<PrivateTablePreferences> | null,
+  mode: PrivateTableMode = "all"
+): PrivateTablePreferences {
+  const defaults = defaultPrivateTablePreferences(mode);
   const requestedOrder = value?.order || [];
   const migratedOrder = requestedOrder
     .map((id) => id === "code" || id === "title" ? "identity" : id === "watchedAt" ? "releaseDate" : id)
@@ -70,7 +120,7 @@ export function normalizePrivateTablePreferences(value?: PrivateTablePreferences
   const order = [
     "identity" as const,
     ...migratedOrder.filter((id, index): id is PrivateColumnId => id !== "identity" && privateColumnIds.includes(id as PrivateColumnId) && migratedOrder.indexOf(id) === index),
-    ...privateColumnIds.filter((id) => id !== "identity" && !migratedOrder.includes(id))
+    ...privateModeOrder[mode].filter((id) => id !== "identity" && !migratedOrder.includes(id))
   ];
   const widths = { ...defaults.widths };
   const visible = { ...defaults.visible };
@@ -97,6 +147,14 @@ export function normalizePrivateTablePreferences(value?: PrivateTablePreferences
   };
 }
 
+export function normalizePrivateTablePreferenceProfiles(value?: PrivateTablePreferenceProfilesInput | null): PrivateTablePreferenceProfiles {
+  return {
+    all: normalizePrivateTablePreferences(value?.profiles?.all, "all"),
+    fc2: normalizePrivateTablePreferences(value?.profiles?.fc2, "fc2"),
+    jav: normalizePrivateTablePreferences(value?.profiles?.jav, "jav")
+  };
+}
+
 export function migratePrivateTablePreferencesV3(value?: PrivateTablePreferencesInput | null) {
   return normalizePrivateTablePreferences(value);
 }
@@ -109,32 +167,77 @@ export function migratePrivateTablePreferencesV2(value?: PrivateTablePreferences
   return normalizePrivateTablePreferences(value);
 }
 
-export function readPrivateTablePreferences(storage: Pick<Storage, "getItem" | "setItem"> | undefined = typeof localStorage === "undefined" ? undefined : localStorage) {
-  if (!storage) return defaultPrivateTablePreferences();
+export function readPrivateTablePreferenceProfiles(storage: Pick<Storage, "getItem" | "setItem"> | undefined = typeof localStorage === "undefined" ? undefined : localStorage) {
+  if (!storage) return defaultPrivateTablePreferenceProfiles();
   try {
     const current = storage.getItem(PRIVATE_TABLE_PREFERENCES_KEY);
-    if (current) return normalizePrivateTablePreferences(JSON.parse(current));
+    if (current) return normalizePrivateTablePreferenceProfiles(JSON.parse(current));
+    const legacyV5 = storage.getItem(LEGACY_V5_PRIVATE_TABLE_PREFERENCES_KEY);
     const legacyV4 = storage.getItem(LEGACY_V4_PRIVATE_TABLE_PREFERENCES_KEY);
     const legacyV3 = storage.getItem(LEGACY_V3_PRIVATE_TABLE_PREFERENCES_KEY);
     const legacyV2 = storage.getItem(LEGACY_PRIVATE_TABLE_PREFERENCES_KEY);
-    const migrated = legacyV4
-      ? migratePrivateTablePreferencesV4(JSON.parse(legacyV4))
-      : legacyV3
-        ? migratePrivateTablePreferencesV3(JSON.parse(legacyV3))
-        : legacyV2
-          ? migratePrivateTablePreferencesV2(JSON.parse(legacyV2))
-          : null;
-    if (!migrated) return defaultPrivateTablePreferences();
-    storage.setItem(PRIVATE_TABLE_PREFERENCES_KEY, JSON.stringify(migrated));
-    return migrated;
+    const migrated = legacyV5
+      ? normalizePrivateTablePreferences(JSON.parse(legacyV5))
+      : legacyV4
+        ? migratePrivateTablePreferencesV4(JSON.parse(legacyV4))
+        : legacyV3
+          ? migratePrivateTablePreferencesV3(JSON.parse(legacyV3))
+          : legacyV2
+            ? migratePrivateTablePreferencesV2(JSON.parse(legacyV2))
+            : null;
+    if (!migrated) return defaultPrivateTablePreferenceProfiles();
+    const profiles = profilesFromLegacyPreference(migrated);
+    storage.setItem(PRIVATE_TABLE_PREFERENCES_KEY, JSON.stringify({ profiles }));
+    return profiles;
   } catch {
-    return defaultPrivateTablePreferences();
+    return defaultPrivateTablePreferenceProfiles();
   }
 }
 
-export function savePrivateTablePreferences(preferences: PrivateTablePreferences, storage: Pick<Storage, "setItem"> | undefined = typeof localStorage === "undefined" ? undefined : localStorage) {
+export function readPrivateTablePreferences(storage: Pick<Storage, "getItem" | "setItem"> | undefined = typeof localStorage === "undefined" ? undefined : localStorage) {
+  return readPrivateTablePreferenceProfiles(storage).all;
+}
+
+export function savePrivateTablePreferenceProfiles(
+  profiles: PrivateTablePreferenceProfiles,
+  storage: Pick<Storage, "setItem"> | undefined = typeof localStorage === "undefined" ? undefined : localStorage
+) {
   if (!storage) return;
-  storage.setItem(PRIVATE_TABLE_PREFERENCES_KEY, JSON.stringify(normalizePrivateTablePreferences(preferences)));
+  storage.setItem(PRIVATE_TABLE_PREFERENCES_KEY, JSON.stringify({
+    profiles: {
+      all: normalizePrivateTablePreferences(profiles.all, "all"),
+      fc2: normalizePrivateTablePreferences(profiles.fc2, "fc2"),
+      jav: normalizePrivateTablePreferences(profiles.jav, "jav")
+    }
+  }));
+}
+
+export function savePrivateTablePreferences(preferences: PrivateTablePreferences, storage: Pick<Storage, "setItem"> | undefined = typeof localStorage === "undefined" ? undefined : localStorage) {
+  savePrivateTablePreferenceProfiles({
+    ...defaultPrivateTablePreferenceProfiles(),
+    all: normalizePrivateTablePreferences(preferences, "all")
+  }, storage);
+}
+
+function profilesFromLegacyPreference(preferences: PrivateTablePreferences): PrivateTablePreferenceProfiles {
+  const sharedWidths = preferences.widths;
+  const pageSize = preferences.pageSize;
+  return {
+    all: normalizePrivateTablePreferences({
+      ...preferences,
+      visible: { ...preferences.visible, actress: false, maker: false }
+    }, "all"),
+    fc2: normalizePrivateTablePreferences({
+      ...defaultPrivateTablePreferences("fc2"),
+      widths: { ...defaultPrivateTablePreferences("fc2").widths, ...sharedWidths, identity: 360 },
+      pageSize
+    }, "fc2"),
+    jav: normalizePrivateTablePreferences({
+      ...defaultPrivateTablePreferences("jav"),
+      widths: { ...defaultPrivateTablePreferences("jav").widths, ...sharedWidths },
+      pageSize
+    }, "jav")
+  };
 }
 
 function legacyIdentityWidth(widths: Record<string, number>) {

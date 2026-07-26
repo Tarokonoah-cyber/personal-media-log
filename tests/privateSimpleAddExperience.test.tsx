@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { PRIVATE_DEFAULT_ACTRESS } from "../shared/privateModel";
 import { SimpleAddModal } from "../src/App";
 import {
   PRIVATE_SIMPLE_ADD_DRAFT_KEY,
@@ -10,6 +11,7 @@ import {
   savePrivateSimpleAddDraft
 } from "../src/lib/privateSimpleAddDraft";
 import type { ItemInput } from "../src/types";
+import type { PrivateTableMode } from "../src/lib/privateTablePreferences";
 
 describe("private simple-add draft experience", () => {
   beforeEach(() => {
@@ -40,7 +42,8 @@ describe("private simple-add draft experience", () => {
     renderPrivateModal();
 
     expect(screen.getByLabelText("番號")).toHaveValue("FC2-PPV-123");
-    expect(screen.getByLabelText("片名")).toHaveValue("未完成片名");
+    expect(screen.queryByLabelText("片名")).toBeNull();
+    expect(readPrivateSimpleAddDraft()?.draft.title).toBe("未完成片名");
     expect(screen.getByText(/已恢復.+未完成草稿/)).toBeVisible();
   });
 
@@ -117,6 +120,40 @@ describe("private simple-add draft experience", () => {
     }));
   });
 
+  it("uses the FC2 template for unknown codes and keeps low-value fields hidden", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    renderPrivateModal({ onSubmit, privateTableMode: "fc2" });
+
+    fireEvent.change(screen.getByLabelText("番號"), { target: { value: "CUSTOM-001" } });
+    await userEvent.click(screen.getByRole("button", { name: "更多資料" }));
+
+    expect(screen.queryByLabelText("片名")).toBeNull();
+    expect(screen.queryByLabelText("女優")).toBeNull();
+    expect(screen.queryByLabelText("平台")).toBeNull();
+    expect(screen.queryByLabelText("片商")).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "新增" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      code: "CUSTOM-001",
+      platform: "FC2",
+      maker: "FC2",
+      people: [PRIVATE_DEFAULT_ACTRESS]
+    }));
+  });
+
+  it("uses the JAV template for unknown codes and exposes actress and maker", async () => {
+    renderPrivateModal({ privateTableMode: "jav" });
+    fireEvent.change(screen.getByLabelText("番號"), { target: { value: "CUSTOM-002" } });
+
+    expect(screen.getByLabelText("女優")).toHaveValue(PRIVATE_DEFAULT_ACTRESS);
+    expect(screen.getByLabelText("片商")).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "更多資料" }));
+    expect(screen.getByLabelText("片名")).toBeVisible();
+    expect(screen.queryByLabelText("平台")).toBeNull();
+  });
+
   it("keeps the modal open and resets record fields after add-and-continue", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     renderPrivateModal({ onSubmit });
@@ -160,16 +197,19 @@ function renderPrivateModal({
   onClose = vi.fn(),
   onSubmit = vi.fn().mockResolvedValue(undefined),
   onOpenExisting,
-  knownTags = []
+  knownTags = [],
+  privateTableMode
 }: {
   onClose?: () => void;
   onSubmit?: (input: ItemInput) => Promise<void>;
   onOpenExisting?: (id: string) => void;
   knownTags?: string[];
+  privateTableMode?: PrivateTableMode;
 } = {}) {
   return render(
     <SimpleAddModal
       privateMode
+      privateTableMode={privateTableMode}
       knownTags={knownTags}
       loading={false}
       onClose={onClose}

@@ -1,14 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   LEGACY_PRIVATE_TABLE_PREFERENCES_KEY,
+  LEGACY_V5_PRIVATE_TABLE_PREFERENCES_KEY,
   LEGACY_V3_PRIVATE_TABLE_PREFERENCES_KEY,
   LEGACY_V4_PRIVATE_TABLE_PREFERENCES_KEY,
   PRIVATE_TABLE_PREFERENCES_KEY,
+  defaultPrivateTablePreferenceProfiles,
   defaultPrivateTablePreferences,
   migratePrivateTablePreferencesV2,
   migratePrivateTablePreferencesV3,
   migratePrivateTablePreferencesV4,
   normalizePrivateTablePreferences,
+  privateTableModeFromPlatformFilters,
+  readPrivateTablePreferenceProfiles,
   readPrivateTablePreferences
 } from "../src/lib/privateTablePreferences";
 
@@ -22,13 +26,32 @@ describe("private table preference migration", () => {
     expect(defaults.order).not.toContain("watchedAt");
   });
 
+  it("provides separate compact FC2, full JAV, and compact mixed templates", () => {
+    const profiles = defaultPrivateTablePreferenceProfiles();
+    expect(profiles.fc2.widths.identity).toBe(360);
+    expect(profiles.fc2.visible.actress).toBe(false);
+    expect(profiles.fc2.visible.maker).toBe(false);
+    expect(profiles.jav.visible.actress).toBe(true);
+    expect(profiles.jav.visible.maker).toBe(true);
+    expect(profiles.all.visible.actress).toBe(false);
+    expect(profiles.all.visible.maker).toBe(false);
+    expect(profiles.jav.order.slice(0, 5)).toEqual(["identity", "rating", "favorite", "actress", "maker"]);
+  });
+
+  it("selects a platform template only for one exact platform filter", () => {
+    expect(privateTableModeFromPlatformFilters("FC2")).toBe("fc2");
+    expect(privateTableModeFromPlatformFilters("jav")).toBe("jav");
+    expect(privateTableModeFromPlatformFilters("FC2,JAV")).toBe("all");
+    expect(privateTableModeFromPlatformFilters("")).toBe("all");
+  });
+
   it("adds release date and removes record date when migrating v4 preferences", () => {
     const migrated = migratePrivateTablePreferencesV4({
       order: ["identity", "rating", "watchedAt", "summary"],
       widths: { identity: 600, watchedAt: 120 },
       pageSize: 100
     });
-    expect(migrated.order).toEqual(["identity", "rating", "releaseDate", "summary", "favorite", "actress", "maker", "tags"]);
+    expect(migrated.order).toEqual(["identity", "rating", "releaseDate", "summary", "favorite", "tags", "actress", "maker"]);
     expect(migrated.order).not.toContain("watchedAt");
     expect(migrated.widths.identity).toBe(600);
     expect(migrated.visible.releaseDate).toBe(true);
@@ -70,7 +93,7 @@ describe("private table preference migration", () => {
     expect(normalized.widths.identity).toBe(900);
   });
 
-  it("reads v4 before v3 and persists the migrated v5 preference", () => {
+  it("reads v4 before v3 and persists migrated v6 profiles", () => {
     const legacyV4 = JSON.stringify({ order: ["identity", "watchedAt", "tags"], pageSize: 200 });
     const legacyV3 = JSON.stringify({ order: ["tags", "code", "title"], pageSize: 50 });
     const legacyV2 = JSON.stringify({ order: ["summary", "code", "title"], pageSize: 200 });
@@ -87,6 +110,30 @@ describe("private table preference migration", () => {
     expect(result.order.slice(0, 3)).toEqual(["identity", "releaseDate", "tags"]);
     expect(result.order).not.toContain("watchedAt");
     expect(result.pageSize).toBe(200);
+    expect(storage.setItem).toHaveBeenCalledWith(PRIVATE_TABLE_PREFERENCES_KEY, expect.any(String));
+  });
+
+  it("migrates v5 widths into all profiles and applies platform visibility defaults", () => {
+    const legacyV5 = JSON.stringify({
+      order: ["identity", "rating", "favorite", "actress", "maker", "tags", "summary"],
+      widths: { identity: 640, tags: 240 },
+      visible: { actress: true, maker: true },
+      pageSize: 200
+    });
+    const storage = {
+      getItem: vi.fn((key: string) => key === LEGACY_V5_PRIVATE_TABLE_PREFERENCES_KEY ? legacyV5 : null),
+      setItem: vi.fn()
+    };
+
+    const profiles = readPrivateTablePreferenceProfiles(storage);
+
+    expect(profiles.all.widths.identity).toBe(640);
+    expect(profiles.all.visible.actress).toBe(false);
+    expect(profiles.fc2.widths.identity).toBe(360);
+    expect(profiles.fc2.visible.maker).toBe(false);
+    expect(profiles.jav.widths.identity).toBe(640);
+    expect(profiles.jav.visible.maker).toBe(true);
+    expect(profiles.jav.pageSize).toBe(200);
     expect(storage.setItem).toHaveBeenCalledWith(PRIVATE_TABLE_PREFERENCES_KEY, expect.any(String));
   });
 });

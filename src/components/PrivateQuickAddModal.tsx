@@ -38,6 +38,7 @@ import {
   popPrivateSimpleAddHistoryEntry,
   pushPrivateSimpleAddHistoryEntry
 } from "../lib/privateSimpleAddHistory";
+import type { PrivateTableMode } from "../lib/privateTablePreferences";
 import { addTags, normalizeTags, parseTagInput } from "../lib/tags";
 import type { ItemInput, PrivateFacetItem, PrivateFacets } from "../types";
 import { PrivateStarRating } from "./PrivateStarRating";
@@ -47,6 +48,7 @@ type DraftStatus = "idle" | "restored" | "saving" | "saved" | "error" | "cleared
 export function PrivateQuickAddModal({
   knownTags = [],
   facets,
+  tableMode = "all",
   loading,
   onClose,
   onSubmit,
@@ -54,6 +56,7 @@ export function PrivateQuickAddModal({
 }: {
   knownTags?: string[];
   facets?: PrivateFacets | null;
+  tableMode?: PrivateTableMode;
   loading: boolean;
   onClose: () => void;
   onSubmit: (input: ItemInput) => Promise<unknown>;
@@ -61,7 +64,7 @@ export function PrivateQuickAddModal({
 }) {
   const [restoredDraft] = useState(() => readPrivateSimpleAddDraft());
   const [draft, setDraft] = useState<PrivateSimpleAddDraft>(
-    () => restoredDraft?.draft ?? emptyPrivateSimpleAddDraft(todayDate())
+    () => restoredDraft?.draft ?? privateDraftForMode(emptyPrivateSimpleAddDraft(todayDate()), tableMode)
   );
   const [draftStatus, setDraftStatus] = useState<DraftStatus>(restoredDraft ? "restored" : "idle");
   const [draftSavedAt, setDraftSavedAt] = useState(restoredDraft?.savedAt || "");
@@ -69,7 +72,9 @@ export function PrivateQuickAddModal({
   const [submitting, setSubmitting] = useState(false);
   const [moreOpen, setMoreOpen] = useState(() => hasAdvancedValues(restoredDraft?.draft));
   const [recents, setRecents] = useState(() => readPrivateAddRecents());
-  const [touched, setTouched] = useState<PrivateAddTouchedFields>(() => restoredTouchedFields(restoredDraft?.draft));
+  const [touched, setTouched] = useState<PrivateAddTouchedFields>(
+    () => restoredDraft ? restoredTouchedFields(restoredDraft.draft) : touchedFieldsForMode(tableMode)
+  );
   const draftRef = useRef(draft);
   const saveTimerRef = useRef<number | null>(null);
   const submittedRef = useRef(false);
@@ -80,7 +85,9 @@ export function PrivateQuickAddModal({
 
   const codeDefaults = useMemo(() => privateAddDefaultsForCode(draft.code), [draft.code]);
   const duplicate = usePrivateCodeConflict(draft.code);
-  const isJav = codeDefaults.platform === "JAV" || draft.platform === "JAV";
+  const effectiveMode = privateDraftMode(draft, codeDefaults.platform, tableMode);
+  const isFc2 = effectiveMode === "fc2";
+  const isJav = effectiveMode === "jav";
   const isBusy = loading || submitting;
   const canSubmit = Boolean(codeDefaults.code) && duplicate.status !== "conflict";
   const draftMessage = privateDraftStatusMessage(draftStatus, draftSavedAt);
@@ -167,8 +174,13 @@ export function PrivateQuickAddModal({
   }
 
   function changeCode(value: string, normalize = false) {
-    const nextCode = normalize ? privateAddDefaultsForCode(value).code : value;
-    replaceDraft(applyPrivateAddCodeDefaults(draftRef.current, nextCode, touched));
+    const nextDefaults = privateAddDefaultsForCode(value);
+    const nextCode = normalize ? nextDefaults.code : value;
+    const contextMode = privateDraftMode(draftRef.current, nextDefaults.platform, tableMode);
+    replaceDraft(privateDraftForMode(
+      applyPrivateAddCodeDefaults(draftRef.current, nextCode, touched),
+      contextMode
+    ));
   }
 
   function touchField(field: keyof PrivateAddTouchedFields, value: string) {
@@ -180,7 +192,11 @@ export function PrivateQuickAddModal({
     if (!canSubmit || isBusy) return;
     setSubmitError("");
     setSubmitting(true);
-    const finalDraft = applyPrivateAddCodeDefaults(draftRef.current, draftRef.current.code, touched);
+    const contextMode = privateDraftMode(draftRef.current, codeDefaults.platform, tableMode);
+    const finalDraft = privateDraftForMode(
+      applyPrivateAddCodeDefaults(draftRef.current, draftRef.current.code, touched),
+      contextMode
+    );
     replaceDraft(finalDraft);
     try {
       await onSubmit(privateQuickAddToInput(finalDraft));
@@ -203,10 +219,10 @@ export function PrivateQuickAddModal({
   }
 
   function resetForm() {
-    const nextDraft = emptyPrivateSimpleAddDraft(todayDate());
+    const nextDraft = privateDraftForMode(emptyPrivateSimpleAddDraft(todayDate()), tableMode);
     draftRef.current = nextDraft;
     setDraft(nextDraft);
-    setTouched({ actress: false, platform: false, maker: false });
+    setTouched(touchedFieldsForMode(tableMode));
     setMoreOpen(false);
     setSubmitError("");
     setDraftSavedAt("");
@@ -277,8 +293,8 @@ export function PrivateQuickAddModal({
                 enterKeyHint="done"
                 aria-label="番號"
               />
-              {codeDefaults.platform !== "unknown" && (
-                <span className={`private-platform-hint is-${codeDefaults.platform.toLocaleLowerCase()}`}>{codeDefaults.platform}</span>
+              {effectiveMode !== "all" && (
+                <span className={`private-platform-hint is-${effectiveMode}`}>{effectiveMode === "fc2" ? "FC2" : "JAV"}</span>
               )}
             </span>
           </label>
@@ -368,11 +384,13 @@ export function PrivateQuickAddModal({
 
           {moreOpen && (
             <div className="private-quick-more-grid">
-              <label>
-                片名
-                <input value={draft.title} onChange={(event) => patch({ title: event.target.value })} />
-              </label>
-              {!isJav && (
+              {!isFc2 && (
+                <label>
+                  片名
+                  <input value={draft.title} onChange={(event) => patch({ title: event.target.value })} />
+                </label>
+              )}
+              {!isJav && !isFc2 && (
                 <SuggestionField
                   label="女優"
                   value={draft.actress}
@@ -380,15 +398,17 @@ export function PrivateQuickAddModal({
                   onChange={(value) => touchField("actress", value)}
                 />
               )}
-              <label>
-                平台
-                <select value={draft.platform} onChange={(event) => touchField("platform", event.target.value)}>
-                  <option value="">自動判斷</option>
-                  <option value="FC2">FC2</option>
-                  <option value="JAV">JAV</option>
-                </select>
-              </label>
-              {!isJav && (
+              {effectiveMode === "all" && (
+                <label>
+                  平台
+                  <select value={draft.platform} onChange={(event) => touchField("platform", event.target.value)}>
+                    <option value="">自動判斷</option>
+                    <option value="FC2">FC2</option>
+                    <option value="JAV">JAV</option>
+                  </select>
+                </label>
+              )}
+              {!isJav && !isFc2 && (
                 <SuggestionField
                   label="片商"
                   value={draft.maker}
@@ -587,6 +607,47 @@ function SuggestionField({
       <datalist id={id}>{suggestions.map((suggestion) => <option key={suggestion} value={suggestion} />)}</datalist>
     </label>
   );
+}
+
+function privateDraftForMode(draft: PrivateSimpleAddDraft, mode: PrivateTableMode): PrivateSimpleAddDraft {
+  if (mode === "fc2") {
+    return {
+      ...draft,
+      title: "",
+      actress: PRIVATE_DEFAULT_ACTRESS,
+      platform: "FC2",
+      maker: "FC2"
+    };
+  }
+  if (mode === "jav") {
+    return {
+      ...draft,
+      actress: draft.actress || PRIVATE_DEFAULT_ACTRESS,
+      platform: "JAV",
+      maker: draft.maker === "FC2" ? "" : draft.maker
+    };
+  }
+  return draft;
+}
+
+function touchedFieldsForMode(mode: PrivateTableMode): PrivateAddTouchedFields {
+  return {
+    actress: false,
+    platform: mode !== "all",
+    maker: false
+  };
+}
+
+function privateDraftMode(
+  draft: PrivateSimpleAddDraft,
+  inferredPlatform: "FC2" | "JAV" | "unknown",
+  fallback: PrivateTableMode
+): PrivateTableMode {
+  if (draft.platform === "FC2") return "fc2";
+  if (draft.platform === "JAV") return "jav";
+  if (inferredPlatform === "FC2") return "fc2";
+  if (inferredPlatform === "JAV") return "jav";
+  return fallback;
 }
 
 function restoredTouchedFields(draft?: PrivateSimpleAddDraft): PrivateAddTouchedFields {
