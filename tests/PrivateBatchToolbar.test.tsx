@@ -27,4 +27,25 @@ describe("PrivateBatchToolbar", () => {
     expect(onTags).toHaveBeenCalledWith("待重看", "add");
     await waitFor(() => expect(input).toHaveValue(""));
   });
+
+  it("applies a rating through the same compact field control", async () => {
+    const user = userEvent.setup();
+    const onField = vi.fn().mockResolvedValue({ succeededIds: ["item-1"], failedIds: [] });
+    render(
+      <PrivateBatchToolbar
+        selectedCount={20}
+        knownTags={[]}
+        busy={false}
+        onCollection={vi.fn()}
+        onField={onField}
+        onTags={vi.fn()}
+        onDelete={vi.fn()}
+        onClear={vi.fn()}
+      />
+    );
+    await user.selectOptions(screen.getByLabelText("批次欄位"), "rating");
+    await user.selectOptions(screen.getByLabelText("批次值"), "5");
+    await user.click(screen.getAllByRole("button", { name: "套用" })[0]);
+    expect(onField).toHaveBeenCalledWith("rating", "5");
+  });
 });

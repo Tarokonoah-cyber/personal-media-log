@@ -226,6 +226,64 @@ export function buildItemWhere(params: ItemListParams) {
       WHERE missing_ip.item_id = items.id
     )`);
   }
+  if (params.qualityView === "missing_tags") {
+    where.push(`NOT EXISTS (
+      SELECT 1 FROM item_tags missing_tag
+      WHERE missing_tag.item_id = items.id
+    )`);
+  }
+  if (params.qualityView === "incomplete_metadata") {
+    where.push(`(
+      coalesce(nullif(trim(items.official_title), ''), '') = ''
+      OR coalesce(nullif(trim(items.maker), ''), '') = ''
+      OR coalesce(nullif(trim(items.release_date), ''), '') = ''
+    )`);
+  }
+  if (params.qualityView === "suspected_duplicate") {
+    const currentTitle = normalizedTitleSql("items");
+    const groupedTitle = normalizedTitleSql("grouped_items");
+    const currentPlatform = "lower(trim(coalesce(items.platform, '')))";
+    const groupedPlatform = "lower(trim(coalesce(grouped_items.platform, '')))";
+    const currentMaker = "lower(trim(coalesce(items.maker, '')))";
+    const groupedMaker = "lower(trim(coalesce(grouped_items.maker, '')))";
+    const currentYear = "coalesce(items.year, items.release_year)";
+    const groupedYear = "coalesce(grouped_items.year, grouped_items.release_year)";
+    where.push(`(
+      (
+        coalesce(nullif(trim(items.normalized_code), ''), '') != ''
+        AND items.normalized_code IN (
+          SELECT grouped_items.normalized_code FROM items grouped_items
+          WHERE grouped_items.is_private = 1
+            AND grouped_items.status != 'deleted'
+            AND coalesce(nullif(trim(grouped_items.normalized_code), ''), '') != ''
+          GROUP BY grouped_items.normalized_code HAVING COUNT(*) > 1
+        )
+      )
+      OR (
+        length(${currentTitle}) >= 4
+        AND (
+          (${currentTitle}, ${currentPlatform}, ${currentMaker}) IN (
+            SELECT ${groupedTitle}, ${groupedPlatform}, ${groupedMaker} FROM items grouped_items
+            WHERE grouped_items.is_private = 1
+              AND grouped_items.status != 'deleted'
+              AND length(${groupedTitle}) >= 4
+              AND ${groupedMaker} != ''
+            GROUP BY ${groupedTitle}, ${groupedPlatform}, ${groupedMaker}
+            HAVING COUNT(*) > 1
+          )
+          OR (${currentTitle}, ${currentPlatform}, ${currentYear}) IN (
+            SELECT ${groupedTitle}, ${groupedPlatform}, ${groupedYear} FROM items grouped_items
+            WHERE grouped_items.is_private = 1
+              AND grouped_items.status != 'deleted'
+              AND length(${groupedTitle}) >= 4
+              AND ${groupedYear} IS NOT NULL
+            GROUP BY ${groupedTitle}, ${groupedPlatform}, ${groupedYear}
+            HAVING COUNT(*) > 1
+          )
+        )
+      )
+    )`);
+  }
   if (params.hasNote === "yes") {
     where.push("(coalesce(nullif(trim(items.quick_note), ''), nullif(trim(items.long_note), '')) IS NOT NULL)");
   } else if (params.hasNote === "no") {
@@ -354,6 +412,12 @@ export function buildItemWhere(params: ItemListParams) {
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   return { whereSql, bind };
+}
+
+function normalizedTitleSql(alias: string) {
+  return `lower(replace(replace(replace(replace(replace(replace(
+    coalesce(nullif(trim(${alias}.official_title), ''), nullif(trim(${alias}.raw_title), ''), ''),
+    ' ', ''), '　', ''), '-', ''), '_', ''), '：', ''), ':', ''))`;
 }
 
 async function getPrivateSummary(env: Env, whereSql: string, bind: unknown[]): Promise<PrivateSummary> {

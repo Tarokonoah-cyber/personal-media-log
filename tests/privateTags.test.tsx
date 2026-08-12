@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { TagEditor } from "../src/components/TagEditor";
 import { PRIVATE_TAG_PRESETS, PUBLIC_TAG_PRESETS, tagPresetsForScope } from "../src/lib/tagPresets";
+import { saveTagAlias } from "../src/lib/tagWorkflow";
 
 describe("private tag presets and editor", () => {
   it("keeps private presets separate from public genre tags", () => {
@@ -28,8 +29,20 @@ describe("private tag presets and editor", () => {
     const { container } = render(<TagEditor tags={["劇情"]} knownTags={["劇情", "短髮"]} onChange={onChange} />);
     const suggestions = container.querySelector(".tag-suggestions");
     expect(suggestions?.textContent).not.toContain("#劇情");
-    expect(screen.getByRole("button", { name: "#短髮" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "#短髮" })).toBeVisible();
     await userEvent.click(screen.getByTitle("移除 劇情"));
     expect(onChange).toHaveBeenCalledWith([]);
+  });
+
+  it("commits an alias as its canonical tag", async () => {
+    localStorage.clear();
+    expect(saveTagAlias("story", "劇情")).toBe(true);
+    const onChange = vi.fn();
+    render(<TagEditor tags={[]} knownTags={["劇情"]} onChange={onChange} />);
+
+    await userEvent.type(screen.getByRole("combobox"), "story{Enter}");
+
+    expect(onChange).toHaveBeenLastCalledWith(["劇情"]);
+    expect(onChange).not.toHaveBeenCalledWith(["story"]);
   });
 });

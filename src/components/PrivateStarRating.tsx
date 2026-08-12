@@ -10,7 +10,8 @@ export function PrivateStarRating({
   active = true,
   compact = false,
   label = "評分",
-  onKeyDown
+  onKeyDown,
+  autoFocus = false
 }: {
   value: number | null;
   onChange: (rating: number | null) => void;
@@ -19,6 +20,7 @@ export function PrivateStarRating({
   compact?: boolean;
   label?: string;
   onKeyDown?: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
+  autoFocus?: boolean;
 }) {
   const selected = privateStarsFromRating(value);
 
@@ -53,6 +55,7 @@ export function PrivateStarRating({
       {starValues.map((star) => (
         <button
           key={star}
+          autoFocus={autoFocus && star === (selected || 1)}
           type="button"
           className={star <= selected ? "is-filled" : ""}
           tabIndex={active && star === (selected || 1) ? 0 : -1}

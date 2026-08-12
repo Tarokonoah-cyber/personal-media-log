@@ -140,6 +140,7 @@ export interface ItemListParams {
   favoriteLevelFilters?: PrivateCollectionLevel[];
   personFilters?: string[];
   missingPeople?: boolean;
+  qualityView?: "missing_tags" | "incomplete_metadata" | "suspected_duplicate";
   hasNote?: "all" | "yes" | "no";
   hasCover?: "all" | "yes" | "no";
   watchStatus?: WatchStatus | "all";

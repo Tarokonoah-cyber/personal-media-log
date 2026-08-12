@@ -39,6 +39,10 @@ export function privateFilterChips(filters: ListFilters): PrivateFilterChip[] {
   if (filters.person.trim()) add("person", `人物：${filters.person.trim()}`, { person: "" });
   if (filters.studio.trim()) add("studio", `片商：${filters.studio.trim()}`, { studio: "" });
   if (filters.missingPeople) add("missingPeople", "未填女優", { missingPeople: false });
+  if (filters.qualityView) {
+    const labels = { missing_tags: "無 Tag", incomplete_metadata: "Metadata 不完整", suspected_duplicate: "疑似重複" } as const;
+    add("qualityView", labels[filters.qualityView], { qualityView: "" });
+  }
   if (filters.hasNote === "yes" || filters.hasNote === "no") add("hasNote", filters.hasNote === "yes" ? "有心得" : "無心得", { hasNote: "all" });
   if (filters.hasCover === "yes" || filters.hasCover === "no") add("hasCover", filters.hasCover === "yes" ? "有封面" : "無封面", { hasCover: "all" });
   return chips;
