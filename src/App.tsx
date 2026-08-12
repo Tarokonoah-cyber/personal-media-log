@@ -8,7 +8,8 @@ import { ItemEditor } from "./components/ItemEditor";
 import { ItemList } from "./components/ItemList";
 import { CalendarView } from "./components/CalendarView";
 import { MetadataLookupModal } from "./components/MetadataLookupModal";
-import { PrivateBatchToolbar } from "./components/PrivateBatchToolbar";
+import { CommandPalette, type CommandPaletteAction } from "./components/CommandPalette";
+import { PrivateBatchToolbar, type PrivateBatchField } from "./components/PrivateBatchToolbar";
 import { PrivateFilterChips } from "./components/PrivateFilterChips";
 import { PrivateQuickAddModal } from "./components/PrivateQuickAddModal";
 import { PrivateStarDisplay, PrivateStarRating } from "./components/PrivateStarRating";
@@ -21,8 +22,9 @@ import { ViewSidebar } from "./components/ViewSidebar";
 import { PrivateQualityCenter } from "./components/PrivateQualityCenter";
 import { usePrivateCodeConflict } from "./hooks/usePrivateCodeConflict";
 import { applyMetadata, batchUpdateItems, createItem, deleteItem, getItem, getPrivateFacets, getPublicAggregate, listItems, listPrivateItems, parseSmartAdd, quickUpdateItem as quickUpdateItemApi, searchMetadata, updateItem } from "./lib/api";
-import { privateBatchTagPatch, retainVisibleSelection, runLimitedBatch, togglePageItemSelection, togglePageSelection, type BatchOperationResult } from "./lib/privateBatch";
+import { privateBatchPeoplePatch, privateBatchTagPatch, retainVisibleSelection, runLimitedBatch, togglePageItemSelection, togglePageSelection, type BatchOperationResult } from "./lib/privateBatch";
 import { mergePrivateFilters, resetFiltersPreservingTableState } from "./lib/privateFilters";
+import { privateSmartViews } from "./lib/privateSmartViews";
 import { PRIVATE_DEFAULT_ACTRESS, isPrivateCollectionLevel, normalizePlatform, privateCollectionLevel, privateCollectionLevelLabels, privateCollectionLevels, privateCollectionPatch, privateRatingFromStars, privateStarsFromRating, type PrivateCollectionLevel } from "../shared/privateModel";
 import { createSavedView, readSavedViews, savedViewSignature, writeSavedViews, type SavedPrivateView } from "./lib/savedViews";
 import { toItemInput } from "./lib/itemTransforms";
@@ -64,6 +66,7 @@ import { parseQuickEntry } from "./lib/quickParse";
 import { collectionLevelOptions } from "./lib/reflection";
 import { tagPresetsForScope } from "./lib/tagPresets";
 import { addTags, normalizeTags, parseTagInput } from "./lib/tags";
+import { canonicalizeTagInput, rememberRecentTags, saveTagAlias } from "./lib/tagWorkflow";
 import { classifyItem, libraryTree } from "./lib/taxonomy";
 import { readStorageEnum, readStorageItem, writeStorageItem } from "./lib/storage";
 import { getWatchStatus, updateWatchProgress } from "./lib/watch";
@@ -87,6 +90,7 @@ const defaultFilters: ListFilters = {
   favoriteLevelFilters: "",
   personFilters: "",
   missingPeople: false,
+  qualityView: "",
   hasNote: "all",
   hasCover: "all",
   watchStatus: "all",
@@ -333,6 +337,7 @@ export default function App() {
     favoriteLevelFilters: filters.favoriteLevelFilters,
     personFilters: filters.personFilters,
     missingPeople: filters.missingPeople,
+    qualityView: filters.qualityView,
     ratingMin: filters.ratingMin,
     ratingMax: filters.ratingMax,
     unrated: filters.unrated,
@@ -344,7 +349,7 @@ export default function App() {
     hasCover: filters.hasCover,
     page: 1,
     pageSize: 1
-  }), [filters.query, filters.platformFilters, filters.makerFilters, filters.favoriteLevelFilters, filters.personFilters, filters.missingPeople, filters.ratingMin, filters.ratingMax, filters.unrated, filters.usedFilter, filters.privateStatus, filters.mediaStatus, filters.tag, filters.hasNote, filters.hasCover]);
+  }), [filters.query, filters.platformFilters, filters.makerFilters, filters.favoriteLevelFilters, filters.personFilters, filters.missingPeople, filters.qualityView, filters.ratingMin, filters.ratingMax, filters.unrated, filters.usedFilter, filters.privateStatus, filters.mediaStatus, filters.tag, filters.hasNote, filters.hasCover]);
 
   useEffect(() => {
     if (!privateActive) return;
@@ -477,6 +482,23 @@ export default function App() {
     setToast("已儲存");
     if (isPrivateItem(saved)) await refreshPrivateWorkspaceData();
     else await refreshVisibleData();
+  }
+
+  async function saveItemAndOpenNext(input: ItemInput) {
+    if (!selected) return;
+    const currentIndex = items.findIndex((item) => item.id === selected.id);
+    const nextId = currentIndex >= 0 ? items[currentIndex + 1]?.id : undefined;
+    const saved = await updateItem(selected.id, input);
+    setToast(nextId ? "已儲存，前往下一筆" : "已儲存，整理佇列完成");
+    const [nextItem] = await Promise.all([
+      nextId ? getItem(nextId).catch(() => null) : Promise.resolve(null),
+      refreshPrivateWorkspaceData()
+    ]);
+    if (!nextId) {
+      setSelected(saved);
+      return;
+    }
+    setSelected(nextItem || saved);
   }
 
   async function openItemDetail(item: MediaItem) {
@@ -847,6 +869,7 @@ export default function App() {
                   onBatchUpdate={batchUpdate}
                   onBatchDelete={batchDelete}
                   onApplyFilters={(next) => setFilters({ ...defaultFilters, ...next, page: 1 })}
+                  onOpenQuality={() => selectTool("quality")}
                 />
               ) : activeView === "home" && !filters.query && !filters.favorite ? (
                 <HomeDashboard
@@ -988,7 +1011,7 @@ export default function App() {
           onOpenExisting={(id) => void openPrivateItemById(id)}
         />
       )}
-      {selected && <ItemEditor item={selected} privateMode={privateActive} knownTags={privateActive || isPrivateItem(selected) ? privateTagSuggestions : publicTagSuggestions} onClose={() => setSelected(null)} onSave={saveItem} onDelete={removeItem} />}
+      {selected && <ItemEditor key={selected.id} item={selected} privateMode={privateActive} knownTags={privateActive || isPrivateItem(selected) ? privateTagSuggestions : publicTagSuggestions} initialFocus={filters.qualityView === "missing_tags" ? "tags" : filters.unrated ? "rating" : filters.missingPeople ? "people" : filters.qualityView === "incomplete_metadata" ? "metadata" : undefined} onClose={() => setSelected(null)} onSave={saveItem} onSaveAndNext={tab === "log" && privateActive && items.length > 1 ? saveItemAndOpenNext : undefined} onDelete={removeItem} />}
       {metadataTarget && (
         <MetadataLookupModal
           item={metadataTarget}
@@ -1354,7 +1377,8 @@ function PrivateWorkbenchV3({
   onQuickUpdate,
   onBatchUpdate,
   onBatchDelete,
-  onApplyFilters
+  onApplyFilters,
+  onOpenQuality
 }: {
   filters: ListFilters;
   items: MediaItem[];
@@ -1377,6 +1401,7 @@ function PrivateWorkbenchV3({
   onBatchUpdate: (items: MediaItem[], patch: Partial<ItemInput> | ((item: MediaItem) => Partial<ItemInput>)) => Promise<BatchOperationResult>;
   onBatchDelete: (items: MediaItem[]) => Promise<BatchOperationResult>;
   onApplyFilters: (filters: Partial<ListFilters>) => void;
+  onOpenQuality: () => void;
 }) {
   const tableMode = privateTableModeFromPlatformFilters(filters.platformFilters);
   const [searchDraft, setSearchDraft] = useState(filters.query);
@@ -1394,6 +1419,7 @@ function PrivateWorkbenchV3({
   const [newRowBusy, setNewRowBusy] = useState(false);
   const [newRowError, setNewRowError] = useState("");
   const [sheetFeedback, setSheetFeedback] = useState<PrivateSheetFeedback | null>(null);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const columnPreferences = preferenceProfiles[tableMode];
   const visibleColumns = useMemo(
     () => columnPreferences.order.filter((id) => columnPreferences.visible[id]).map((id) => privateColumnMap[id]),
@@ -1426,6 +1452,17 @@ function PrivateWorkbenchV3({
     document.addEventListener("keydown", focusSearch);
     return () => document.removeEventListener("keydown", focusSearch);
   }, []);
+
+  useEffect(() => {
+    function toggleCommandPalette(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLocaleLowerCase() !== "k") return;
+      if (!commandPaletteOpen && document.querySelector(".drawer[role='dialog']")) return;
+      event.preventDefault();
+      setCommandPaletteOpen((open) => !open);
+    }
+    document.addEventListener("keydown", toggleCommandPalette);
+    return () => document.removeEventListener("keydown", toggleCommandPalette);
+  }, [commandPaletteOpen]);
 
   useEffect(() => {
     if (searchDraft === filters.query) return;
@@ -1550,7 +1587,19 @@ function PrivateWorkbenchV3({
   }
 
   async function updateSelectedTags(input: string, mode: "add" | "remove") {
-    return keepFailedSelection(await onBatchUpdate(selectedItems, (item) => privateBatchTagPatch(item, input, mode)));
+    const canonical = canonicalizeTagInput(input, knownTags);
+    if (canonical.length === 0) return { succeededIds: [], failedIds: selectedItems.map((item) => item.id) };
+    const result = keepFailedSelection(await onBatchUpdate(selectedItems, (item) => privateBatchTagPatch(item, canonical.join(","), mode)));
+    if (!result.cancelled && result.failedIds.length === 0 && mode === "add") rememberRecentTags(canonical);
+    return result;
+  }
+
+  async function updateSelectedField(field: PrivateBatchField, value: string) {
+    if (field === "collection") return updateSelectedCollection(value as PrivateCollectionLevel);
+    if (field === "rating") return keepFailedSelection(await onBatchUpdate(selectedItems, { rating: value === "clear" ? null : privateRatingFromStars(Number(value)) }));
+    if (field === "platform") return keepFailedSelection(await onBatchUpdate(selectedItems, { platform: value }));
+    if (field === "maker") return keepFailedSelection(await onBatchUpdate(selectedItems, { maker: value.trim() || null }));
+    return keepFailedSelection(await onBatchUpdate(selectedItems, (item) => privateBatchPeoplePatch(item, value)));
   }
 
   async function deleteSelected() {
@@ -1621,6 +1670,46 @@ function PrivateWorkbenchV3({
   const savedViewDirty = activeView ? savedViewSignature(filters, columnPreferences) !== savedViewSignature(activeView.filters, activeView.tablePreferences) : false;
   const visibleStart = total === 0 || items.length === 0 ? 0 : (filters.page - 1) * filters.pageSize + 1;
   const visibleEnd = items.length === 0 ? 0 : Math.min(total, (filters.page - 1) * filters.pageSize + items.length);
+  const commandActions: CommandPaletteAction[] = [
+    {
+      id: "focus-search", label: "聚焦資料搜尋", description: "不離開鍵盤直接搜尋番號、片名、人物或 Tag", group: "搜尋與檢視", keywords: ["search", "搜尋", "/"], shortcut: "/",
+      run: () => { window.requestAnimationFrame(() => { searchInputRef.current?.focus(); searchInputRef.current?.select(); }); }
+    },
+    ...privateSmartViews.map((view): CommandPaletteAction => ({
+      id: `smart-view-${view.id}`, label: `Smart View：${view.label}`, description: view.description, group: "搜尋與檢視", keywords: view.keywords,
+      run: () => { onApplyFilters(view.filters); setSearchDraft(""); setActiveSavedView(null); }
+    })),
+    { id: "view-all", label: "顯示全部資料", description: "清除目前篩選並保留每頁筆數與排序", group: "搜尋與檢視", keywords: ["全部", "clear", "清除"], run: onClearFilters },
+    { id: "filter-fc2", label: "篩選平台：FC2", group: "搜尋與檢視", keywords: ["平台", "filter"], run: () => onApplyFilters({ platformFilters: "FC2" }) },
+    { id: "filter-jav", label: "篩選平台：JAV", group: "搜尋與檢視", keywords: ["平台", "filter"], run: () => onApplyFilters({ platformFilters: "JAV" }) },
+    { id: "select-page", label: `選取目前頁面（${items.length} 筆）`, description: "一次選取目前最多 200 筆", group: "操作", keywords: ["select", "選取", "全選"], disabled: items.length === 0, run: () => setSelectedIds(items.map((item) => item.id)) },
+    { id: "open-first", label: "開啟目前第一筆", description: "進入整理佇列，儲存後可直接到下一筆", group: "操作", keywords: ["第一筆", "next", "下一筆", "review"], disabled: items.length === 0, run: () => { if (items[0]) onSelect(items[0]); } },
+    { id: "new-row", label: "新增資料列", group: "操作", keywords: ["新增", "add"], run: beginNewRow },
+    { id: "quality-inbox", label: "開啟 Data Quality Inbox", description: "review 完整品質問題與忽略項目", group: "操作", keywords: ["品質", "quality", "inbox", "review"], run: onOpenQuality },
+    ...([5, 4, 3, 2, 1] as const).map((stars): CommandPaletteAction => ({
+      id: `batch-rating-${stars}`, label: `批次評分：${stars} 星`, group: "批次整理", keywords: ["評分", "rating", "星"], disabled: selectedItems.length === 0,
+      run: async () => { await updateSelectedField("rating", String(stars)); }
+    })),
+    ...privateCollectionLevels.map((level): CommandPaletteAction => ({
+      id: `batch-collection-${level}`, label: `批次收藏：${privateCollectionLevelLabels[level]}`, group: "批次整理", keywords: ["收藏", "favorite", "分類"], disabled: selectedItems.length === 0,
+      run: async () => { await updateSelectedCollection(level); }
+    })),
+    ...knownTags.slice(0, 16).map((tag): CommandPaletteAction => ({
+      id: `batch-tag-${tag}`, label: `批次加入 #${tag}`, description: "依近期與使用頻率排序", group: "批次整理", keywords: ["tag", "標籤", tag], disabled: selectedItems.length === 0,
+      run: async () => { await updateSelectedTags(tag, "add"); }
+    })),
+    {
+      id: "add-tag-alias", label: "新增 Tag alias → canonical tag", description: "只儲存在這台裝置；之後輸入 alias 會自動正規化", group: "設定", keywords: ["alias", "別名", "canonical", "標籤"],
+      run: () => {
+        const alias = window.prompt("輸入容易打錯或常用的 Tag 別名");
+        if (!alias) return;
+        const canonical = window.prompt("輸入要統一成的 canonical Tag");
+        if (!canonical) return;
+        const saved = saveTagAlias(alias, canonical);
+        setSheetFeedback({ message: saved ? `已設定 ${alias} → ${canonical}` : "別名與 canonical Tag 不能相同或留空", tone: saved ? "success" : "error" });
+      }
+    }
+  ];
 
   return (
     <section className="private-workbench private-workbench-v4" aria-busy={refreshing}>
@@ -1650,6 +1739,7 @@ function PrivateWorkbenchV3({
           {searchDraft && <button type="button" className="private-search-clear" onClick={() => { setSearchDraft(""); searchInputRef.current?.focus(); }} aria-label="清除搜尋" title="清除搜尋（Esc）"><X size={14} /></button>}
         </div>
         <div className="private-toolbar-actions">
+          <button className="filter-toggle command-palette-trigger" onClick={() => setCommandPaletteOpen(true)} aria-keyshortcuts="Control+K Meta+K"><span>指令</span><kbd>Ctrl K</kbd></button>
           <button className="filter-toggle advanced-filter" onClick={onOpenAdvanced}><SlidersHorizontal size={16} />進階篩選</button>
           {hasPrivateFilters(filters) && <button className="filter-chip-clear" onClick={onClearFilters}>清除篩選</button>}
           <div className="private-columns-menu">
@@ -1693,12 +1783,20 @@ function PrivateWorkbenchV3({
 
       <PrivateFilterChips filters={filters} onPatch={onPatchFilters} onClear={onClearFilters} />
 
+      <CommandPalette
+        open={commandPaletteOpen}
+        actions={commandActions}
+        onOpenChange={setCommandPaletteOpen}
+        onSearch={(query) => { setSearchDraft(query); onPatchFilters({ query, page: 1 }); }}
+      />
+
       {selectedItems.length > 0 && (
         <PrivateBatchToolbar
           selectedCount={selectedItems.length}
           knownTags={knownTags}
           busy={batchBusy}
           onCollection={updateSelectedCollection}
+          onField={updateSelectedField}
           onTags={updateSelectedTags}
           onDelete={deleteSelected}
           onClear={() => setSelectedIds([])}
@@ -2860,6 +2958,7 @@ function hasPrivateFilters(filters: ListFilters) {
     filters.favoriteLevelFilters?.trim() ||
     filters.personFilters?.trim() ||
     filters.missingPeople ||
+    filters.qualityView ||
     (filters.hasNote && filters.hasNote !== "all") ||
     (filters.hasCover && filters.hasCover !== "all") ||
     filters.tag.trim() ||

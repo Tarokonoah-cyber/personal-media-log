@@ -90,7 +90,7 @@ export interface PrivateCodeConflictResponse {
   conflict: PrivateCodeConflict | null;
 }
 
-export type PrivateIssueType = "duplicate_code" | "unknown_platform" | "missing_title" | "missing_people" | "missing_tags" | "unrated" | "unset_collection" | "invalid_collection" | "invalid_code";
+export type PrivateIssueType = "duplicate_code" | "duplicate_metadata" | "unknown_platform" | "missing_title" | "incomplete_metadata" | "missing_people" | "missing_tags" | "unrated" | "unset_collection" | "invalid_collection" | "invalid_code";
 export interface PrivateQualitySummaryItem { type: PrivateIssueType; label: string; count: number; }
 export interface PrivateQualityIssue {
   item_id: string; code: string; title: string; platform: string | null; collection_level: string;
@@ -135,6 +135,7 @@ export interface ListFilters {
   favoriteLevelFilters?: string;
   personFilters?: string;
   missingPeople?: boolean;
+  qualityView?: "" | "missing_tags" | "incomplete_metadata" | "suspected_duplicate";
   hasNote?: "all" | "yes" | "no";
   hasCover?: "all" | "yes" | "no";
   watchStatus?: WatchStatus | "all";

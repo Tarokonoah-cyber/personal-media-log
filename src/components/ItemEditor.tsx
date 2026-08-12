@@ -11,6 +11,7 @@ import type { ItemInput, MediaItem, WatchStatus } from "../types";
 import { PRIVATE_DEFAULT_ACTRESS, privateCollectionLevel, privateCollectionLevelLabels, privateCollectionLevels, privateCollectionPatch, type PrivateCollectionLevel } from "../../shared/privateModel";
 
 const platformOptions = ["Netflix", "Disney+", "Prime Video", "Apple TV+", "HBO Max", "YouTube", "Crunchyroll", "電影院", "DVD / BD", "其他"];
+export type PrivateEditorInitialFocus = "tags" | "rating" | "people" | "metadata";
 
 export function ItemEditor({
   item,
@@ -18,14 +19,18 @@ export function ItemEditor({
   knownTags = [],
   onClose,
   onSave,
-  onDelete
+  onSaveAndNext,
+  onDelete,
+  initialFocus
 }: {
   item: MediaItem;
   privateMode?: boolean;
   knownTags?: string[];
   onClose: () => void;
   onSave: (input: ItemInput) => Promise<void>;
+  onSaveAndNext?: (input: ItemInput) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  initialFocus?: PrivateEditorInitialFocus;
 }) {
   const [form, setForm] = useState(() => toForm(item));
   const [savedForm, setSavedForm] = useState(() => toForm(item));
@@ -50,9 +55,20 @@ export function ItemEditor({
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      requestCloseWithConfirmation();
+      if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "s") {
+        event.preventDefault();
+        document.querySelector<HTMLButtonElement>("[data-editor-save]")?.click();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        const next = document.querySelector<HTMLButtonElement>("[data-editor-save-next]");
+        if (next) { event.preventDefault(); next.click(); }
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        requestCloseWithConfirmation();
+      }
     }
 
     window.addEventListener("keydown", handleKeyDown);
@@ -89,6 +105,20 @@ export function ItemEditor({
     }
   }
 
+  async function submitAndNext() {
+    if (!onSaveAndNext) return;
+    setSaving(true);
+    setError("");
+    try {
+      await onSaveAndNext(toInput(form));
+      setSavedForm(form);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "儲存失敗");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="drawer-backdrop" onClick={handleBackdropClick}>
       <aside className={privateEditor ? "drawer private-editor private-drawer" : "drawer"} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
@@ -103,14 +133,15 @@ export function ItemEditor({
         {error && <div className="notice danger">{error}</div>}
 
         {privateEditor ? (
-          <PrivateForm form={form} setForm={setForm} knownTags={knownTags} />
+          <PrivateForm form={form} setForm={setForm} knownTags={knownTags} initialFocus={initialFocus} />
         ) : (
           <GeneralForm form={form} setForm={setForm} seriesLike={seriesLike} metadataOpen={metadataOpen} setMetadataOpen={setMetadataOpen} knownTags={knownTags} />
         )}
 
         <footer className="drawer-actions">
           <button className="danger-button" onClick={remove} disabled={saving}><Trash2 size={16} />刪除</button>
-          <button className="primary" onClick={submit} disabled={saving || !canSave(form)}><Save size={16} />儲存</button>
+          {onSaveAndNext && <button data-editor-save-next onClick={submitAndNext} disabled={saving || !canSave(form)} title="Ctrl/Cmd + Enter"><Save size={16} />儲存並下一筆</button>}
+          <button data-editor-save className="primary" onClick={submit} disabled={saving || !canSave(form)} title="Ctrl/Cmd + S"><Save size={16} />儲存</button>
         </footer>
       </aside>
     </div>
@@ -226,11 +257,13 @@ function GeneralForm({
 function PrivateForm({
   form,
   setForm,
-  knownTags
+  knownTags,
+  initialFocus
 }: {
   form: FormState;
   setForm: (form: FormState) => void;
   knownTags: string[];
+  initialFocus?: PrivateEditorInitialFocus;
 }) {
   return (
     <div className="form-stack private-form-grid">
@@ -238,8 +271,8 @@ function PrivateForm({
         <h3>核心資料</h3>
         <div className="form-grid nested">
           <Field label="番號" value={form.private_code} onChange={(value) => setForm({ ...form, private_code: value, code: value })} />
-          <Field label="片名" value={form.private_title} onChange={(value) => setForm({ ...form, private_title: value })} />
-          <Field label="女優 / 演員" value={form.private_performers} onChange={(value) => setForm({ ...form, private_performers: value, people: value })} />
+          <Field label="片名" value={form.private_title} onChange={(value) => setForm({ ...form, private_title: value })} autoFocus={initialFocus === "metadata"} />
+          <Field label="女優 / 演員" value={form.private_performers} onChange={(value) => setForm({ ...form, private_performers: value, people: value })} autoFocus={initialFocus === "people"} />
           <Field label="平台" value={form.private_platform} onChange={(value) => setForm({ ...form, private_platform: value, platform: value })} />
           <Field label="片商" value={form.private_studio} onChange={(value) => setForm({ ...form, private_studio: value })} />
           <Field label="類型" value={form.private_type} onChange={(value) => setForm({ ...form, private_type: value, category: value })} />
@@ -249,11 +282,11 @@ function PrivateForm({
       <section className="editor-section wide">
         <h3>私密紀錄</h3>
         <div className="form-grid nested">
-          <label className="private-star-field">評分<PrivateStarRating value={numberOrNull(form.rating)} label="私密評分" onChange={(rating) => setForm({ ...form, rating: rating === null ? "" : String(rating) })} /></label>
+          <label className="private-star-field">評分<PrivateStarRating value={numberOrNull(form.rating)} label="私密評分" autoFocus={initialFocus === "rating"} onChange={(rating) => setForm({ ...form, rating: rating === null ? "" : String(rating) })} /></label>
           <CollectionLevelField value={form.collection_level as PrivateCollectionLevel} onChange={(value) => setForm({ ...form, collection_level: value })} />
           <Field label="發行日期" value={form.release_date} onChange={(value) => setForm({ ...form, release_date: value })} type="date" />
           <Field label="紀錄日" value={form.watched_at} onChange={(value) => setForm({ ...form, watched_at: value })} type="date" />
-          <TagEditor tags={form.tags} knownTags={knownTags} onChange={(tags) => setForm({ ...form, tags })} />
+          <TagEditor tags={form.tags} knownTags={knownTags} autoFocus={initialFocus === "tags"} onChange={(tags) => setForm({ ...form, tags })} />
           <label className="wide">快速筆記<textarea value={form.quick_note} onChange={(event) => setForm({ ...form, quick_note: event.target.value })} rows={3} /></label>
         </div>
       </section>
@@ -261,11 +294,11 @@ function PrivateForm({
   );
 }
 
-function Field({ label, value, onChange, required, type = "text", inputMode }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; type?: string; inputMode?: "numeric" | "decimal" }) {
+function Field({ label, value, onChange, required, type = "text", inputMode, autoFocus = false }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; type?: string; inputMode?: "numeric" | "decimal"; autoFocus?: boolean }) {
   return (
     <label>
       {label}
-      <input value={value} onChange={(event) => onChange(event.target.value)} required={required} type={type} inputMode={inputMode} />
+      <input autoFocus={autoFocus} value={value} onChange={(event) => onChange(event.target.value)} required={required} type={type} inputMode={inputMode} />
     </label>
   );
 }

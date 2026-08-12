@@ -269,6 +269,7 @@ function getListParams(url: URL): ItemListParams {
     favoriteLevelFilters: csvValues(url.searchParams.get("favoriteLevelFilters")).filter(isCollectionLevelFilter) as PrivateCollectionLevel[],
     personFilters: csvValues(url.searchParams.get("personFilters")),
     missingPeople: url.searchParams.get("missingPeople") === "true",
+    qualityView: isPrivateQualityView(url.searchParams.get("qualityView")) ? url.searchParams.get("qualityView") as ItemListParams["qualityView"] : undefined,
     hasNote: isTriState(url.searchParams.get("hasNote")) ? url.searchParams.get("hasNote") as "all" | "yes" | "no" : "all",
     hasCover: isTriState(url.searchParams.get("hasCover")) ? url.searchParams.get("hasCover") as "all" | "yes" | "no" : "all",
     watchStatus: isWatchStatusFilter(url.searchParams.get("watchStatus")) ? url.searchParams.get("watchStatus") as WatchStatus | "all" : "all",
@@ -295,6 +296,10 @@ function getListParams(url: URL): ItemListParams {
     page: optionalNumber(url.searchParams.get("page")) || 1,
     pageSize: optionalNumber(url.searchParams.get("pageSize")) || 50
   };
+}
+
+function isPrivateQualityView(value: string | null): value is NonNullable<ItemListParams["qualityView"]> {
+  return value === "missing_tags" || value === "incomplete_metadata" || value === "suspected_duplicate";
 }
 
 function optional(value: string | null) {

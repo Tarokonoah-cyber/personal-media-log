@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ItemEditor } from "../src/components/ItemEditor";
@@ -85,5 +85,34 @@ describe("private editor experience", () => {
 
     expect(confirm).not.toHaveBeenCalled();
     expect(onDelete).toHaveBeenCalledWith(privateItem.id);
+  });
+
+  it.each(["{Control>}s{/Control}", "{Meta>}s{/Meta}"])("saves with Ctrl/Cmd+S (%s)", async (shortcut) => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<ItemEditor item={privateItem} privateMode onClose={vi.fn()} onSave={onSave} onDelete={vi.fn()} />);
+
+    await userEvent.keyboard(shortcut);
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+  });
+
+  it.each(["{Control>}{Enter}{/Control}", "{Meta>}{Enter}{/Meta}"])("saves and advances with Ctrl/Cmd+Enter (%s)", async (shortcut) => {
+    const onSaveAndNext = vi.fn().mockResolvedValue(undefined);
+    render(<ItemEditor item={privateItem} privateMode onClose={vi.fn()} onSave={vi.fn()} onSaveAndNext={onSaveAndNext} onDelete={vi.fn()} />);
+
+    await userEvent.keyboard(shortcut);
+
+    await waitFor(() => expect(onSaveAndNext).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not advance when save-and-next fails", async () => {
+    const onSaveAndNext = vi.fn().mockRejectedValue(new Error("release-gate-save-failed"));
+    render(<ItemEditor item={privateItem} privateMode onClose={vi.fn()} onSave={vi.fn()} onSaveAndNext={onSaveAndNext} onDelete={vi.fn()} />);
+
+    await userEvent.keyboard("{Control>}{Enter}{/Control}");
+
+    expect(await screen.findByText("release-gate-save-failed")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "FC2-PPV-1234567" })).toBeVisible();
+    expect(onSaveAndNext).toHaveBeenCalledTimes(1);
   });
 });

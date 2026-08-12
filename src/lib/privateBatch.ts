@@ -52,3 +52,8 @@ export function privateBatchTagPatch(item: MediaItem, input: string, mode: "add"
   const removals = new Set(tags);
   return { tags: normalizeTags(item.tags.filter((tag) => !removals.has(tag))) };
 }
+
+export function privateBatchPeoplePatch(item: MediaItem, input: string): Partial<ItemInput> {
+  const people = parseTagInput(input);
+  return { people: normalizeTags([...item.people, ...people]) };
+}
