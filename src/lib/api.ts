@@ -1,4 +1,4 @@
-import type { BackupJob, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, PrivateCodeConflictResponse, PrivateFacetSearchResponse, PrivateFacets, PrivateIssueType, PrivateQualityResponse, SmartAddResponse, StatsResponse, TmdbSearchResponse } from "../types";
+import type { BackupJob, BatchUpdateOperation, BatchUpdateResponse, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, PrivateCodeConflictResponse, PrivateFacetSearchResponse, PrivateFacets, PrivateIssueType, PrivateQualityResponse, PublicAggregateResponse, SmartAddResponse, StatsResponse, TmdbSearchResponse } from "../types";
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -22,12 +22,12 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function listItems(filters: ListFilters) {
+export function listItems(filters: ListFilters, signal?: AbortSignal) {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== "" && value !== false && value !== null && value !== undefined) params.set(key, String(value));
   });
-  return request<ItemListResponse>(`/api/items?${params.toString()}`);
+  return request<ItemListResponse>(`/api/items?${params.toString()}`, { signal });
 }
 
 export function formatDuplicateCodeError(details: { inputCode?: string; normalizedCode?: string; existing?: { code?: string; title?: string } }) {
@@ -35,12 +35,12 @@ export function formatDuplicateCodeError(details: { inputCode?: string; normaliz
   return `番號「${code}」已有其他紀錄；請確認是否為重複作品。`;
 }
 
-export function listPrivateItems(filters: ListFilters) {
+export function listPrivateItems(filters: ListFilters, signal?: AbortSignal) {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== "" && value !== false && value !== null && value !== undefined) params.set(key, String(value));
   });
-  return request<ItemListResponse>(`/api/private/items?${params.toString()}`);
+  return request<ItemListResponse>(`/api/private/items?${params.toString()}`, { signal });
 }
 
 export function getItem(id: string) {
@@ -87,6 +87,10 @@ export function updateItem(id: string, input: ItemInput) {
   return request<MediaItem>(`/api/items/${id}`, { method: "PUT", body: JSON.stringify(input) });
 }
 
+export function batchUpdateItems(operations: BatchUpdateOperation[]) {
+  return request<BatchUpdateResponse>("/api/items/batch", { method: "POST", body: JSON.stringify({ operations }) });
+}
+
 export function quickUpdateItem(id: string, field: "collection_level" | "rating" | "used" | "private_status", value: unknown) {
   return request<MediaItem>(`/api/items/${id}/quick`, { method: "PATCH", body: JSON.stringify({ field, value }) });
 }
@@ -97,6 +101,11 @@ export function deleteItem(id: string) {
 
 export function getStats(includePrivate = false) {
   return request<StatsResponse>(`/api/stats?includePrivate=${includePrivate}`);
+}
+
+export function getPublicAggregate() {
+  const timezoneOffsetMinutes = new Date().getTimezoneOffset();
+  return request<PublicAggregateResponse>(`/api/public/aggregate?timezoneOffsetMinutes=${timezoneOffsetMinutes}`);
 }
 
 export function previewImport(content: string, sourceType: "csv" | "json", sourceName: string) {

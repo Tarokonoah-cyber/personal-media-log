@@ -24,6 +24,12 @@ export function PrivateBatchToolbar({
   const [tagMode, setTagMode] = useState<"add" | "remove">("add");
   const [tagInput, setTagInput] = useState("");
 
+  async function applyTags() {
+    if (busy || !tagInput.trim()) return;
+    const result = await onTags(tagInput, tagMode);
+    if (!result.cancelled && result.failedIds.length === 0) setTagInput("");
+  }
+
   return (
     <div className="private-batch-toolbar" role="region" aria-label="批次整理">
       <strong>{selectedCount} 筆已選</strong>
@@ -39,9 +45,21 @@ export function PrivateBatchToolbar({
           <button className={tagMode === "add" ? "active" : ""} onClick={() => setTagMode("add")} disabled={busy}>加入</button>
           <button className={tagMode === "remove" ? "active" : ""} onClick={() => setTagMode("remove")} disabled={busy}>移除</button>
         </div>
-        <input value={tagInput} onChange={(event) => setTagInput(event.target.value)} placeholder="輸入標籤" list="private-batch-known-tags" disabled={busy} />
+        <input
+          value={tagInput}
+          onChange={(event) => setTagInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || busy || !tagInput.trim()) return;
+            event.preventDefault();
+            void applyTags();
+          }}
+          placeholder="輸入標籤"
+          list="private-batch-known-tags"
+          disabled={busy}
+          aria-label="批次標籤"
+        />
         <datalist id="private-batch-known-tags">{knownTags.slice(0, 30).map((tag) => <option key={tag} value={tag} />)}</datalist>
-        <button disabled={busy || !tagInput.trim()} onClick={() => void onTags(tagInput, tagMode).then((result) => { if (!result.cancelled && result.failedIds.length === 0) setTagInput(""); })}><Tags size={14} />套用</button>
+        <button disabled={busy || !tagInput.trim()} onClick={() => void applyTags()}><Tags size={14} />套用</button>
       </div>
       <span className="private-batch-spacer" />
       <button className="danger-text" disabled={busy} onClick={() => void onDelete()}><Trash2 size={14} />刪除</button>

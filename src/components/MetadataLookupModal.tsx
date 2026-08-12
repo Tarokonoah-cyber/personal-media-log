@@ -1,6 +1,7 @@
 import { Search, X } from "lucide-react";
 import { useState } from "react";
 import type { MediaItem, TmdbCandidate } from "../types";
+import { CoverImage } from "./CoverImage";
 
 export function MetadataLookupModal({
   item,
@@ -43,7 +44,7 @@ export function MetadataLookupModal({
         <div className="candidate-list">
           {candidates.map((candidate) => (
             <button className="candidate-row" key={`${candidate.media_type}-${candidate.tmdb_id}`} onClick={() => onApply(candidate)}>
-              {candidate.poster_url ? <img src={candidate.poster_url} alt="" /> : <span className="poster-placeholder">無海報</span>}
+              <CoverImage src={candidate.poster_url} fallback={<span className="poster-placeholder">無海報</span>} />
               <span className="candidate-main">
                 <strong>{candidate.title}</strong>
                 <em>{candidate.original_title || "-"}</em>

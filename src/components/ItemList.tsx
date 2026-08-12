@@ -1,7 +1,9 @@
 import { Ban, CheckCircle2, Pause, Plus, Repeat2, RotateCcw, SkipForward, Sparkles, Star, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import { CoverImage } from "./CoverImage";
 import { displayDate } from "../lib/date";
+import { removeStorageItem, writeStorageItem } from "../lib/storage";
 import { privateItemDetails } from "../lib/privacy";
 import { getItemReflection, moodOptions, rewatchIntentOptions } from "../lib/reflection";
 import { classifyItem, libraryTree } from "../lib/taxonomy";
@@ -96,7 +98,7 @@ export function ItemList({
     const selected = stored.length > 0 ? stored : defaultColumnIds.filter((id) => available.has(id));
     const nextSelected = privateMode && available.has("used") ? ensureColumnAfter(selected, "used", "rating") : selected;
     setSelectedColumnIds(nextSelected);
-    if (stored.length > 0 && nextSelected.length !== stored.length) localStorage.setItem(storageKey, JSON.stringify(nextSelected));
+    if (stored.length > 0 && nextSelected.length !== stored.length) writeStorageItem(storageKey, JSON.stringify(nextSelected));
   }, [allColumns, defaultColumnIds, privateMode, storageKey]);
 
   useEffect(() => {
@@ -124,7 +126,7 @@ export function ItemList({
     const fallback = defaultColumnIds.filter((id) => available.has(id));
     const value = clean.length > 0 ? clean : fallback;
     setSelectedColumnIds(value);
-    localStorage.setItem(storageKey, JSON.stringify(value));
+    writeStorageItem(storageKey, JSON.stringify(value));
   }
 
   function toggleColumn(id: ColumnId) {
@@ -137,14 +139,14 @@ export function ItemList({
   }
 
   function resetColumns() {
-    localStorage.removeItem(storageKey);
+    removeStorageItem(storageKey);
     setSelectedColumnIds(defaultColumnIds);
   }
 
   function resizeColumn(id: ColumnId, width: number) {
     setColumnWidths((current) => {
       const next = { ...current, [id]: Math.round(width) };
-      localStorage.setItem(columnWidthStorageKey, JSON.stringify(next));
+      writeStorageItem(columnWidthStorageKey, JSON.stringify(next));
       return next;
     });
   }
@@ -158,14 +160,14 @@ export function ItemList({
     if (!nextColumn.label || !nextColumn.source) return;
     const next = [...customColumns, nextColumn];
     setCustomColumns(next);
-    localStorage.setItem(customStorageKey, JSON.stringify(next));
+    writeStorageItem(customStorageKey, JSON.stringify(next));
     updateColumns([...selectedColumnIds, nextColumn.id]);
   }
 
   function deleteCustomColumn(id: string) {
     const next = customColumns.filter((column) => column.id !== id);
     setCustomColumns(next);
-    localStorage.setItem(customStorageKey, JSON.stringify(next));
+    writeStorageItem(customStorageKey, JSON.stringify(next));
     updateColumns(selectedColumnIds.filter((columnId) => columnId !== id));
   }
 
@@ -205,7 +207,7 @@ export function ItemList({
         {items.map((item) => (
           <article className="compact-row" key={item.id} onClick={() => onSelect(item)}>
             <span className="compact-cover" aria-hidden="true">
-              {item.cover_url ? <img src={item.cover_url} alt="" /> : coverInitial(item)}
+              <CoverImage src={item.cover_url} fallback={coverInitial(item)} />
             </span>
             <div className="compact-main">
               <div className="compact-title">
@@ -706,11 +708,11 @@ function generalColumnDefs({
       cellClassName: "title-cell",
       render: (item) => (
         <div className="title-cell-inner">
-          {item.cover_url ? (
-            <img className="table-cover" src={item.cover_url} alt="" loading="lazy" />
-          ) : (
-            <span className="table-cover placeholder">{coverInitial(item)}</span>
-          )}
+          <CoverImage
+            src={item.cover_url}
+            className="table-cover"
+            fallback={<span className="table-cover placeholder">{coverInitial(item)}</span>}
+          />
           <span className="title-copy">
             <strong>{item.official_title || item.raw_title}</strong>
             {item.code && <small>{item.code}</small>}
@@ -1119,17 +1121,15 @@ function numberOrNull(value: string) {
 }
 
 function PosterWall({ items, onSelect }: { items: MediaItem[]; onSelect: (item: MediaItem) => void }) {
-  const posterItems = items.filter((item) => item.cover_url);
-  if (posterItems.length === 0) return <div className="empty">目前沒有海報。可以用「補資料」從 TMDb 補上封面連結。</div>;
   return (
     <div className="poster-wall">
-      {posterItems.map((item) => (
+      {items.map((item) => (
         <button className="poster-card" key={item.id} onClick={() => onSelect(item)}>
-          <img src={item.cover_url || ""} alt="" />
+          <CoverImage src={item.cover_url} fallback={<span className="poster-placeholder">{coverInitial(item)}</span>} />
           <span>
             <strong>{item.official_title || item.raw_title}</strong>
             <em>{item.release_year || "-"} · {watchStatusLabel(getWatchStatus(item))}</em>
-            <em>{item.rating ? `★ ${Number(item.rating).toFixed(1)}` : "尚未評分"}{isSeriesLike(item) && progressLabel(item) ? ` · ${progressLabel(item)}` : ""}</em>
+            <em>{item.rating ? `★ ${Number(item.rating).toFixed(1)}/10` : "尚未評分"}{isSeriesLike(item) && progressLabel(item) ? ` · ${progressLabel(item)}` : ""}</em>
           </span>
         </button>
       ))}
@@ -1138,17 +1138,18 @@ function PosterWall({ items, onSelect }: { items: MediaItem[]; onSelect: (item: 
 }
 
 function RatingStars({ item, compact, onQuickUpdate }: { item: MediaItem; compact?: boolean; onQuickUpdate?: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void> }) {
-  const value = item.rating || 0;
+  const selectedStars = Math.min(5, Math.max(0, Math.ceil((item.rating || 0) / 2)));
   return (
     <span className={compact ? "rating-stars compact" : "rating-stars"} onClick={stop}>
-      {[1, 2, 3, 4, 5].map((rating) => (
+      {[1, 2, 3, 4, 5].map((stars) => (
         <button
-          key={rating}
-          className={value >= rating ? "filled" : ""}
-          onClick={(event) => action(event, () => onQuickUpdate?.(item, { rating }))}
-          title={`${rating} 星`}
+          key={stars}
+          type="button"
+          className={selectedStars >= stars ? "filled" : ""}
+          onClick={(event) => action(event, () => onQuickUpdate?.(item, { rating: selectedStars === stars ? null : stars * 2 }))}
+          title={`${stars} 星（${stars * 2}/10）`}
         >
-          <Star size={compact ? 13 : 16} fill={value >= rating ? "currentColor" : "none"} />
+          <Star size={compact ? 13 : 16} fill={selectedStars >= stars ? "currentColor" : "none"} />
         </button>
       ))}
     </span>
@@ -1158,9 +1159,9 @@ function RatingStars({ item, compact, onQuickUpdate }: { item: MediaItem; compac
 function RatingValue({ item }: { item: MediaItem }) {
   if (!item.rating) return <span className="muted-cell">-</span>;
   return (
-    <span className="rating-value" aria-label={`${item.rating} 星`}>
+    <span className="rating-value" aria-label={`評分 ${item.rating} / 10`}>
       <Star size={14} fill="currentColor" />
-      {Number(item.rating).toFixed(1)}
+      {Number(item.rating).toFixed(1)} / 10
     </span>
   );
 }

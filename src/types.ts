@@ -156,7 +156,7 @@ export interface ListFilters {
   viewedTo?: string;
   updatedFrom: string;
   updatedTo: string;
-  sort?: "displayName" | "";
+  sort?: "displayName" | "rating" | "releaseDate" | "";
   order?: "asc" | "desc" | "";
   page: number;
   pageSize: number;
@@ -177,6 +177,39 @@ export interface StatsResponse {
   categories: Array<{ name: string; count: number }>;
   platforms: Array<{ name: string; count: number }>;
   tags: Array<{ name: string; count: number }>;
+}
+
+export interface BatchUpdateOperation {
+  id: string;
+  input: ItemInput;
+}
+
+export interface BatchUpdateResponse {
+  outcome: "updated" | "already_applied";
+  requested: number;
+  updatedIds: string[];
+  unchangedIds: string[];
+  atomic: true;
+}
+
+export interface PublicAggregateResponse {
+  generatedAt: string;
+  summary: {
+    total: number;
+    today: number;
+    thisWeek: number;
+    inbox: number;
+    currentYear: number;
+    averageRating: number;
+  };
+  facets: {
+    types: StatsResponse["types"];
+    categories: StatsResponse["categories"];
+    platforms: StatsResponse["platforms"];
+    tags: StatsResponse["tags"];
+    watchStatuses: StatsResponse["watchStatuses"];
+  };
+  stats: StatsResponse;
 }
 
 export interface ImportPreview {

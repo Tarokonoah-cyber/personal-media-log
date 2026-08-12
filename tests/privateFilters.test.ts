@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clearPrivateSidebarFilters, mergePrivateFilters } from "../src/lib/privateFilters";
+import { clearPrivateSidebarFilters, mergePrivateFilters, resetFiltersPreservingTableState } from "../src/lib/privateFilters";
 import type { ListFilters } from "../src/types";
 
 const base = (): ListFilters => ({
@@ -27,5 +27,11 @@ describe("private filter state", () => {
   it("clears only sidebar facets for All", () => {
     const state = clearPrivateSidebarFilters({ ...base(), platformFilters: "FC2", favoriteLevelFilters: "normal", personFilters: "A", tag: "劇情" });
     expect(state).toMatchObject({ platformFilters: "", favoriteLevelFilters: "", personFilters: "", tag: "", query: "needle", ratingMin: "8", hasNote: "yes", page: 1 });
+  });
+
+  it("clears filters without discarding page size or the active sort", () => {
+    const current = { ...base(), pageSize: 200, sort: "rating", order: "desc" } as ListFilters;
+    const reset = resetFiltersPreservingTableState(current, { ...base(), query: "", ratingMin: "", hasNote: "all", page: 1 });
+    expect(reset).toMatchObject({ query: "", ratingMin: "", hasNote: "all", page: 1, pageSize: 200, sort: "rating", order: "desc" });
   });
 });

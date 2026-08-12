@@ -5,7 +5,8 @@ import { buildOrganizerIssues, type OrganizerIssueKind } from "../lib/organizati
 import { getWatchStatus, progressLabel, watchStatusLabel } from "../lib/watch";
 import { classifyItem } from "../lib/taxonomy";
 import { useEffect, useMemo, useState } from "react";
-import type { ListFilters, MediaItem, StatsResponse } from "../types";
+import type { ListFilters, MediaItem, PublicAggregateResponse, StatsResponse } from "../types";
+import { CoverImage } from "./CoverImage";
 
 const hiddenHomeTypes = new Set(["沙雕动画"]);
 
@@ -52,6 +53,7 @@ interface HomeBuckets {
 
 export function HomeDashboard({
   items = [],
+  aggregate = null,
   variant = "sidebar",
   includePrivate = false,
   onView,
@@ -59,6 +61,7 @@ export function HomeDashboard({
   onSelect
 }: {
   items?: MediaItem[];
+  aggregate?: PublicAggregateResponse | null;
   inboxTotal?: number;
   favoriteTotal?: number;
   variant?: "sidebar" | "main";
@@ -67,10 +70,10 @@ export function HomeDashboard({
   onTool?: (tab: ToolTab) => void;
   onSelect?: (item: MediaItem) => void;
 }) {
-  if (variant === "main") return <MainDashboard includePrivate={includePrivate} onView={onView} onTool={onTool} onSelect={onSelect} />;
+  if (variant === "main") return <MainDashboard aggregate={aggregate} includePrivate={includePrivate} onView={onView} onTool={onTool} onSelect={onSelect} />;
 
-  const todayCount = items.filter((item) => isToday(item.created_at)).length;
-  const weekCount = items.filter((item) => isThisWeek(item.created_at)).length;
+  const todayCount = aggregate?.summary.today ?? items.filter((item) => isToday(item.created_at)).length;
+  const weekCount = aggregate?.summary.thisWeek ?? items.filter((item) => isThisWeek(item.created_at)).length;
 
   return (
     <section className="summary-line" aria-label="觀看摘要">
@@ -81,37 +84,54 @@ export function HomeDashboard({
 }
 
 function MainDashboard({
+  aggregate,
   includePrivate,
   onView,
   onTool,
   onSelect
 }: {
+  aggregate: PublicAggregateResponse | null;
   includePrivate: boolean;
   onView?: (view: string) => void;
   onTool?: (tab: ToolTab) => void;
   onSelect?: (item: MediaItem) => void;
 }) {
-  const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [privateStats, setPrivateStats] = useState<StatsResponse | null>(null);
   const [organizerItems, setOrganizerItems] = useState<MediaItem[]>([]);
   const [error, setError] = useState("");
+  const stats = includePrivate ? privateStats : aggregate?.stats || null;
 
   useEffect(() => {
     let cancelled = false;
-    async function loadHome() {
+    async function loadOrganizer() {
       setError("");
       try {
-        const [nextStats, nextOrganizerItems] = await Promise.all([
-          getStats(includePrivate),
-          loadOrganizerItems(includePrivate)
-        ]);
+        const nextOrganizerItems = await loadOrganizerItems(includePrivate);
         if (cancelled) return;
-        setStats(nextStats);
         setOrganizerItems(nextOrganizerItems);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "首頁資料載入失敗");
       }
     }
-    void loadHome();
+    void loadOrganizer();
+    return () => {
+      cancelled = true;
+    };
+  }, [includePrivate]);
+
+  useEffect(() => {
+    if (!includePrivate) {
+      setPrivateStats(null);
+      return;
+    }
+    let cancelled = false;
+    void getStats(true)
+      .then((nextStats) => {
+        if (!cancelled) setPrivateStats(nextStats);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "統計資料載入失敗");
+      });
     return () => {
       cancelled = true;
     };
@@ -255,7 +275,7 @@ function PosterCarousel({ items, onSelect }: { items: MediaItem[]; onSelect?: (i
 function Thumb({ item, size = "tile" }: { item: MediaItem; size?: "mini" | "tile" | "feature" | "poster" }) {
   return (
     <span className={`home-clean-thumb ${size}`} aria-hidden="true">
-      {item.cover_url ? <img src={item.cover_url} alt="" /> : coverInitial(item)}
+      <CoverImage src={item.cover_url} fallback={coverInitial(item)} />
     </span>
   );
 }

@@ -1,12 +1,13 @@
 import type { Actor, Env } from "./types";
 
 export function json(data: unknown, init: ResponseInit = {}) {
+  const headers = new Headers(init.headers);
+  if (!headers.has("content-type")) headers.set("content-type", "application/json; charset=utf-8");
+  if (!headers.has("cache-control")) headers.set("cache-control", "private, no-store");
+  if (!headers.has("x-content-type-options")) headers.set("x-content-type-options", "nosniff");
   return new Response(JSON.stringify(data), {
     ...init,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      ...init.headers
-    }
+    headers
   });
 }
 
@@ -69,5 +70,11 @@ export function notFound() {
 }
 
 export function noContent() {
-  return new Response(null, { status: 204 });
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "cache-control": "private, no-store",
+      "x-content-type-options": "nosniff"
+    }
+  });
 }

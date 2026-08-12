@@ -7,12 +7,14 @@ export function FilterSheet({
   open,
   filters,
   privateMode = false,
+  suggestions,
   onChange,
   onClose
 }: {
   open: boolean;
   filters: ListFilters;
   privateMode?: boolean;
+  suggestions?: FilterSuggestions;
   onChange: (patch: Partial<ListFilters>) => void;
   onClose: () => void;
 }) {
@@ -26,21 +28,28 @@ export function FilterSheet({
         {privateMode ? (
           <PrivateFilters filters={filters} onChange={onChange} />
         ) : (
-          <GeneralFilters filters={filters} onChange={onChange} />
+          <GeneralFilters filters={filters} suggestions={suggestions} onChange={onChange} />
         )}
       </div>
     </div>
   );
 }
 
-function GeneralFilters({ filters, onChange }: { filters: ListFilters; onChange: (patch: Partial<ListFilters>) => void }) {
+interface FilterSuggestions {
+  types: string[];
+  categories: string[];
+  tags: string[];
+  platforms: string[];
+}
+
+function GeneralFilters({ filters, suggestions, onChange }: { filters: ListFilters; suggestions?: FilterSuggestions; onChange: (patch: Partial<ListFilters>) => void }) {
   return (
     <div className="filter-grid">
       <Select label="狀態" value={filters.status} onChange={(value) => onChange({ status: value as ListFilters["status"] })} options={["all", "inbox", "raw", "partial", "organized", "complete"]} />
-      <Field label="類型" value={filters.type} onChange={(value) => onChange({ type: value })} />
-      <Field label="分類" value={filters.category || ""} onChange={(value) => onChange({ category: value })} />
-      <Field label="標籤" value={filters.tag} onChange={(value) => onChange({ tag: value })} />
-      <Field label="平台" value={filters.platform} onChange={(value) => onChange({ platform: value })} />
+      <Field label="類型" value={filters.type} suggestions={suggestions?.types} onChange={(value) => onChange({ type: value })} />
+      <Field label="分類" value={filters.category || ""} suggestions={suggestions?.categories} onChange={(value) => onChange({ category: value })} />
+      <Field label="標籤" value={filters.tag} suggestions={suggestions?.tags} onChange={(value) => onChange({ tag: value })} />
+      <Field label="平台" value={filters.platform} suggestions={suggestions?.platforms} onChange={(value) => onChange({ platform: value })} />
       <Field label="年份" value={filters.year} inputMode="numeric" onChange={(value) => onChange({ year: value })} />
       <Field label="觀看起日" value={filters.watchedFrom} type="date" onChange={(value) => onChange({ watchedFrom: value })} />
       <Field label="觀看迄日" value={filters.watchedTo} type="date" onChange={(value) => onChange({ watchedTo: value })} />
@@ -85,11 +94,13 @@ function StarFilter({ label, value, bound, onChange }: { label: string; value: s
   );
 }
 
-function Field({ label, value, onChange, placeholder, type = "text", inputMode }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; type?: string; inputMode?: "numeric" | "decimal" }) {
+function Field({ label, value, onChange, placeholder, type = "text", inputMode, suggestions }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; type?: string; inputMode?: "numeric" | "decimal"; suggestions?: string[] }) {
+  const listId = suggestions?.length ? `filter-suggestions-${label}` : undefined;
   return (
     <label>
       {label}
-      <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} type={type} inputMode={inputMode} />
+      <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} type={type} inputMode={inputMode} list={listId} />
+      {listId && <datalist id={listId}>{suggestions?.map((option) => <option key={option} value={option} />)}</datalist>}
     </label>
   );
 }

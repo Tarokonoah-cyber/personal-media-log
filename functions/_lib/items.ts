@@ -4,7 +4,7 @@ import { isPrivateMarker as isPrivateMarkerValue, privateItemWhereSql, publicIte
 import { newId, nowIso } from "./ids";
 import { isCollectionLevel, normalizeCollectionLevel, normalizePlatform as normalizePrivatePlatform, normalizeWorkCode, validateQuickEdit } from "../../shared/privateModel";
 import { privateStatusToFields } from "../../shared/privateStatus";
-import type { Actor, Env, FavoriteLevel, ItemInput, ItemListParams, ItemRecord, ItemStatus, MediaStatus, WatchStatus, PrivateFacets, PrivateSummary } from "./types";
+import type { Actor, BatchUpdateOperation, BatchUpdateResult, Env, FavoriteLevel, ItemInput, ItemListParams, ItemRecord, ItemStatus, MediaStatus, PublicAggregateResponse, WatchStatus, PrivateFacets, PrivateSummary } from "./types";
 
 type Row = Record<string, unknown>;
 type NormalizedInput = Required<ItemInput> & { search_text: string };
@@ -670,9 +670,16 @@ export async function searchPrivateFacet(env: Env, facet: "actress" | "tag" | "s
   return (result.results || []).map((row) => ({ value: row.value, label: row.value, count: Number(row.count) }));
 }
 
-function listOrderSql(params: ItemListParams) {
+export function listOrderSql(params: ItemListParams) {
+  const direction = params.order === "asc" ? "ASC" : "DESC";
+  if (params.sort === "rating") {
+    return `ORDER BY items.rating IS NULL ASC, items.rating ${direction}, datetime(items.updated_at) DESC, items.id DESC`;
+  }
+  if (params.sort === "releaseDate") {
+    return `ORDER BY nullif(trim(items.release_date), '') IS NULL ASC, date(items.release_date) ${direction}, datetime(items.updated_at) DESC, items.id DESC`;
+  }
   if (params.sort === "displayName") {
-    const direction = params.order === "desc" ? "DESC" : "ASC";
+    const nameDirection = params.order === "desc" ? "DESC" : "ASC";
     const codeSql = "coalesce(nullif(trim(items.normalized_code), ''), nullif(trim(items.code), ''), '')";
     const rawTitleSql = "coalesce(nullif(trim(json_extract(items.metadata_json, '$.title')), ''), nullif(trim(items.official_title), ''), nullif(trim(items.raw_title), ''), '')";
     const displaySql = `CASE
@@ -683,7 +690,7 @@ function listOrderSql(params: ItemListParams) {
     END`;
     const codePrefixSql = `lower(rtrim(${codeSql}, '0123456789'))`;
     const codeNumberSql = `CAST(nullif(substr(${codeSql}, length(rtrim(${codeSql}, '0123456789')) + 1), '') AS INTEGER)`;
-    return `ORDER BY lower(trim(${displaySql})) COLLATE NOCASE ${direction}, ${codePrefixSql} COLLATE NOCASE ${direction}, ${codeNumberSql} ${direction}, lower(${codeSql}) COLLATE NOCASE ${direction}, items.id ${direction}`;
+    return `ORDER BY lower(trim(${displaySql})) COLLATE NOCASE ${nameDirection}, ${codePrefixSql} COLLATE NOCASE ${nameDirection}, ${codeNumberSql} ${nameDirection}, lower(${codeSql}) COLLATE NOCASE ${nameDirection}, items.id ${nameDirection}`;
   }
   if (params.mediaStatus === "待觀看") return "ORDER BY datetime(coalesce(planned_at, created_at)) DESC, id DESC";
   if (params.mediaStatus === "已觀看" || params.mediaStatus === "想重看") return "ORDER BY datetime(coalesce(watched_at, updated_at, created_at)) DESC, id DESC";
@@ -934,7 +941,7 @@ export async function getStats(env: Env, includePrivate = false) {
     env.MEDIA_LOG_DB.prepare(`SELECT coalesce(type, '其他') AS name, COUNT(*) AS count FROM items WHERE ${visibleSql} GROUP BY coalesce(type, '其他') ORDER BY count DESC`).all(),
     env.MEDIA_LOG_DB.prepare(`SELECT coalesce(category, '未分類') AS name, COUNT(*) AS count FROM items WHERE ${visibleSql} GROUP BY coalesce(category, '未分類') ORDER BY count DESC`).all(),
     env.MEDIA_LOG_DB.prepare(`SELECT coalesce(platform, '未設定') AS name, COUNT(*) AS count FROM items WHERE ${visibleSql} GROUP BY coalesce(platform, '未設定') ORDER BY count DESC`).all(),
-    env.MEDIA_LOG_DB.prepare(`SELECT tags.name AS name, COUNT(*) AS count FROM tags JOIN item_tags ON item_tags.tag_id = tags.id JOIN items ON items.id = item_tags.item_id WHERE ${visibleItemsSql} GROUP BY tags.id ORDER BY count DESC, tags.name ASC LIMIT 100`).all()
+    env.MEDIA_LOG_DB.prepare(`SELECT tags.name AS name, COUNT(*) AS count FROM tags JOIN item_tags ON item_tags.tag_id = tags.id JOIN items ON items.id = item_tags.item_id WHERE ${visibleItemsSql} GROUP BY tags.id ORDER BY count DESC, tags.name ASC`).all()
   ]);
 
   return {
@@ -946,12 +953,63 @@ export async function getStats(env: Env, includePrivate = false) {
     recent: await hydrateItems(env, recent.results || []),
     watching: await hydrateItems(env, watching.results || []),
     plan: await hydrateItems(env, plan.results || []),
-    monthly: monthly.results || [],
+    monthly: (monthly.results || []) as Array<{ month: string; count: number }>,
     watchStatuses: normalizeWatchStatusCounts(watchStatuses.results || []),
-    types: types.results || [],
-    categories: categories.results || [],
-    platforms: platforms.results || [],
-    tags: tags.results || []
+    types: (types.results || []) as Array<{ name: string; count: number }>,
+    categories: (categories.results || []) as Array<{ name: string; count: number }>,
+    platforms: (platforms.results || []) as Array<{ name: string; count: number }>,
+    tags: (tags.results || []) as Array<{ name: string; count: number }>
+  };
+}
+
+export async function getPublicAggregate(env: Env, timezoneOffsetMinutes = 0): Promise<PublicAggregateResponse> {
+  const offset = Number.isFinite(timezoneOffsetMinutes) && Math.abs(timezoneOffsetMinutes) <= 840
+    ? Math.trunc(timezoneOffsetMinutes)
+    : 0;
+  const generatedAt = nowIso();
+  const range = localDayAndWeekRange(new Date(generatedAt), offset);
+  const visibleSql = `items.status != 'deleted' AND ${publicItemWhereSql("items")}`;
+  const [stats, periodCounts] = await Promise.all([
+    getStats(env, false),
+    env.MEDIA_LOG_DB.prepare(`
+      SELECT
+        SUM(CASE WHEN datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?) THEN 1 ELSE 0 END) AS today,
+        SUM(CASE WHEN datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?) THEN 1 ELSE 0 END) AS this_week
+      FROM items WHERE ${visibleSql}
+    `).bind(range.dayStart, range.dayEnd, range.weekStart, range.weekEnd).first<{ today: number; this_week: number }>()
+  ]);
+  return {
+    generatedAt,
+    summary: {
+      total: stats.total,
+      today: periodCounts?.today || 0,
+      thisWeek: periodCounts?.this_week || 0,
+      inbox: stats.inbox,
+      currentYear: stats.currentYear,
+      averageRating: stats.averageRating
+    },
+    facets: {
+      types: stats.types,
+      categories: stats.categories,
+      platforms: stats.platforms,
+      tags: stats.tags,
+      watchStatuses: stats.watchStatuses
+    },
+    stats
+  };
+}
+
+function localDayAndWeekRange(now: Date, timezoneOffsetMinutes: number) {
+  const shifted = new Date(now.getTime() - timezoneOffsetMinutes * 60_000);
+  const localMidnightAsUtc = Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate());
+  const dayStartMs = localMidnightAsUtc + timezoneOffsetMinutes * 60_000;
+  const mondayOffsetDays = (shifted.getUTCDay() + 6) % 7;
+  const weekStartMs = dayStartMs - mondayOffsetDays * 86_400_000;
+  return {
+    dayStart: new Date(dayStartMs).toISOString(),
+    dayEnd: new Date(dayStartMs + 86_400_000).toISOString(),
+    weekStart: new Date(weekStartMs).toISOString(),
+    weekEnd: new Date(weekStartMs + 7 * 86_400_000).toISOString()
   };
 }
 
@@ -1129,16 +1187,25 @@ export async function isLikelyDuplicate(env: Env, input: ItemInput) {
 async function hydrateItems(env: Env, rows: Row[]): Promise<ItemRecord[]> {
   if (rows.length === 0) return [];
   const ids = rows.map((row) => String(row.id));
-  const placeholders = ids.map(() => "?").join(", ");
-  const [tagRows, peopleRows, collectionRows] = await Promise.all([
-    env.MEDIA_LOG_DB.prepare(`SELECT item_tags.item_id, tags.name FROM item_tags JOIN tags ON tags.id = item_tags.tag_id WHERE item_tags.item_id IN (${placeholders}) ORDER BY tags.name`).bind(...ids).all<{ item_id: string; name: string }>(),
-    env.MEDIA_LOG_DB.prepare(`SELECT item_people.item_id, people.name FROM item_people JOIN people ON people.id = item_people.person_id WHERE item_people.item_id IN (${placeholders}) ORDER BY people.name`).bind(...ids).all<{ item_id: string; name: string }>(),
-    env.MEDIA_LOG_DB.prepare(`SELECT collection_items.item_id, collections.name FROM collection_items JOIN collections ON collections.id = collection_items.collection_id WHERE collection_items.item_id IN (${placeholders}) ORDER BY collections.name`).bind(...ids).all<{ item_id: string; name: string }>()
+  const idChunks = chunkSqlValues(ids);
+  const [tagResults, peopleResults, collectionResults] = await Promise.all([
+    Promise.all(idChunks.map((chunk) => {
+      const placeholders = chunk.map(() => "?").join(", ");
+      return env.MEDIA_LOG_DB.prepare(`SELECT item_tags.item_id, tags.name FROM item_tags JOIN tags ON tags.id = item_tags.tag_id WHERE item_tags.item_id IN (${placeholders}) ORDER BY tags.name`).bind(...chunk).all<{ item_id: string; name: string }>();
+    })),
+    Promise.all(idChunks.map((chunk) => {
+      const placeholders = chunk.map(() => "?").join(", ");
+      return env.MEDIA_LOG_DB.prepare(`SELECT item_people.item_id, people.name FROM item_people JOIN people ON people.id = item_people.person_id WHERE item_people.item_id IN (${placeholders}) ORDER BY people.name`).bind(...chunk).all<{ item_id: string; name: string }>();
+    })),
+    Promise.all(idChunks.map((chunk) => {
+      const placeholders = chunk.map(() => "?").join(", ");
+      return env.MEDIA_LOG_DB.prepare(`SELECT collection_items.item_id, collections.name FROM collection_items JOIN collections ON collections.id = collection_items.collection_id WHERE collection_items.item_id IN (${placeholders}) ORDER BY collections.name`).bind(...chunk).all<{ item_id: string; name: string }>();
+    }))
   ]);
 
-  const tags = groupByItem(tagRows.results || []);
-  const people = groupByItem(peopleRows.results || []);
-  const collections = groupByItem(collectionRows.results || []);
+  const tags = groupByItem(tagResults.flatMap((result) => result.results || []));
+  const people = groupByItem(peopleResults.flatMap((result) => result.results || []));
+  const collections = groupByItem(collectionResults.flatMap((result) => result.results || []));
 
   return rows.map((row) => ({
     id: String(row.id),
@@ -1191,6 +1258,226 @@ function groupByItem(rows: { item_id: string; name: string }[]) {
     map.set(row.item_id, list);
   }
   return map;
+}
+
+function validateBatchUpdateOperations(input: unknown): BatchUpdateOperation[] {
+  if (!Array.isArray(input)) throw new HttpError(400, "operations must be an array", { atomic: true });
+  if (input.length < 1 || input.length > 100) {
+    throw new HttpError(400, "Batch must contain between 1 and 100 operations", { atomic: true, requested: input.length, max: 100 });
+  }
+
+  const errors: Array<{ index: number; id?: string; field: string; message: string }> = [];
+  const operations: BatchUpdateOperation[] = [];
+  const seenIds = new Set<string>();
+  input.forEach((value, index) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      errors.push({ index, field: "operation", message: "Operation must be an object" });
+      return;
+    }
+    const operation = value as Record<string, unknown>;
+    const id = typeof operation.id === "string" ? operation.id.trim() : "";
+    if (!id) errors.push({ index, field: "id", message: "id is required" });
+    else if (seenIds.has(id)) errors.push({ index, id, field: "id", message: "Duplicate item id in batch" });
+    else seenIds.add(id);
+
+    if (!operation.input || typeof operation.input !== "object" || Array.isArray(operation.input)) {
+      errors.push({ index, id: id || undefined, field: "input", message: "input must be an object" });
+      return;
+    }
+    const itemInput = operation.input as Record<string, unknown>;
+    if (typeof itemInput.raw_title !== "string" || !itemInput.raw_title.trim()) {
+      errors.push({ index, id: id || undefined, field: "raw_title", message: "raw_title is required" });
+    }
+    if (itemInput.collection_level !== undefined && !isCollectionLevel(itemInput.collection_level)) {
+      errors.push({ index, id: id || undefined, field: "collection_level", message: "Invalid collection_level" });
+    }
+    if (itemInput.status !== undefined && !["raw", "partial", "complete", "archived", "deleted"].includes(String(itemInput.status))) {
+      errors.push({ index, id: id || undefined, field: "status", message: "Invalid status" });
+    }
+    for (const field of ["tags", "people", "collections"] as const) {
+      const relation = itemInput[field];
+      if (relation !== undefined && (!Array.isArray(relation) || relation.some((entry) => typeof entry !== "string"))) {
+        errors.push({ index, id: id || undefined, field, message: `${field} must be an array of strings` });
+      }
+    }
+    operations.push({ id, input: operation.input as ItemInput });
+  });
+
+  if (errors.length) throw new HttpError(400, "Batch validation failed", { atomic: true, errors });
+  return operations;
+}
+
+async function validateBatchNormalizedCodes(
+  env: Env,
+  desired: Array<{ id: string; input: ItemInput; normalized: NormalizedInput }>,
+  currentById: Map<string, ItemRecord>
+) {
+  const desiredByCode = new Map<string, Array<{ id: string; input: ItemInput; normalized: NormalizedInput }>>();
+  for (const entry of desired) {
+    const code = entry.normalized.normalized_code;
+    if (!code) continue;
+    desiredByCode.set(code, [...(desiredByCode.get(code) || []), entry]);
+  }
+  const duplicateErrors = Array.from(desiredByCode.entries())
+    .filter(([, entries]) => entries.length > 1 && entries.some((entry) => currentById.get(entry.id)?.normalized_code !== entry.normalized.normalized_code))
+    .flatMap(([normalizedCode, entries]) => entries.map((entry) => ({ id: entry.id, field: "code", message: "Duplicate normalized code in batch", normalizedCode })));
+  if (duplicateErrors.length) throw new HttpError(409, "Batch contains duplicate codes", { atomic: true, errors: duplicateErrors });
+
+  const codes = desired
+    .filter((entry) => currentById.get(entry.id)?.normalized_code !== entry.normalized.normalized_code)
+    .map((entry) => entry.normalized.normalized_code)
+    .filter((code): code is string => Boolean(code));
+  if (!codes.length) return;
+  const existing = await env.MEDIA_LOG_DB.prepare(`
+    SELECT id, code, raw_title, official_title, normalized_code
+    FROM items
+    WHERE status != 'deleted' AND normalized_code IN (SELECT CAST(value AS TEXT) FROM json_each(?))
+  `).bind(JSON.stringify(codes)).all<Row>();
+  const desiredById = new Map(desired.map((entry) => [entry.id, entry]));
+  const conflicts: Array<{ id: string; field: string; message: string; normalizedCode: string; existing: { id: string; code: string; title: string } }> = [];
+  for (const row of existing.results || []) {
+    const existingId = String(row.id);
+    const normalizedCode = String(row.normalized_code || "");
+    const target = desiredByCode.get(normalizedCode)?.find((entry) => currentById.get(entry.id)?.normalized_code !== entry.normalized.normalized_code);
+    if (!target || target.id === existingId) continue;
+    const movingItem = desiredById.get(existingId);
+    if (movingItem && movingItem.normalized.normalized_code !== normalizedCode) continue;
+    conflicts.push({
+      id: target.id,
+      field: "code",
+      message: "Normalized code already exists",
+      normalizedCode,
+      existing: {
+        id: existingId,
+        code: nullableString(row.code) || normalizedCode,
+        title: nullableString(row.official_title) || String(row.raw_title || "")
+      }
+    });
+  }
+  if (conflicts.length) throw new HttpError(409, "Batch contains conflicting codes", { atomic: true, errors: conflicts });
+}
+
+const batchComparableFields: Array<keyof NormalizedInput> = [
+  "raw_title", "official_title", "original_title", "code", "type", "category", "platform", "maker", "series",
+  "release_year", "release_date", "year", "watched_at", "started_at", "completed_at", "planned_at", "rating", "rewatch_score",
+  "favorite", "favorite_level", "collection_level", "normalized_code", "used", "is_private", "status", "media_status",
+  "quick_note", "long_note", "source_url", "cover_url", "metadata_json", "progress_json"
+];
+
+function batchItemMatches(current: ItemRecord, desired: NormalizedInput) {
+  const currentValues = current as unknown as Record<string, unknown>;
+  const desiredValues = desired as unknown as Record<string, unknown>;
+  if (batchComparableFields.some((field) => currentValues[field] !== desiredValues[field])) return false;
+  return sameStringSet(current.tags, desired.tags)
+    && sameStringSet(current.people, desired.people)
+    && sameStringSet(current.collections, desired.collections);
+}
+
+function sameStringSet(left: string[], right: string[]) {
+  const normalize = (values: string[]) => uniqueClean(values).map((value) => value.toLocaleLowerCase()).sort();
+  const a = normalize(left);
+  const b = normalize(right);
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+function toBatchItemPayload(id: string, input: NormalizedInput, timestamp: string) {
+  return {
+    id,
+    raw_title: input.raw_title,
+    official_title: input.official_title,
+    original_title: input.original_title,
+    code: input.code,
+    type: input.type,
+    category: input.category,
+    platform: input.platform,
+    maker: input.maker,
+    series: input.series,
+    release_year: input.release_year,
+    release_date: input.release_date,
+    year: input.year,
+    watched_at: input.watched_at,
+    started_at: input.started_at,
+    completed_at: input.completed_at,
+    planned_at: input.planned_at,
+    rating: input.rating,
+    rewatch_score: input.rewatch_score,
+    favorite: input.favorite ? 1 : 0,
+    favorite_level: input.favorite_level,
+    collection_level: input.collection_level,
+    normalized_code: input.normalized_code,
+    used: input.used ? 1 : 0,
+    is_private: input.is_private ? 1 : 0,
+    status: input.status,
+    media_status: input.media_status,
+    quick_note: input.quick_note,
+    long_note: input.long_note,
+    source_url: input.source_url,
+    cover_url: input.cover_url,
+    metadata_json: input.metadata_json,
+    progress_json: input.progress_json,
+    search_text: input.search_text,
+    updated_at: timestamp
+  };
+}
+
+function batchItemPayloadCte() {
+  const fields = [
+    "id", "raw_title", "official_title", "original_title", "code", "type", "category", "platform", "maker", "series",
+    "release_year", "release_date", "year", "watched_at", "started_at", "completed_at", "planned_at", "rating", "rewatch_score",
+    "favorite", "favorite_level", "collection_level", "normalized_code", "used", "is_private", "status", "media_status",
+    "quick_note", "long_note", "source_url", "cover_url", "metadata_json", "progress_json", "search_text", "updated_at"
+  ];
+  return `WITH payload AS (SELECT ${fields.map((field) => `json_extract(value, '$.${field}') AS ${field}`).join(", ")} FROM json_each(?))`;
+}
+
+function uniqueNames(values: string[]) {
+  const byName = new Map<string, string>();
+  for (const value of uniqueClean(values)) {
+    const key = value.toLocaleLowerCase();
+    if (!byName.has(key)) byName.set(key, value);
+  }
+  return Array.from(byName.values()).map((name) => ({ id: newId("relation"), name }));
+}
+
+function appendBulkRelationStatements(
+  env: Env,
+  statements: D1PreparedStatement[],
+  relation: "tag" | "person" | "collection",
+  names: Array<{ id: string; name: string }>,
+  links: Array<{ itemId: string; name: string; position?: number }>
+) {
+  if (names.length) {
+    const table = relation === "tag" ? "tags" : relation === "person" ? "people" : "collections";
+    statements.push(env.MEDIA_LOG_DB.prepare(`
+      INSERT OR IGNORE INTO ${table} (id, name)
+      SELECT json_extract(value, '$.id'), json_extract(value, '$.name') FROM json_each(?)
+    `).bind(JSON.stringify(names)));
+  }
+  if (!links.length) return;
+  if (relation === "tag") {
+    statements.push(env.MEDIA_LOG_DB.prepare(`
+      INSERT OR IGNORE INTO item_tags (item_id, tag_id)
+      SELECT json_extract(payload.value, '$.itemId'), tags.id
+      FROM json_each(?) AS payload
+      JOIN tags ON tags.name = json_extract(payload.value, '$.name') COLLATE NOCASE
+    `).bind(JSON.stringify(links)));
+    return;
+  }
+  if (relation === "person") {
+    statements.push(env.MEDIA_LOG_DB.prepare(`
+      INSERT OR IGNORE INTO item_people (item_id, person_id, role)
+      SELECT json_extract(payload.value, '$.itemId'), people.id, ''
+      FROM json_each(?) AS payload
+      JOIN people ON people.name = json_extract(payload.value, '$.name') COLLATE NOCASE
+    `).bind(JSON.stringify(links)));
+    return;
+  }
+  statements.push(env.MEDIA_LOG_DB.prepare(`
+    INSERT OR IGNORE INTO collection_items (collection_id, item_id, position)
+    SELECT collections.id, json_extract(payload.value, '$.itemId'), json_extract(payload.value, '$.position')
+    FROM json_each(?) AS payload
+    JOIN collections ON collections.name = json_extract(payload.value, '$.name') COLLATE NOCASE
+  `).bind(JSON.stringify(links)));
 }
 
 async function replaceRelations(env: Env, itemId: string, tags: string[], people: string[], collections: string[]) {
@@ -1292,6 +1579,13 @@ function normalizeInput(input: ItemInput): NormalizedInput {
   };
 }
 
+export function chunkSqlValues<T>(values: T[], chunkSize = 80) {
+  const size = Math.max(1, Math.min(80, Math.floor(chunkSize)));
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += size) chunks.push(values.slice(index, index + size));
+  return chunks;
+}
+
 export function shouldValidateNormalizedCode(currentCode: string | null | undefined, nextCode: string | null | undefined) {
   return (currentCode || null) !== (nextCode || null);
 }
@@ -1321,6 +1615,112 @@ export async function quickUpdateItem(env: Env, actor: Actor, id: string, field:
   }
   await env.MEDIA_LOG_DB.batch([statement, audit(env, actor, "quick_update", "item", id, { field: validated.field })]);
   return getItem(env, id);
+}
+
+export async function batchUpdateItems(env: Env, actor: Actor, input: unknown): Promise<BatchUpdateResult> {
+  const operations = validateBatchUpdateOperations(input);
+  const requestBytes = new TextEncoder().encode(JSON.stringify(operations)).byteLength;
+  if (requestBytes > 1_500_000) throw new HttpError(413, "Batch payload is too large", { maxBytes: 1_500_000, actualBytes: requestBytes });
+
+  const ids = operations.map((operation) => operation.id);
+  const rows = await env.MEDIA_LOG_DB
+    .prepare(`SELECT ${itemColumns} FROM items WHERE status != 'deleted' AND id IN (SELECT CAST(value AS TEXT) FROM json_each(?))`)
+    .bind(JSON.stringify(ids))
+    .all<Row>();
+  const currentItems = await hydrateItems(env, rows.results || []);
+  const currentById = new Map(currentItems.map((item) => [item.id, item]));
+  const missing = operations.filter((operation) => !currentById.has(operation.id));
+  if (missing.length) {
+    throw new HttpError(400, "Batch validation failed", {
+      atomic: true,
+      errors: missing.map((operation, index) => ({ index, id: operation.id, field: "id", message: "Item not found" }))
+    });
+  }
+
+  const desired = operations.map((operation) => {
+    const normalized = normalizeInput(operation.input);
+    normalized.status = operation.input.status || inferStatus(normalized);
+    return { id: operation.id, input: operation.input, normalized };
+  });
+  await validateBatchNormalizedCodes(env, desired, currentById);
+
+  const changed = desired.filter(({ id, normalized }) => !batchItemMatches(currentById.get(id)!, normalized));
+  const changedIds = changed.map(({ id }) => id);
+  const unchangedIds = desired.filter(({ id }) => !changedIds.includes(id)).map(({ id }) => id);
+  if (!changed.length) {
+    return { outcome: "already_applied", requested: operations.length, updatedIds: [], unchangedIds, atomic: true };
+  }
+
+  const timestamp = nowIso();
+  const itemPayload = changed.map(({ id, normalized }) => toBatchItemPayload(id, normalized, timestamp));
+  const tagNames = uniqueNames(changed.flatMap(({ normalized }) => normalized.tags));
+  const peopleNames = uniqueNames(changed.flatMap(({ normalized }) => normalized.people));
+  const collectionNames = uniqueNames(changed.flatMap(({ normalized }) => normalized.collections));
+  const tagLinks = changed.flatMap(({ id, normalized }) => uniqueClean(normalized.tags).map((name) => ({ itemId: id, name })));
+  const peopleLinks = changed.flatMap(({ id, normalized }) => uniqueClean(normalized.people).map((name) => ({ itemId: id, name })));
+  const collectionLinks = changed.flatMap(({ id, normalized }) => uniqueClean(normalized.collections).map((name, position) => ({ itemId: id, name, position })));
+  const statements: D1PreparedStatement[] = [
+    env.MEDIA_LOG_DB.prepare(`${batchItemPayloadCte()}
+      UPDATE items AS target SET
+        raw_title = payload.raw_title,
+        official_title = payload.official_title,
+        original_title = payload.original_title,
+        code = payload.code,
+        type = payload.type,
+        category = payload.category,
+        platform = payload.platform,
+        maker = payload.maker,
+        series = payload.series,
+        release_year = payload.release_year,
+        release_date = payload.release_date,
+        year = payload.year,
+        watched_at = payload.watched_at,
+        started_at = payload.started_at,
+        completed_at = payload.completed_at,
+        planned_at = payload.planned_at,
+        rating = payload.rating,
+        rewatch_score = payload.rewatch_score,
+        favorite = payload.favorite,
+        favorite_level = payload.favorite_level,
+        collection_level = payload.collection_level,
+        normalized_code = payload.normalized_code,
+        used = payload.used,
+        is_private = payload.is_private,
+        status = payload.status,
+        media_status = payload.media_status,
+        quick_note = payload.quick_note,
+        long_note = payload.long_note,
+        source_url = payload.source_url,
+        cover_url = payload.cover_url,
+        metadata_json = payload.metadata_json,
+        progress_json = payload.progress_json,
+        search_text = payload.search_text,
+        updated_at = payload.updated_at
+      FROM payload WHERE target.id = payload.id`).bind(JSON.stringify(itemPayload)),
+    env.MEDIA_LOG_DB.prepare("DELETE FROM item_tags WHERE item_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))").bind(JSON.stringify(changedIds)),
+    env.MEDIA_LOG_DB.prepare("DELETE FROM item_people WHERE item_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))").bind(JSON.stringify(changedIds)),
+    env.MEDIA_LOG_DB.prepare("DELETE FROM collection_items WHERE item_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))").bind(JSON.stringify(changedIds))
+  ];
+
+  appendBulkRelationStatements(env, statements, "tag", tagNames, tagLinks);
+  appendBulkRelationStatements(env, statements, "person", peopleNames, peopleLinks);
+  appendBulkRelationStatements(env, statements, "collection", collectionNames, collectionLinks);
+  statements.push(env.MEDIA_LOG_DB.prepare(`
+    INSERT INTO audit_logs (id, actor_email, action, entity_type, entity_id, metadata_json)
+    SELECT
+      json_extract(value, '$.auditId'), ?, 'batch_update', 'item',
+      json_extract(value, '$.itemId'), json_extract(value, '$.metadata')
+    FROM json_each(?)
+  `).bind(actor.email, JSON.stringify(changed.map(({ id }) => ({ auditId: newId("audit"), itemId: id, metadata: JSON.stringify({ atomic: true, requested: operations.length }) })))));
+
+  try {
+    await env.MEDIA_LOG_DB.batch(statements);
+  } catch (error) {
+    console.error("Atomic batch update failed", error);
+    throw new HttpError(500, "Batch update failed; no changes were applied", { atomic: true });
+  }
+
+  return { outcome: "updated", requested: operations.length, updatedIds: changedIds, unchangedIds, atomic: true };
 }
 
 export async function findNormalizedCodeConflict(env: Env, code: unknown, currentId?: string) {

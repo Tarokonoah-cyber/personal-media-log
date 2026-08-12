@@ -4,10 +4,9 @@ import { isPrivateLibraryLabel } from "../lib/privacy";
 import { searchPrivateFacet } from "../lib/api";
 import { clearPrivateSidebarFilters } from "../lib/privateFilters";
 import { libraryTree } from "../lib/taxonomy";
-import type { ListFilters, MediaItem, PrivateFacets, PrivateSummary } from "../types";
+import type { ListFilters, PrivateFacets, PrivateSummary, PublicAggregateResponse } from "../types";
 import { HomeDashboard } from "./HomeDashboard";
 
-type DisplayView = "table" | "list" | "poster" | "calendar";
 type ToolTab = "organizer" | "stats" | "data" | "settings" | "quality";
 
 const mainItems = [
@@ -26,8 +25,7 @@ const toolItems = [
 export function ViewSidebar({
   activeView,
   activeTool,
-  summaryItems,
-  inboxTotal,
+  publicAggregate,
   tags,
   filters,
   privateMode = false,
@@ -45,10 +43,8 @@ export function ViewSidebar({
   onPrivateFilter
 }: {
   activeView: string;
-  displayView: DisplayView;
   activeTool: ToolTab | null;
-  summaryItems: MediaItem[];
-  inboxTotal: number;
+  publicAggregate: PublicAggregateResponse | null;
   tags: string[];
   filters: ListFilters;
   privateMode?: boolean;
@@ -60,7 +56,6 @@ export function ViewSidebar({
   onToggleCollapsed: () => void;
   onCloseMobile: () => void;
   onView: (view: string) => void;
-  onDisplayView: (view: DisplayView) => void;
   onLibrary: (type: string, category?: string) => void;
   onTag: (tag: string) => void;
   onTool: (tab: ToolTab) => void;
@@ -293,7 +288,7 @@ export function ViewSidebar({
           subtitle=""
           onToggleCollapsed={onToggleCollapsed}
           onCloseMobile={onCloseMobile}
-          extra={showText ? <HomeDashboard items={summaryItems} inboxTotal={inboxTotal} /> : null}
+          extra={showText ? <HomeDashboard aggregate={publicAggregate} /> : null}
         />
 
         <NavSection title="主要" showText={showText} tone="primary">

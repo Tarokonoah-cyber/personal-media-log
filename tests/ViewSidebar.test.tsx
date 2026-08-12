@@ -21,7 +21,7 @@ const privateFacets = {
 };
 
 function renderPrivateSidebar(filters: Record<string, unknown>, onPrivateFilter = vi.fn()) {
-  const result = render(<ViewSidebar activeView="私密" displayView="table" activeTool={null} summaryItems={[]} inboxTotal={0} tags={[]} filters={{ platformFilters: "", makerFilters: "", favoriteLevelFilters: "", personFilters: "", missingPeople: false, ...filters } as never} privateMode privateSummary={{ total: 17, used: 0, unused: 17, averageRating: null, collectionCounts: [] }} privateFacets={privateFacets} safeMode={false} collapsed={false} mobileOpen={false} onToggleCollapsed={vi.fn()} onCloseMobile={vi.fn()} onView={vi.fn()} onDisplayView={vi.fn()} onLibrary={vi.fn()} onTag={vi.fn()} onTool={vi.fn()} onPrivateFilter={onPrivateFilter} />);
+  const result = render(<ViewSidebar activeView="私密" displayView="table" activeTool={null} publicAggregate={null} tags={[]} filters={{ platformFilters: "", makerFilters: "", favoriteLevelFilters: "", personFilters: "", missingPeople: false, ...filters } as never} privateMode privateSummary={{ total: 17, used: 0, unused: 17, averageRating: null, collectionCounts: [] }} privateFacets={privateFacets} safeMode={false} collapsed={false} mobileOpen={false} onToggleCollapsed={vi.fn()} onCloseMobile={vi.fn()} onView={vi.fn()} onDisplayView={vi.fn()} onLibrary={vi.fn()} onTag={vi.fn()} onTool={vi.fn()} onPrivateFilter={onPrivateFilter} />);
   return { ...result, onPrivateFilter };
 }
 

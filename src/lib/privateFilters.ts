@@ -29,3 +29,13 @@ export function clearPrivateSidebarFilters(current: ListFilters): ListFilters {
     page: 1
   };
 }
+
+export function resetFiltersPreservingTableState(current: ListFilters, next: ListFilters): ListFilters {
+  return {
+    ...next,
+    page: 1,
+    pageSize: current.pageSize,
+    sort: current.sort,
+    order: current.order
+  };
+}

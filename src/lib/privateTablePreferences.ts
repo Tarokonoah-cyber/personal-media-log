@@ -203,13 +203,17 @@ export function savePrivateTablePreferenceProfiles(
   storage: Pick<Storage, "setItem"> | undefined = typeof localStorage === "undefined" ? undefined : localStorage
 ) {
   if (!storage) return;
-  storage.setItem(PRIVATE_TABLE_PREFERENCES_KEY, JSON.stringify({
-    profiles: {
-      all: normalizePrivateTablePreferences(profiles.all, "all"),
-      fc2: normalizePrivateTablePreferences(profiles.fc2, "fc2"),
-      jav: normalizePrivateTablePreferences(profiles.jav, "jav")
-    }
-  }));
+  try {
+    storage.setItem(PRIVATE_TABLE_PREFERENCES_KEY, JSON.stringify({
+      profiles: {
+        all: normalizePrivateTablePreferences(profiles.all, "all"),
+        fc2: normalizePrivateTablePreferences(profiles.fc2, "fc2"),
+        jav: normalizePrivateTablePreferences(profiles.jav, "jav")
+      }
+    }));
+  } catch {
+    // Preferences are non-authoritative; keep the in-memory table usable.
+  }
 }
 
 export function savePrivateTablePreferences(preferences: PrivateTablePreferences, storage: Pick<Storage, "setItem"> | undefined = typeof localStorage === "undefined" ? undefined : localStorage) {

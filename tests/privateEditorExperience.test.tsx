@@ -1,5 +1,6 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ItemEditor } from "../src/components/ItemEditor";
 import { formatDuplicateCodeError } from "../src/lib/api";
@@ -73,5 +74,16 @@ describe("private editor experience", () => {
 
     expect(message).toBe("番號「FC2-PPV-1234567」已有其他紀錄；請確認是否為重複作品。");
     expect(message).not.toContain("正規化");
+  });
+
+  it("delegates delete confirmation to the app only once", async () => {
+    const confirm = vi.spyOn(window, "confirm");
+    const onDelete = vi.fn().mockResolvedValue(undefined);
+    render(<ItemEditor item={privateItem} privateMode onClose={vi.fn()} onSave={vi.fn()} onDelete={onDelete} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "刪除" }));
+
+    expect(confirm).not.toHaveBeenCalled();
+    expect(onDelete).toHaveBeenCalledWith(privateItem.id);
   });
 });

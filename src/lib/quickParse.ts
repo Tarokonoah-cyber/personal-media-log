@@ -2,7 +2,7 @@ import { PRIVATE_LIBRARY_LABEL } from "./privacy";
 import { hasReflection, mergeReflectionMetadata, reflectionFromText } from "./reflection";
 import type { ItemInput } from "../types";
 
-const ratingPattern = /(?:^|\s)(10(?:\.0)?|[0-9](?:\.\d)?)\s*(?:\/10|\/5|分)?(?:\s|$)/;
+const ratingPattern = /(?:^|\s)(10(?:\.0)?|[0-9](?:\.\d)?)\s*(\/10|\/5|分)?(?=\s|$)/;
 const codePattern = /\b[A-Z]{2,10}[-_ ]?\d{2,8}\b|FC2[-_\s]*(?:PPV[-_\s]*)?\d{4,8}/i;
 
 export function parseQuickEntry(input: string, options: { privateMode?: boolean } = {}): ItemInput {
@@ -10,7 +10,7 @@ export function parseQuickEntry(input: string, options: { privateMode?: boolean 
   const tags = extractTags(input);
   const favorite = tags.some((tag) => ["收藏", "favorite", "fav", "愛"].includes(tag.toLowerCase()));
   const ratingMatch = input.match(ratingPattern);
-  const rating = ratingMatch ? Number(ratingMatch[1]) : ratingFromWords(input);
+  const rating = ratingMatch ? ratingFromMatch(ratingMatch) : ratingFromWords(input);
   const reflection = reflectionFromText(input);
   const withoutTags = stripTagText(input).replace(/\s+/g, " ").trim();
   const withoutRating = ratingMatch ? withoutTags.replace(ratingPattern, " ").replace(/\s+/g, " ").trim() : withoutTags;
@@ -37,7 +37,7 @@ function parsePrivateQuickEntry(input: string): ItemInput {
   const codeMatch = input.match(codePattern);
   const code = codeMatch ? normalizeCode(codeMatch[0]) : "";
   const ratingMatch = input.match(ratingPattern);
-  const rating = ratingMatch ? Number(ratingMatch[1]) : ratingFromWords(input);
+  const rating = ratingMatch ? ratingFromMatch(ratingMatch) : ratingFromWords(input);
   const reflection = reflectionFromText(input);
   const watchedAt = dateFromWords(input);
   const title = stripPrivateNoise(input, code).trim();
@@ -91,12 +91,17 @@ function stripPrivateNoise(input: string, code: string) {
 }
 
 function ratingFromWords(input: string) {
-  if (/神作|超好|非常好|很棒/.test(input)) return 5;
-  if (/很好|好看|不錯|讚/.test(input)) return 4;
-  if (/普通|尚可|一般|還行/.test(input)) return 3;
-  if (/難看|很差|無聊/.test(input)) return 2;
-  if (/爛|糟/.test(input)) return 1;
+  if (/神作|超好|非常好|很棒/.test(input)) return 10;
+  if (/很好|好看|不錯|讚/.test(input)) return 8;
+  if (/普通|尚可|一般|還行/.test(input)) return 6;
+  if (/難看|很差|無聊/.test(input)) return 4;
+  if (/爛|糟/.test(input)) return 2;
   return null;
+}
+
+function ratingFromMatch(match: RegExpMatchArray) {
+  const value = Number(match[1]);
+  return match[2] === "/5" ? Math.min(10, value * 2) : value;
 }
 
 function dateFromWords(input: string) {

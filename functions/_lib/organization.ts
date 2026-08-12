@@ -9,18 +9,18 @@ export function inboxWhereSql(alias = "items") {
   const currentEpisodeSql = `json_extract(${alias}.progress_json, '${currentEpisodePath}')`;
   const totalEpisodesSql = `coalesce(json_extract(${alias}.progress_json, '${totalEpisodesPath}'), json_extract(${alias}.metadata_json, '$.episode_count'))`;
   const seriesSql = seriesLikeSql(alias);
+  const activeSeriesSql = `((${watchStatusSql} IN ('watching', 'paused', 'rewatching')) OR (${watchStatusSql} IS NULL AND ${alias}.status = 'partial'))`;
 
   return `(
     ${alias}.status != 'deleted'
     AND (
-      (${watchStatusSql} IS NULL AND ${alias}.status IN ('raw', 'partial'))
-      OR ${titleSql} IS NULL
+      ${titleSql} IS NULL
       OR ${typeSql} IS NULL
       OR (
         ${seriesSql}
+        AND ${activeSeriesSql}
         AND (
-          ${watchStatusSql} IS NULL
-          OR ${currentEpisodeSql} IS NULL
+          ${currentEpisodeSql} IS NULL
           OR ${totalEpisodesSql} IS NULL
         )
       )

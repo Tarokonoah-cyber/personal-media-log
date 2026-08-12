@@ -1,5 +1,5 @@
 ﻿import { Bookmark, Check, CircleSlash2, Columns3, Home, Menu, Moon, Plus, Save, Search, SlidersHorizontal, Star, Sun, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, CircleAlert, Pencil, X } from "lucide-react";
 import { FilterSheet } from "./components/FilterSheet";
 import { HomeDashboard } from "./components/HomeDashboard";
@@ -20,9 +20,9 @@ import { Toast } from "./components/Toast";
 import { ViewSidebar } from "./components/ViewSidebar";
 import { PrivateQualityCenter } from "./components/PrivateQualityCenter";
 import { usePrivateCodeConflict } from "./hooks/usePrivateCodeConflict";
-import { applyMetadata, createItem, deleteItem, getItem, getPrivateFacets, listItems, listPrivateItems, parseSmartAdd, quickUpdateItem as quickUpdateItemApi, searchMetadata, updateItem } from "./lib/api";
+import { applyMetadata, batchUpdateItems, createItem, deleteItem, getItem, getPrivateFacets, getPublicAggregate, listItems, listPrivateItems, parseSmartAdd, quickUpdateItem as quickUpdateItemApi, searchMetadata, updateItem } from "./lib/api";
 import { privateBatchTagPatch, retainVisibleSelection, runLimitedBatch, togglePageItemSelection, togglePageSelection, type BatchOperationResult } from "./lib/privateBatch";
-import { mergePrivateFilters } from "./lib/privateFilters";
+import { mergePrivateFilters, resetFiltersPreservingTableState } from "./lib/privateFilters";
 import { PRIVATE_DEFAULT_ACTRESS, isPrivateCollectionLevel, normalizePlatform, privateCollectionLevel, privateCollectionLevelLabels, privateCollectionLevels, privateCollectionPatch, privateRatingFromStars, privateStarsFromRating, type PrivateCollectionLevel } from "../shared/privateModel";
 import { createSavedView, readSavedViews, savedViewSignature, writeSavedViews, type SavedPrivateView } from "./lib/savedViews";
 import { toItemInput } from "./lib/itemTransforms";
@@ -43,6 +43,7 @@ import {
   removeStalePrivateSimpleAddHistoryEntry
 } from "./lib/privateSimpleAddHistory";
 import { privateAddDefaultsForCode } from "./lib/privateQuickAdd";
+import { nextPrivateSort, privateSortFieldForColumn } from "./lib/privateSorting";
 import {
   defaultPrivateTablePreferences,
   normalizePrivateTablePreferences,
@@ -64,8 +65,9 @@ import { collectionLevelOptions } from "./lib/reflection";
 import { tagPresetsForScope } from "./lib/tagPresets";
 import { addTags, normalizeTags, parseTagInput } from "./lib/tags";
 import { classifyItem, libraryTree } from "./lib/taxonomy";
+import { readStorageEnum, readStorageItem, writeStorageItem } from "./lib/storage";
 import { getWatchStatus, updateWatchProgress } from "./lib/watch";
-import type { ItemInput, ListFilters, MediaItem, PrivateFacets, PrivateSummary, SmartAddResponse, TmdbCandidate } from "./types";
+import type { ItemInput, ListFilters, MediaItem, PrivateFacets, PrivateSummary, PublicAggregateResponse, SmartAddResponse, TmdbCandidate } from "./types";
 
 const defaultFilters: ListFilters = {
   query: "",
@@ -124,19 +126,18 @@ function initialPrivatePageSize() {
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("log");
-  const [displayView, setDisplayView] = useState<DisplayView>(() => (localStorage.getItem("displayView") as DisplayView) || "table");
-  const [displayDensity, setDisplayDensity] = useState<DisplayDensity>(() => (localStorage.getItem("displayDensity") as DisplayDensity) || "standard");
-  const [safeMode, setSafeMode] = useState(() => localStorage.getItem("safeMode") !== "false");
+  const [displayView, setDisplayView] = useState<DisplayView>(() => readStorageEnum("displayView", displayViews, "table"));
+  const [displayDensity, setDisplayDensity] = useState<DisplayDensity>(() => readStorageEnum("displayDensity", displayDensities, "standard"));
+  const [safeMode, setSafeMode] = useState(() => readStorageItem("safeMode") !== "false");
   const [quickText, setQuickText] = useState("");
   const [filters, setFilters] = useState<ListFilters>(defaultFilters);
   const [activeView, setActiveView] = useState("home");
   const [activeCategory, setActiveCategory] = useState("");
   const [items, setItems] = useState<MediaItem[]>([]);
-  const [summaryItems, setSummaryItems] = useState<MediaItem[]>([]);
+  const [publicAggregate, setPublicAggregate] = useState<PublicAggregateResponse | null>(null);
   const [privateSummary, setPrivateSummary] = useState<PrivateSummary | null>(null);
   const [privateFacets, setPrivateFacets] = useState<PrivateFacets | null>(null);
   const [total, setTotal] = useState(0);
-  const [inboxTotal, setInboxTotal] = useState(0);
   const [selected, setSelected] = useState<MediaItem | null>(null);
   const [metadataTarget, setMetadataTarget] = useState<MediaItem | null>(null);
   const [metadataCandidates, setMetadataCandidates] = useState<TmdbCandidate[]>([]);
@@ -158,12 +159,12 @@ export default function App() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [columnManagerOpen, setColumnManagerOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebarCollapsed") === "true");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readStorageItem("sidebarCollapsed") === "true");
   const [privateSidebarCollapsed, setPrivateSidebarCollapsed] = useState(() => {
     try { return localStorage.getItem("private-sidebar-collapsed-v1") === "true"; } catch { return false; }
   });
   const [organizerPrivateMode, setOrganizerPrivateMode] = useState(false);
-  const [dark, setDark] = useState(() => localStorage.getItem("theme") !== "light");
+  const [dark, setDark] = useState(() => readStorageItem("theme") !== "light");
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
   const privateView = isPrivateWorkspaceView(activeView);
   const includePrivate = privateView && !safeMode;
@@ -173,6 +174,48 @@ export default function App() {
   const currentDisplayView = privateActive ? "table" : displayView;
   const effectiveSidebarCollapsed = privateActive ? privateSidebarCollapsed : sidebarCollapsed;
   const loading = initialLoading || refreshing || actionLoading;
+  const itemsRef = useRef(items);
+  const loadAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
+  const loadItems = useCallback(async () => {
+    const requestId = ++loadRequestId.current;
+    loadAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
+    const loadScope = includePrivate ? "private" : "public";
+    const scopeChanged = loadScopeRef.current !== loadScope;
+    const hasExistingRows = loadScopeRef.current === loadScope && itemsRef.current.length > 0;
+    if (scopeChanged) {
+      setItems([]);
+      setTotal(0);
+      setPrivateSummary(null);
+    }
+    setInitialLoading(scopeChanged || !hasExistingRows);
+    setRefreshing(hasExistingRows);
+    setError("");
+    try {
+      const result = includePrivate
+        ? await listPrivateItems({ ...filters, includeFacets: false }, controller.signal)
+        : await listItems({ ...filters, includePrivate: false, privateOnly: false, includeFacets: false }, controller.signal);
+      if (requestId !== loadRequestId.current) return;
+      setItems(result.items);
+      setTotal(result.total);
+      setPrivateSummary(result.privateSummary || null);
+      loadScopeRef.current = loadScope;
+    } catch (err) {
+      if (requestId !== loadRequestId.current || controller.signal.aborted) return;
+      setError(err instanceof Error ? err.message : "讀取紀錄失敗");
+    } finally {
+      if (requestId === loadRequestId.current) {
+        setInitialLoading(false);
+        setRefreshing(false);
+      }
+    }
+  }, [filters, includePrivate]);
 
   useEffect(() => {
     removeStalePrivateSimpleAddHistoryEntry();
@@ -193,7 +236,7 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
-    localStorage.setItem("theme", dark ? "dark" : "light");
+    writeStorageItem("theme", dark ? "dark" : "light");
   }, [dark]);
 
   useEffect(() => {
@@ -207,7 +250,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("sidebarCollapsed", String(sidebarCollapsed));
+    writeStorageItem("sidebarCollapsed", String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
   useEffect(() => {
@@ -221,20 +264,21 @@ export default function App() {
   }, [privateActive]);
 
   useEffect(() => {
-    localStorage.setItem("displayView", displayView);
+    writeStorageItem("displayView", displayView);
   }, [displayView]);
 
   useEffect(() => {
-    localStorage.setItem("displayDensity", displayDensity);
+    writeStorageItem("displayDensity", displayDensity);
   }, [displayDensity]);
 
   useEffect(() => {
-    localStorage.setItem("safeMode", String(safeMode));
+    writeStorageItem("safeMode", String(safeMode));
   }, [safeMode]);
 
   useEffect(() => {
-    void loadItems();
-  }, [filters, includePrivate]);
+    const timer = window.setTimeout(() => void loadItems(), filters.query.trim() && !includePrivate ? 250 : 0);
+    return () => window.clearTimeout(timer);
+  }, [filters.query, includePrivate, loadItems]);
 
   useEffect(() => {
     void loadSummary();
@@ -247,12 +291,24 @@ export default function App() {
   }, [toast]);
 
   const pageCount = useMemo(() => Math.max(1, Math.ceil(total / filters.pageSize)), [total, filters.pageSize]);
-  const knownTags = useMemo(() => Array.from(new Set(summaryItems.flatMap((item) => item.tags))).sort((a, b) => a.localeCompare(b, "zh-Hant")), [summaryItems]);
+  const knownTags = useMemo(() => {
+    return (publicAggregate?.facets.tags || []).map((tag) => tag.name);
+  }, [publicAggregate]);
   const sidebarTags = useMemo(() => {
     if (!includePrivate) return knownTags;
     return Array.from(new Set(items.flatMap((item) => item.tags))).sort((a, b) => a.localeCompare(b, "zh-Hant"));
   }, [includePrivate, items, knownTags]);
   const publicTagSuggestions = useMemo(() => normalizeTags([...tagPresetsForScope("public"), ...knownTags]).sort((a, b) => a.localeCompare(b, "zh-Hant")), [knownTags]);
+  const publicFilterSuggestions = useMemo(() => ({
+    types: libraryTree.filter((entry) => !isPrivateLibraryLabel(entry.label)).map((entry) => entry.label),
+    categories: normalizeTags([
+      "韓國", "中國", "日本", "美國", "歐洲", "台灣", "香港",
+      "韓劇", "陸劇", "日劇", "美劇", "台劇", "動畫影集", "綜藝", "其他",
+      ...(publicAggregate?.facets.categories || []).map((item) => item.name)
+    ]),
+    tags: publicTagSuggestions,
+    platforms: normalizeTags((publicAggregate?.facets.platforms || []).map((item) => item.name))
+  }), [publicAggregate, publicTagSuggestions]);
   const privateTagSuggestions = useMemo(() => {
     const privateFacetTags = (privateFacets?.tags || []).flatMap((tag) => Array.from({ length: Math.max(1, Math.min(10, tag.count)) }, () => tag.value));
     return normalizeTags([
@@ -290,39 +346,6 @@ export default function App() {
     pageSize: 1
   }), [filters.query, filters.platformFilters, filters.makerFilters, filters.favoriteLevelFilters, filters.personFilters, filters.missingPeople, filters.ratingMin, filters.ratingMax, filters.unrated, filters.usedFilter, filters.privateStatus, filters.mediaStatus, filters.tag, filters.hasNote, filters.hasCover]);
 
-  async function loadItems() {
-    const requestId = ++loadRequestId.current;
-    const loadScope = includePrivate ? "private" : "public";
-    const scopeChanged = loadScopeRef.current !== loadScope;
-    const hasExistingRows = loadScopeRef.current === loadScope && items.length > 0;
-    if (scopeChanged) {
-      setItems([]);
-      setTotal(0);
-      setPrivateSummary(null);
-    }
-    setInitialLoading(scopeChanged || !hasExistingRows);
-    setRefreshing(hasExistingRows);
-    setError("");
-    try {
-      const result = includePrivate
-        ? await listPrivateItems({ ...filters, includeFacets: false })
-        : await listItems({ ...filters, includePrivate: false, privateOnly: false, includeFacets: false });
-      if (requestId !== loadRequestId.current) return;
-      setItems(result.items);
-      setTotal(result.total);
-      setPrivateSummary(result.privateSummary || null);
-      loadScopeRef.current = loadScope;
-    } catch (err) {
-      if (requestId !== loadRequestId.current) return;
-      setError(err instanceof Error ? err.message : "讀取紀錄失敗");
-    } finally {
-      if (requestId === loadRequestId.current) {
-        setInitialLoading(false);
-        setRefreshing(false);
-      }
-    }
-  }
-
   useEffect(() => {
     if (!privateActive) return;
     const requestId = ++facetRequestId.current;
@@ -340,19 +363,22 @@ export default function App() {
 
   async function loadSummary() {
     try {
-      const [all, inbox] = await Promise.all([
-        listItems({ ...defaultFilters, includePrivate: false, privateOnly: false, pageSize: 100 }),
-        listItems({ ...defaultFilters, includePrivate: false, privateOnly: false, status: "inbox", pageSize: 1 })
-      ]);
-      setSummaryItems(all.items);
-      setInboxTotal(inbox.total);
+      setPublicAggregate(await getPublicAggregate());
     } catch {
-      setSummaryItems([]);
+      setPublicAggregate(null);
     }
   }
 
   async function refreshVisibleData() {
     await Promise.all([loadItems(), loadSummary()]);
+  }
+
+  async function refreshPrivateWorkspaceData(includeFacets = true) {
+    const [facets] = await Promise.all([
+      includeFacets ? getPrivateFacets(privateFacetFilters) : Promise.resolve(null),
+      loadItems()
+    ]);
+    if (facets) setPrivateFacets(facets);
   }
 
   async function submitQuick() {
@@ -389,7 +415,8 @@ export default function App() {
       if (nextInput.is_private && !privateRecommendedActive) setActiveView(PRIVATE_LIBRARY_LABEL);
       setActiveCategory("");
       setFilters((current) => ({ ...current, status: "all", page: 1 }));
-      void refreshVisibleData().catch(() => {
+      const refresh = nextInput.is_private ? refreshPrivateWorkspaceData() : refreshVisibleData();
+      void refresh.catch(() => {
         setError("資料已新增，但列表重新整理失敗，請稍後重新整理頁面。");
       });
       return created;
@@ -448,7 +475,8 @@ export default function App() {
     const saved = await updateItem(selected.id, input);
     setSelected(saved);
     setToast("已儲存");
-    await refreshVisibleData();
+    if (isPrivateItem(saved)) await refreshPrivateWorkspaceData();
+    else await refreshVisibleData();
   }
 
   async function openItemDetail(item: MediaItem) {
@@ -476,9 +504,15 @@ export default function App() {
   }
 
   async function quickUpdate(item: MediaItem, patch: Partial<ItemInput>) {
-    await updateItem(item.id, { ...toItemInput(item), ...patch });
+    const updated = await updateItem(item.id, { ...toItemInput(item), ...patch });
+    setItems((current) => current.map((entry) => entry.id === item.id ? updated : entry));
     setToast("已更新");
-    await refreshVisibleData();
+    if (isPrivateItem(item)) {
+      const facetFields = ["people", "tags", "maker", "platform", "collection_level", "favorite_level", "used", "media_status"];
+      await refreshPrivateWorkspaceData(facetFields.some((field) => field in patch));
+    } else {
+      await refreshVisibleData();
+    }
   }
 
   async function quickPrivateUpdate(item: MediaItem, field: "collection_level" | "rating" | "used" | "private_status", value: unknown) {
@@ -494,8 +528,7 @@ export default function App() {
       setItems((current) => current.map((entry) => entry.id === item.id ? updated : entry));
       setToast("已更新");
       try {
-        setPrivateFacets(await getPrivateFacets(privateFacetFilters));
-        await loadItems();
+        await refreshPrivateWorkspaceData(field !== "rating");
       } catch (refreshError) {
         setError(refreshError instanceof Error ? refreshError.message : "資料已更新，但重新整理失敗");
       }
@@ -509,19 +542,29 @@ export default function App() {
   async function quickCreateFromTable(input: ItemInput) {
     await createItem(withPrivatePageDefaults(input, privateRecommendedActive));
     setToast("已新增");
-    setFilters((current) => ({ ...current, status: "all", page: 1 }));
-    await refreshVisibleData();
+    const needsPageReset = filters.status !== "all" || filters.page !== 1;
+    if (needsPageReset) setFilters((current) => ({ ...current, status: "all", page: 1 }));
+    const facets = await getPrivateFacets(privateFacetFilters);
+    setPrivateFacets(facets);
+    if (!needsPageReset) await loadItems();
   }
 
   async function batchUpdate(targets: MediaItem[], patch: Partial<ItemInput> | ((item: MediaItem) => Partial<ItemInput>)): Promise<BatchOperationResult> {
     if (targets.length === 0) return { succeededIds: [], failedIds: [] };
     setActionLoading(true);
     try {
-      const result = await runLimitedBatch(targets, (item) => updateItem(item.id, { ...toItemInput(item), ...(typeof patch === "function" ? patch(item) : patch) }), 5);
-      if (result.failedIds.length > 0) setError(`批次更新：成功 ${result.succeededIds.length} 筆，失敗 ${result.failedIds.length} 筆`);
-      else setToast(`已更新 ${result.succeededIds.length} 筆`);
-      await refreshVisibleData();
+      const response = await batchUpdateItems(targets.map((item) => ({
+        id: item.id,
+        input: { ...toItemInput(item), ...(typeof patch === "function" ? patch(item) : patch) }
+      })));
+      const result: BatchOperationResult = { succeededIds: [...response.updatedIds, ...response.unchangedIds], failedIds: [] };
+      setToast(response.outcome === "already_applied" ? `這 ${response.unchangedIds.length} 筆已是最新狀態` : `已更新 ${response.updatedIds.length} 筆`);
+      if (targets.every(isPrivateItem)) await refreshPrivateWorkspaceData();
+      else await refreshVisibleData();
       return result;
+    } catch (err) {
+      setError(err instanceof Error ? `批次更新未完成；整批可安全重試：${err.message}` : "批次更新未完成；整批可安全重試");
+      return { succeededIds: [], failedIds: targets.map((item) => item.id) };
     } finally {
       setActionLoading(false);
     }
@@ -548,7 +591,8 @@ export default function App() {
       }
       if (result.failedIds.length > 0) setError(`批次刪除：成功 ${result.succeededIds.length} 筆，失敗 ${result.failedIds.length} 筆`);
       else setToast(`已刪除 ${result.succeededIds.length} 筆`);
-      await refreshVisibleData();
+      if (targets.every(isPrivateItem)) await refreshPrivateWorkspaceData();
+      else await refreshVisibleData();
       return result;
     } finally {
       setActionLoading(false);
@@ -678,7 +722,10 @@ export default function App() {
     const keepRecommendedPage = privateRecommendedActive;
     setActiveView(privateActive ? (keepRecommendedPage ? PRIVATE_RECOMMENDED_LABEL : PRIVATE_LIBRARY_LABEL) : "database");
     setActiveCategory("");
-    setFilters(keepRecommendedPage ? { ...defaultFilters, tag: PRIVATE_RECOMMENDED_TAG } : { ...defaultFilters, excludeTag: "" });
+    setFilters((current) => resetFiltersPreservingTableState(
+      current,
+      keepRecommendedPage ? { ...defaultFilters, tag: PRIVATE_RECOMMENDED_TAG } : { ...defaultFilters, excludeTag: "" }
+    ));
   }
 
   function returnHome() {
@@ -748,10 +795,8 @@ export default function App() {
       <main className={`${privateActive ? "database-layout private-layout" : "database-layout"}${effectiveSidebarCollapsed ? " sidebar-collapsed" : ""}`}>
         <ViewSidebar
           activeView={activeView}
-          displayView={displayView}
           activeTool={tab === "organizer" || tab === "stats" || tab === "data" || tab === "settings" || tab === "quality" ? tab : null}
-          summaryItems={summaryItems}
-          inboxTotal={inboxTotal}
+          publicAggregate={publicAggregate}
           tags={sidebarTags}
           filters={filters}
           privateMode={privateActive}
@@ -769,7 +814,6 @@ export default function App() {
           }}
           onCloseMobile={() => setSidebarOpen(false)}
           onView={selectView}
-          onDisplayView={selectDisplayView}
           onLibrary={selectLibrary}
           onTag={selectTag}
           onTool={selectTool}
@@ -808,6 +852,7 @@ export default function App() {
                 <HomeDashboard
                   variant="main"
                   includePrivate={includePrivate}
+                  aggregate={publicAggregate}
                   onView={selectView}
                   onTool={selectTool}
                   onSelect={setSelected}
@@ -929,7 +974,7 @@ export default function App() {
         </section>
       </main>
 
-      <FilterSheet open={filtersOpen} filters={filters} privateMode={privateActive} onChange={patchFilters} onClose={() => setFiltersOpen(false)} />
+      <FilterSheet open={filtersOpen} filters={filters} privateMode={privateActive} suggestions={publicFilterSuggestions} onChange={patchFilters} onClose={() => setFiltersOpen(false)} />
 
       {simpleAddOpen && (
         <SimpleAddModal
@@ -1335,6 +1380,7 @@ function PrivateWorkbenchV3({
 }) {
   const tableMode = privateTableModeFromPlatformFilters(filters.platformFilters);
   const [searchDraft, setSearchDraft] = useState(filters.query);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [preferenceProfiles, setPreferenceProfiles] = useState<PrivateTablePreferenceProfiles>(() => readPrivateTablePreferenceProfiles());
   const [savedViews, setSavedViews] = useState<SavedPrivateView<PrivateTablePreferences>[]>(() => readSavedViews<PrivateTablePreferences>());
@@ -1366,6 +1412,20 @@ function PrivateWorkbenchV3({
   useEffect(() => {
     setSearchDraft(filters.query);
   }, [filters.query]);
+
+  useEffect(() => {
+    function focusSearch(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const typing = Boolean(target?.closest("input, textarea, select, [contenteditable='true']"));
+      if (event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey && !typing && !document.querySelector("[role='dialog']")) {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    }
+    document.addEventListener("keydown", focusSearch);
+    return () => document.removeEventListener("keydown", focusSearch);
+  }, []);
 
   useEffect(() => {
     if (searchDraft === filters.query) return;
@@ -1457,7 +1517,7 @@ function PrivateWorkbenchV3({
     setNewRowError("");
   }
 
-  async function submitNewRow() {
+  async function submitNewRow(continueAdding = false) {
     if (!newRow.code.trim()) {
       const message = "無法新增：番號不能空白。";
       setNewRowError(message);
@@ -1468,9 +1528,9 @@ function PrivateWorkbenchV3({
     setNewRowError("");
     try {
       await onCreate(privateRowDraftToInput(newRow));
-      setAddingRow(false);
+      setAddingRow(continueAdding);
       setNewRow(emptyPrivateRowDraftForMode(tableMode));
-      setSheetFeedback({ message: "新增完成", tone: "success" });
+      setSheetFeedback({ message: continueAdding ? "新增完成，可繼續輸入" : "新增完成", tone: "success" });
     } catch (err) {
       const message = err instanceof Error ? err.message : "新增失敗";
       setNewRowError(message);
@@ -1498,13 +1558,22 @@ function PrivateWorkbenchV3({
   }
 
   function persistViews(next: SavedPrivateView<PrivateTablePreferences>[]) {
-    setSavedViews(next); writeSavedViews(next);
+    if (!writeSavedViews(next)) {
+      setSavedViewError("瀏覽器無法儲存檢視；請確認網站儲存空間權限。");
+      return false;
+    }
+    setSavedViews(next);
+    setSavedViewError("");
+    return true;
   }
 
   function addSavedView() {
     try {
       const view = createSavedView(savedViewName, filters, columnPreferences, savedViews);
-      persistViews([...savedViews, view]); setSavedViewName(""); setActiveSavedView(view.id); setSavedViewError("");
+      if (persistViews([...savedViews, view])) {
+        setSavedViewName("");
+        setActiveSavedView(view.id);
+      }
     } catch (err) { setSavedViewError(err instanceof Error ? err.message : "無法儲存檢視"); }
   }
 
@@ -1532,14 +1601,14 @@ function PrivateWorkbenchV3({
 
   function updateSavedView(view: SavedPrivateView<PrivateTablePreferences>) {
     const now = new Date().toISOString();
-    persistViews(savedViews.map((entry) => entry.id === view.id ? {
+    const persisted = persistViews(savedViews.map((entry) => entry.id === view.id ? {
       ...entry,
       filters: { ...filters, page: 1 },
       sorting: { field: filters.sort || "updated_at", direction: filters.order === "asc" ? "asc" : "desc" },
       tablePreferences: columnPreferences,
       updatedAt: now
     } : entry));
-    setActiveSavedView(view.id);
+    if (persisted) setActiveSavedView(view.id);
   }
 
   function renameSavedView(view: SavedPrivateView<PrivateTablePreferences>) {
@@ -1556,10 +1625,30 @@ function PrivateWorkbenchV3({
   return (
     <section className="private-workbench private-workbench-v4" aria-busy={refreshing}>
       <div className="private-toolbar">
-        <label className="private-search-field">
+        <div className="private-search-field" role="search">
           <Search size={16} />
-          <input value={searchDraft} onChange={(event) => setSearchDraft(event.target.value)} placeholder="搜尋番號、片名、女優或標籤" />
-        </label>
+          <input
+            ref={searchInputRef}
+            type="search"
+            value={searchDraft}
+            onChange={(event) => setSearchDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                onPatchFilters({ query: searchDraft, page: 1 });
+                return;
+              }
+              if (event.key === "Escape" && searchDraft) {
+                event.preventDefault();
+                setSearchDraft("");
+              }
+            }}
+            placeholder="搜尋番號、片名、女優或標籤"
+            aria-label="搜尋私密資料"
+            aria-keyshortcuts="/"
+          />
+          {searchDraft && <button type="button" className="private-search-clear" onClick={() => { setSearchDraft(""); searchInputRef.current?.focus(); }} aria-label="清除搜尋" title="清除搜尋（Esc）"><X size={14} /></button>}
+        </div>
         <div className="private-toolbar-actions">
           <button className="filter-toggle advanced-filter" onClick={onOpenAdvanced}><SlidersHorizontal size={16} />進階篩選</button>
           {hasPrivateFilters(filters) && <button className="filter-chip-clear" onClick={onClearFilters}>清除篩選</button>}
@@ -1627,7 +1716,7 @@ function PrivateWorkbenchV3({
           <>
             {refreshing && <div className="private-refresh-indicator" role="status">更新中...</div>}
             {error && <div className="notice danger private-refresh-error" role="alert">{error}</div>}
-            <PrivateMobileCards items={items} selectedIds={selectedIds} onToggleSelected={(id) => setSelectedIds((current) => togglePageItemSelection(current, id))} onSelect={onSelect} />
+            <PrivateMobileCards items={items} selectedIds={selectedIds} onToggleSelected={(id) => setSelectedIds((current) => togglePageItemSelection(current, id))} onSelect={onSelect} onQuickUpdate={onQuickUpdate} />
             <PrivateDataTable
               items={items}
               tableMode={tableMode}
@@ -1642,7 +1731,7 @@ function PrivateWorkbenchV3({
               newRowBusy={newRowBusy}
               newRowError={newRowError}
               knownTags={knownTags}
-              onSortTitle={() => onPatchFilters(nextTitleSort(filters))}
+              onSort={(column) => onPatchFilters(nextPrivateSort(filters, column))}
               onFilter={(patch) => onPatchFilters({ ...patch, page: 1 })}
               onPreferencesChange={setColumnPreferences}
               onToggleSelected={(id) => setSelectedIds((current) => togglePageItemSelection(current, id))}
@@ -1651,7 +1740,7 @@ function PrivateWorkbenchV3({
               onCellUpdate={onCellUpdate}
               onQuickUpdate={onQuickUpdate}
               onNewRowChange={setNewRow}
-              onNewRowSubmit={() => void submitNewRow()}
+              onNewRowSubmit={(continueAdding) => void submitNewRow(continueAdding)}
               onNewRowCancel={cancelNewRow}
               onStatusChange={setSheetFeedback}
             />
@@ -1691,12 +1780,6 @@ function filterValues(value: string | undefined) {
   return (value || "").split(",").map((entry) => entry.trim()).filter(Boolean);
 }
 
-function nextTitleSort(filters: ListFilters): Partial<ListFilters> {
-  if (filters.sort !== "displayName") return { sort: "displayName", order: "asc", page: 1 };
-  if (filters.order === "asc") return { sort: "displayName", order: "desc", page: 1 };
-  return { sort: "", order: "", page: 1 };
-}
-
 type PrivateSheetFeedback = {
   message: string;
   tone: "neutral" | "success" | "error";
@@ -1716,7 +1799,7 @@ function PrivateDataTable({
   newRowBusy,
   newRowError,
   knownTags,
-  onSortTitle,
+  onSort,
   onPreferencesChange,
   onToggleSelected,
   onToggleAll,
@@ -1742,7 +1825,7 @@ function PrivateDataTable({
   newRowBusy: boolean;
   newRowError: string;
   knownTags: string[];
-  onSortTitle: () => void;
+  onSort: (column: PrivateColumnId) => void;
   onPreferencesChange: (preferences: PrivateTablePreferences | ((current: PrivateTablePreferences) => PrivateTablePreferences)) => void;
   onToggleSelected: (id: string) => void;
   onToggleAll: () => void;
@@ -1751,7 +1834,7 @@ function PrivateDataTable({
   onCellUpdate: (item: MediaItem, patch: Partial<ItemInput>) => Promise<void>;
   onQuickUpdate: (item: MediaItem, field: "collection_level" | "rating" | "used" | "private_status", value: unknown) => Promise<void>;
   onNewRowChange: (draft: PrivateRowDraft) => void;
-  onNewRowSubmit: () => void;
+  onNewRowSubmit: (continueAdding?: boolean) => void;
   onNewRowCancel: () => void;
   onStatusChange: (feedback: PrivateSheetFeedback) => void;
 }) {
@@ -2130,37 +2213,37 @@ function PrivateDataTable({
             <th className="private-select-column">
               <input ref={selectAllRef} type="checkbox" checked={allSelected} onChange={onToggleAll} aria-label="選取目前頁全部資料" />
             </th>
-            {columns.map((column) => (
-              <th
-                key={column.id}
-                className={column.id === "identity" ? "private-sticky-column" : undefined}
-                aria-sort={column.id === "identity" ? sort === "displayName" ? order === "desc" ? "descending" : "ascending" : "none" : undefined}
-                draggable
-                onDragStart={(event) => {
-                  if ((event.target as HTMLElement).closest(".private-sort-header,.private-column-resize")) {
-                    event.preventDefault();
-                    return;
-                  }
-                  setDragColumn(column.id);
-                }}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={() => moveColumn(column.id)}
-              >
-                {column.id === "identity" ? (
-                  <button className="private-sort-header" type="button" onClick={onSortTitle} onKeyDown={(event) => {
-                    if (event.key !== "Enter" && event.key !== " ") return;
-                    event.preventDefault();
-                    onSortTitle();
-                  }}>
+            {columns.map((column) => {
+              const sortField = privateSortFieldForColumn(column.id);
+              const sorted = Boolean(sortField && sort === sortField);
+              return (
+                <th
+                  key={column.id}
+                  className={column.id === "identity" ? "private-sticky-column" : undefined}
+                  aria-sort={sortField ? sorted ? order === "desc" ? "descending" : "ascending" : "none" : undefined}
+                  draggable
+                  onDragStart={(event) => {
+                    if ((event.target as HTMLElement).closest(".private-sort-header,.private-column-resize")) {
+                      event.preventDefault();
+                      return;
+                    }
+                    setDragColumn(column.id);
+                  }}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => moveColumn(column.id)}
+                >
+                  {sortField ? (
+                    <button className="private-sort-header" type="button" onClick={() => onSort(column.id)}>
+                      <span>{privateColumnLabel(column.id, tableMode)}</span>
+                      <span className="private-sort-direction" aria-hidden="true">{sorted ? order === "desc" ? <ArrowDown size={13} /> : <ArrowUp size={13} /> : null}</span>
+                    </button>
+                  ) : (
                     <span>{privateColumnLabel(column.id, tableMode)}</span>
-                    <span className="private-sort-direction" aria-hidden="true">{sort === "displayName" ? order === "desc" ? <ArrowDown size={13} /> : <ArrowUp size={13} /> : null}</span>
-                  </button>
-                ) : (
-                  <span>{privateColumnLabel(column.id, tableMode)}</span>
-                )}
-                <span className="private-column-resize" onMouseDown={(event) => startResize(column, event)} onDoubleClick={() => autosize(column)} title="拖曳調整寬度，雙擊自動寬度" />
-              </th>
-            ))}
+                  )}
+                  <span className="private-column-resize" onMouseDown={(event) => startResize(column, event)} onDoubleClick={() => autosize(column)} title="拖曳調整寬度，雙擊自動寬度" />
+                </th>
+              );
+            })}
             <th className="private-open-column" aria-label="開啟詳細資料" />
           </tr>
         </thead>
@@ -2414,7 +2497,7 @@ function PrivateNewSpreadsheetRow({ tableMode, columns, draft, busy, error, know
   error: string;
   knownTags: string[];
   onChange: (draft: PrivateRowDraft) => void;
-  onSubmit: () => void;
+  onSubmit: (continueAdding?: boolean) => void;
   onCancel: () => void;
 }) {
   const [touchedAutofill, setTouchedAutofill] = useState({ actress: false, maker: false });
@@ -2443,7 +2526,7 @@ function PrivateNewSpreadsheetRow({ tableMode, columns, draft, busy, error, know
   function handleKeyDown(event: React.KeyboardEvent<HTMLElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
-      if (!duplicateMessage) onSubmit();
+      if (!duplicateMessage) onSubmit(event.shiftKey);
     } else if (event.key === "Escape") {
       event.preventDefault();
       onCancel();
@@ -2467,7 +2550,7 @@ function PrivateNewSpreadsheetRow({ tableMode, columns, draft, busy, error, know
       {columns.map((column) => <td key={column.id} className={column.id === "identity" ? "private-sticky-column" : undefined}>{cell(column.id)}</td>)}
       <td className="private-open-column">
         <span className="private-new-row-actions">
-          <button type="button" onClick={onSubmit} disabled={busy || !draft.code.trim() || Boolean(duplicateMessage)} title="儲存新資料" aria-label="儲存新資料"><Check size={14} /></button>
+          <button type="button" onClick={() => onSubmit(false)} disabled={busy || !draft.code.trim() || Boolean(duplicateMessage)} title="儲存新資料（Enter；Shift+Enter 儲存並繼續）" aria-label="儲存新資料"><Check size={14} /></button>
           <button type="button" onClick={onCancel} disabled={busy} title="取消新增" aria-label="取消新增"><X size={14} /></button>
           {visibleError && <span className="private-new-row-error" role="alert"><CircleAlert size={15} aria-hidden="true" /><span>{visibleError}</span></span>}
         </span>
@@ -2525,10 +2608,10 @@ function PrivateNewRowTagEditor({
   );
 }
 
-function PrivateMobileCards({ items, selectedIds, onToggleSelected, onSelect }: { items: MediaItem[]; selectedIds: string[]; onToggleSelected: (id: string) => void; onSelect: (item: MediaItem) => void }) {
+function PrivateMobileCards({ items, selectedIds, onToggleSelected, onSelect, onQuickUpdate }: { items: MediaItem[]; selectedIds: string[]; onToggleSelected: (id: string) => void; onSelect: (item: MediaItem) => void; onQuickUpdate: (item: MediaItem, field: "collection_level" | "rating" | "used" | "private_status", value: unknown) => Promise<void> }) {
   return (
     <div className="private-mobile-list">
-      {items.map((item) => <PrivateMobileCard key={item.id} item={item} selected={selectedIds.includes(item.id)} onToggleSelected={onToggleSelected} onSelect={onSelect} />)}
+      {items.map((item) => <PrivateMobileCard key={item.id} item={item} selected={selectedIds.includes(item.id)} onToggleSelected={onToggleSelected} onSelect={onSelect} onQuickUpdate={onQuickUpdate} />)}
     </div>
   );
 }
@@ -2541,13 +2624,25 @@ function PrivateCardList({ items, onSelect }: { items: MediaItem[]; onSelect: (i
   );
 }
 
-function PrivateMobileCard({ item, onSelect, desktop = false, selected = false, onToggleSelected }: { item: MediaItem; onSelect: (item: MediaItem) => void; desktop?: boolean; selected?: boolean; onToggleSelected?: (id: string) => void }) {
+function PrivateMobileCard({ item, onSelect, desktop = false, selected = false, onToggleSelected, onQuickUpdate }: { item: MediaItem; onSelect: (item: MediaItem) => void; desktop?: boolean; selected?: boolean; onToggleSelected?: (id: string) => void; onQuickUpdate?: (item: MediaItem, field: "collection_level" | "rating" | "used" | "private_status", value: unknown) => Promise<void> }) {
+  const [pendingField, setPendingField] = useState<"collection_level" | "rating" | null>(null);
   const details = privateItemDetails(item);
   const itemMode = privateTableModeForItem(item);
   const title = itemMode !== "fc2" && details.title !== "-" && details.title !== details.code ? details.title : "";
   const source = privateCardSource(item, details.studio, itemMode);
   const performers = itemMode === "fc2" ? "" : details.performers === "-" ? PRIVATE_DEFAULT_ACTRESS : details.performers;
   const releaseDate = item.release_date?.slice(0, 10) || "";
+
+  async function commit(field: "collection_level" | "rating", value: unknown) {
+    if (!onQuickUpdate || pendingField) return;
+    setPendingField(field);
+    try {
+      await onQuickUpdate(item, field, value);
+    } finally {
+      setPendingField(null);
+    }
+  }
+
   return (
     <article className={`${desktop ? "private-mobile-card private-desktop-card" : "private-mobile-card"}${selected ? " selected" : ""}`} onClick={() => onSelect(item)}>
       <div className="private-card-head">
@@ -2560,9 +2655,22 @@ function PrivateMobileCard({ item, onSelect, desktop = false, selected = false, 
         </span>
         <button type="button" className="private-card-open" onClick={(event) => { event.stopPropagation(); onSelect(item); }} aria-label={`編輯 ${details.code}`}><Pencil size={16} aria-hidden="true" /></button>
       </div>
-      <div className="private-card-summary">
-        <PrivateRating item={item} />
-        <PrivateBadge tone="favorite">{privateFavoriteLevel(item)}</PrivateBadge>
+      <div className="private-card-summary" onClick={(event) => event.stopPropagation()}>
+        {onQuickUpdate ? (
+          <PrivateStarRating value={item.rating} compact disabled={Boolean(pendingField)} label={`評分 ${details.code}`} onChange={(rating) => void commit("rating", rating)} />
+        ) : (
+          <PrivateRating item={item} />
+        )}
+        {onQuickUpdate ? (
+          <span className="private-card-collection-control">
+            <select value={privateCollectionLevel(item)} disabled={Boolean(pendingField)} onChange={(event) => void commit("collection_level", event.target.value)} aria-label={`收藏 ${details.code}`}>
+              {privateCollectionLevels.map((value) => <option key={value} value={value}>{privateCollectionLevelLabels[value]}</option>)}
+            </select>
+            <ChevronDown size={12} aria-hidden="true" />
+          </span>
+        ) : (
+          <PrivateBadge tone="favorite">{privateFavoriteLevel(item)}</PrivateBadge>
+        )}
       </div>
       <div className="private-card-meta">
         {source && <span>{source}</span>}
@@ -2702,11 +2810,11 @@ function privateCardSource(item: MediaItem, fallbackStudio: string, mode: Privat
   if (mode === "fc2") return "";
   if (mode === "jav") {
     const maker = (item.maker || fallbackStudio || "").trim();
-    return maker.toUpperCase() === "JAV" ? "" : maker;
+    return maker.toUpperCase() === "JAV" || maker.toLowerCase() === "unknown" ? "" : maker;
   }
   return Array.from(new Set([item.platform, item.maker || fallbackStudio]
     .map((value) => (value || "").trim())
-    .filter((value) => value && value !== "-"))).join(" · ");
+    .filter((value) => value && value !== "-" && value.toLowerCase() !== "unknown"))).join(" · ");
 }
 
 function privateFilterSummary(filters: ListFilters) {

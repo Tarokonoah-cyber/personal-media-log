@@ -6,7 +6,8 @@ export interface SavedPrivateView<TPreferences = unknown> {
   filters: Partial<ListFilters>; sorting: { field: string; direction: "asc" | "desc" }; tablePreferences: TPreferences;
 }
 
-export function readSavedViews<TPreferences = unknown>(storage: Pick<Storage, "getItem"> = localStorage): SavedPrivateView<TPreferences>[] {
+export function readSavedViews<TPreferences = unknown>(storage: Pick<Storage, "getItem"> | undefined = browserStorage()): SavedPrivateView<TPreferences>[] {
+  if (!storage) return [];
   try {
     const value = JSON.parse(storage.getItem(SAVED_VIEWS_KEY) || "[]") as unknown;
     if (!Array.isArray(value)) return [];
@@ -14,8 +15,14 @@ export function readSavedViews<TPreferences = unknown>(storage: Pick<Storage, "g
   } catch { return []; }
 }
 
-export function writeSavedViews<TPreferences>(views: SavedPrivateView<TPreferences>[], storage: Pick<Storage, "setItem"> = localStorage) {
-  storage.setItem(SAVED_VIEWS_KEY, JSON.stringify(views));
+export function writeSavedViews<TPreferences>(views: SavedPrivateView<TPreferences>[], storage: Pick<Storage, "setItem"> | undefined = browserStorage()) {
+  if (!storage) return false;
+  try {
+    storage.setItem(SAVED_VIEWS_KEY, JSON.stringify(views));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function createSavedView<TPreferences>(name: string, filters: ListFilters, tablePreferences: TPreferences, existing: SavedPrivateView<TPreferences>[]) {
@@ -37,4 +44,12 @@ export function createSavedView<TPreferences>(name: string, filters: ListFilters
 
 export function savedViewSignature(filters: Partial<ListFilters>, tablePreferences: unknown) {
   return JSON.stringify({ filters: { ...filters, page: 1 }, tablePreferences });
+}
+
+function browserStorage() {
+  try {
+    return typeof window === "undefined" ? undefined : window.localStorage;
+  } catch {
+    return undefined;
+  }
 }

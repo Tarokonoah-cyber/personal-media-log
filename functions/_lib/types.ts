@@ -60,6 +60,54 @@ export interface ItemInput {
   collections?: string[];
 }
 
+export interface BatchUpdateOperation {
+  id: string;
+  input: ItemInput;
+}
+
+export interface BatchUpdateResult {
+  outcome: "updated" | "already_applied";
+  requested: number;
+  updatedIds: string[];
+  unchangedIds: string[];
+  atomic: true;
+}
+
+export interface PublicAggregateResponse {
+  generatedAt: string;
+  summary: {
+    total: number;
+    today: number;
+    thisWeek: number;
+    inbox: number;
+    currentYear: number;
+    averageRating: number;
+  };
+  facets: {
+    types: Array<{ name: string; count: number }>;
+    categories: Array<{ name: string; count: number }>;
+    platforms: Array<{ name: string; count: number }>;
+    tags: Array<{ name: string; count: number }>;
+    watchStatuses: Array<{ name: WatchStatus; label: string; count: number }>;
+  };
+  stats: {
+    total: number;
+    currentYear: number;
+    averageRating: number;
+    inbox: number;
+    top: ItemRecord[];
+    recent: ItemRecord[];
+    watching: ItemRecord[];
+    plan: ItemRecord[];
+    monthly: Array<{ month: string; count: number }>;
+    watchStatuses: Array<{ name: WatchStatus; label: string; count: number }>;
+    types: Array<{ name: string; count: number }>;
+    categories: Array<{ name: string; count: number }>;
+    platforms: Array<{ name: string; count: number }>;
+    tags: Array<{ name: string; count: number }>;
+  };
+}
+
 export interface ItemRecord extends Required<Omit<ItemInput, "tags" | "people" | "collections">> {
   id: string;
   favorite: boolean;
@@ -113,7 +161,7 @@ export interface ItemListParams {
   viewedTo?: string;
   updatedFrom?: string;
   updatedTo?: string;
-  sort?: "displayName";
+  sort?: "displayName" | "rating" | "releaseDate";
   order?: "asc" | "desc";
   page: number;
   pageSize: number;

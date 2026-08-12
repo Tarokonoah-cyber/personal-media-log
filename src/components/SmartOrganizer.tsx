@@ -1,9 +1,11 @@
 import { AlertTriangle, CheckCircle2, Eye, RefreshCcw, Search, Sparkles, Wand2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { listItems, updateItem } from "../lib/api";
 import { toItemInput } from "../lib/itemTransforms";
 import { buildOrganizerIssues, type OrganizerIssue, type OrganizerIssueKind, type OrganizerSuggestion } from "../lib/organizationInsights";
 import type { ListFilters, MediaItem } from "../types";
+import { CoverImage } from "./CoverImage";
+import { removeStorageItem, writeStorageItem } from "../lib/storage";
 
 const ignoredStorageKey = "smartOrganizerIgnoredIssues";
 
@@ -65,19 +67,7 @@ export function SmartOrganizer({
   const [savingIssueId, setSavingIssueId] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    void loadOrganizerItems();
-  }, [privateMode]);
-
-  const issues = useMemo(() => buildOrganizerIssues(items, ignored, privateMode), [ignored, items, privateMode]);
-  const filteredIssues = useMemo(() => activeKind === "all" ? issues : issues.filter((issue) => issue.kind === activeKind), [activeKind, issues]);
-  const counts = useMemo(() => {
-    const next: Record<OrganizerIssueKind | "all", number> = { all: issues.length, missing: 0, progress: 0, duplicate: 0, naming: 0, rating: 0 };
-    for (const issue of issues) next[issue.kind] += 1;
-    return next;
-  }, [issues]);
-
-  async function loadOrganizerItems() {
+  const loadOrganizerItems = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -102,7 +92,19 @@ export function SmartOrganizer({
     } finally {
       setLoading(false);
     }
-  }
+  }, [privateMode]);
+
+  useEffect(() => {
+    void loadOrganizerItems();
+  }, [loadOrganizerItems]);
+
+  const issues = useMemo(() => buildOrganizerIssues(items, ignored, privateMode), [ignored, items, privateMode]);
+  const filteredIssues = useMemo(() => activeKind === "all" ? issues : issues.filter((issue) => issue.kind === activeKind), [activeKind, issues]);
+  const counts = useMemo(() => {
+    const next: Record<OrganizerIssueKind | "all", number> = { all: issues.length, missing: 0, progress: 0, duplicate: 0, naming: 0, rating: 0 };
+    for (const issue of issues) next[issue.kind] += 1;
+    return next;
+  }, [issues]);
 
   function ignoreIssue(issue: OrganizerIssue) {
     const next = new Set(ignored);
@@ -113,7 +115,7 @@ export function SmartOrganizer({
 
   function resetIgnored() {
     setIgnored(new Set());
-    localStorage.removeItem(ignoredStorageKey);
+    removeStorageItem(ignoredStorageKey);
   }
 
   async function applySuggestion(issue: OrganizerIssue, suggestion: OrganizerSuggestion) {
@@ -221,7 +223,7 @@ function IssueCard({
           <div className="organizer-item-strip">
             {issue.items.slice(0, 4).map((item) => (
               <button key={item.id} onClick={() => onSelect(item)} title={item.official_title || item.raw_title}>
-                {item.cover_url ? <img src={item.cover_url} alt="" /> : <span>{coverInitial(item)}</span>}
+                <CoverImage src={item.cover_url} fallback={<span>{coverInitial(item)}</span>} />
                 <em>{item.official_title || item.raw_title}</em>
               </button>
             ))}
@@ -263,7 +265,7 @@ function loadIgnored() {
 }
 
 function saveIgnored(value: Set<string>) {
-  localStorage.setItem(ignoredStorageKey, JSON.stringify(Array.from(value)));
+  writeStorageItem(ignoredStorageKey, JSON.stringify(Array.from(value)));
 }
 
 function coverInitial(item: MediaItem) {

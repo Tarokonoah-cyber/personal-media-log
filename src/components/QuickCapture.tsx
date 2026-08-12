@@ -30,7 +30,7 @@ export function QuickCapture({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="快速新增：3/29 藍鳥 運動家，或 標題 4.5 一句心得 #tag"
+        placeholder="快速新增：3/29 藍鳥 運動家，或 標題 8/10 一句心得 #tag"
       />
       <button
         className="smart-add"

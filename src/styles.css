@@ -3570,11 +3570,7 @@ h2 {
 
 @media (max-width: 560px) {
   .quick-add-bar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .quick-add-bar .compact-add {
-    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .home-dashboard-main {

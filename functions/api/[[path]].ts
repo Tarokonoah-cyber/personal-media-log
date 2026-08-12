@@ -1,7 +1,7 @@
 import { createBackup, listBackups, restoreBackup } from "../_lib/backup";
 import { error, handleError, json, noContent, notFound, readJson, requireAccess } from "../_lib/http";
 import { parseCsv, parseJsonItems, toCsv } from "../_lib/importExport";
-import { createItem, exportItems, findNormalizedCodeConflict, getItem, getPrivateFacetsForFilters, getStats, importItems, isLikelyDuplicate, listItems, quickUpdateItem, searchPrivateFacet, softDeleteItem, updateItem } from "../_lib/items";
+import { batchUpdateItems, createItem, exportItems, findNormalizedCodeConflict, getItem, getPrivateFacetsForFilters, getPublicAggregate, getStats, importItems, isLikelyDuplicate, listItems, quickUpdateItem, searchPrivateFacet, softDeleteItem, updateItem } from "../_lib/items";
 import { parseSmartAdd } from "../_lib/smartAdd";
 import { applyTmdbMetadata, searchTmdb } from "../_lib/tmdb";
 import { getPrivateQuality, ignorePrivateIssue, isPrivateIssueType, unignorePrivateIssue } from "../_lib/privateQuality";
@@ -41,6 +41,10 @@ export const onRequest: PagesFunction<Env, "path"> = async (context) => {
     if (path[0] === "items") {
       if (method === "GET" && path.length === 1) return json(await listItems(context.env, getListParams(url)));
       if (method === "POST" && path.length === 1) return json(await createItem(context.env, actor, await readJson<ItemInput>(context.request)), { status: 201 });
+      if (method === "POST" && path.length === 2 && path[1] === "batch") {
+        const body = await readJson<{ operations?: unknown }>(context.request);
+        return json(await batchUpdateItems(context.env, actor, body.operations));
+      }
       if (path.length === 2) {
         if (method === "GET") return json(await getItem(context.env, path[1]));
         if (method === "PUT") return json(await updateItem(context.env, actor, path[1], await readJson<ItemInput>(context.request)));
@@ -57,6 +61,10 @@ export const onRequest: PagesFunction<Env, "path"> = async (context) => {
 
     if (method === "GET" && path.length === 1 && path[0] === "stats") {
       return json(await getStats(context.env, url.searchParams.get("includePrivate") === "true"));
+    }
+
+    if (method === "GET" && path.length === 2 && path[0] === "public" && path[1] === "aggregate") {
+      return json(await getPublicAggregate(context.env, optionalNumber(url.searchParams.get("timezoneOffsetMinutes")) || 0));
     }
 
     if (method === "GET" && path[0] === "private" && path[1] === "facets") {
@@ -101,7 +109,9 @@ export const onRequest: PagesFunction<Env, "path"> = async (context) => {
         return new Response(toCsv(items as unknown as Record<string, unknown>[]), {
           headers: {
             "content-type": "text/csv; charset=utf-8",
-            "content-disposition": `attachment; filename="media-log-${new Date().toISOString().slice(0, 10)}.csv"`
+            "content-disposition": `attachment; filename="media-log-${new Date().toISOString().slice(0, 10)}.csv"`,
+            "cache-control": "private, no-store",
+            "x-content-type-options": "nosniff"
           }
         });
       }
@@ -280,7 +290,7 @@ function getListParams(url: URL): ItemListParams {
     viewedTo: optional(url.searchParams.get("viewedTo")),
     updatedFrom: optional(url.searchParams.get("updatedFrom")),
     updatedTo: optional(url.searchParams.get("updatedTo")),
-    sort: sort === "displayName" ? "displayName" : undefined,
+    sort: sort === "displayName" || sort === "rating" || sort === "releaseDate" ? sort : undefined,
     order: isSortOrder(order) ? order as "asc" | "desc" : undefined,
     page: optionalNumber(url.searchParams.get("page")) || 1,
     pageSize: optionalNumber(url.searchParams.get("pageSize")) || 50

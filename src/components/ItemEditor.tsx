@@ -1,5 +1,5 @@
 import { Save, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { TagEditor } from "./TagEditor";
 import { PrivateStarRating } from "./PrivateStarRating";
 import { fieldsToPrivateStatus, privateStatusToFields, type PrivateUiStatus } from "../lib/privateStatus";
@@ -35,6 +35,10 @@ export function ItemEditor({
   const privateEditor = privateMode || form.is_private;
   const seriesLike = useMemo(() => !privateEditor && isSeriesLike({ ...item, type: form.type, category: form.category } as MediaItem), [item, form.type, form.category, privateEditor]);
   const hasUnsavedChanges = useMemo(() => JSON.stringify(form) !== JSON.stringify(savedForm), [form, savedForm]);
+  const requestCloseWithConfirmation = useCallback(() => {
+    if (hasUnsavedChanges && !window.confirm("有未儲存的變更，確定要關閉編輯面板嗎？")) return;
+    onClose();
+  }, [hasUnsavedChanges, onClose]);
 
   useEffect(() => {
     const nextForm = toForm(item);
@@ -42,7 +46,7 @@ export function ItemEditor({
     setSavedForm(nextForm);
     setMetadataOpen(false);
     setError("");
-  }, [item.id]);
+  }, [item]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -53,12 +57,7 @@ export function ItemEditor({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [hasUnsavedChanges, onClose]);
-
-  function requestCloseWithConfirmation() {
-    if (hasUnsavedChanges && !window.confirm("有未儲存的變更，確定要關閉編輯面板嗎？")) return;
-    onClose();
-  }
+  }, [requestCloseWithConfirmation]);
 
   function handleBackdropClick(event: React.MouseEvent<HTMLDivElement>) {
     if (event.target !== event.currentTarget) return;
@@ -79,9 +78,15 @@ export function ItemEditor({
   }
 
   async function remove() {
-    if (!window.confirm("確定要刪除這筆紀錄嗎？")) return;
     setSaving(true);
-    await onDelete(item.id);
+    setError("");
+    try {
+      await onDelete(item.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "刪除失敗");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
