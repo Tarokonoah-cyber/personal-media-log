@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, ChevronDown, CircleAlert, Pencil, X } from "lucide-
 import { FilterSheet } from "./components/FilterSheet";
 import { HomeDashboard } from "./components/HomeDashboard";
 import { ImportExport } from "./components/ImportExport";
-import { ItemEditor } from "./components/ItemEditor";
+import { ItemEditor, type PrivateEditorInitialFocus } from "./components/ItemEditor";
 import { ItemList } from "./components/ItemList";
 import { CalendarView } from "./components/CalendarView";
 import { MetadataLookupModal } from "./components/MetadataLookupModal";
@@ -144,6 +144,8 @@ export default function App() {
   const [privateFacets, setPrivateFacets] = useState<PrivateFacets | null>(null);
   const [total, setTotal] = useState(0);
   const [selected, setSelected] = useState<MediaItem | null>(null);
+  const [editorInitialFocus, setEditorInitialFocus] = useState<PrivateEditorInitialFocus | undefined>();
+  const [editorQueueIds, setEditorQueueIds] = useState<string[]>([]);
   const [metadataTarget, setMetadataTarget] = useState<MediaItem | null>(null);
   const [metadataCandidates, setMetadataCandidates] = useState<TmdbCandidate[]>([]);
   const [metadataQuery, setMetadataQuery] = useState("");
@@ -497,8 +499,9 @@ export default function App() {
 
   async function saveItemAndOpenNext(input: ItemInput) {
     if (!selected) return;
-    const currentIndex = items.findIndex((item) => item.id === selected.id);
-    const nextId = currentIndex >= 0 ? items[currentIndex + 1]?.id : undefined;
+    const queueIds = editorQueueIds.length > 0 ? editorQueueIds : items.map((item) => item.id);
+    const currentIndex = queueIds.indexOf(selected.id);
+    const nextId = currentIndex >= 0 ? queueIds[currentIndex + 1] : undefined;
     const saved = await updateItem(selected.id, input);
     setToast(nextId ? "已儲存，前往下一筆" : "已儲存，整理佇列完成");
     const [nextItem] = await Promise.all([
@@ -507,12 +510,15 @@ export default function App() {
     ]);
     if (!nextId) {
       setSelected(saved);
+      setEditorQueueIds([]);
       return;
     }
     setSelected(nextItem || saved);
   }
 
   async function openItemDetail(item: MediaItem) {
+    setEditorInitialFocus(undefined);
+    setEditorQueueIds([]);
     setSelected(item);
     try {
       const fullItem = await getItem(item.id);
@@ -991,9 +997,14 @@ export default function App() {
           {tab === "stats" && <StatsPanel includePrivate={false} />}
           {tab === "data" && <ImportExport safeMode={safeMode} onImported={refreshVisibleData} />}
           {tab === "quality" && privateActive && (
-            <PrivateQualityCenter onOpenItem={(id) => {
+            <PrivateQualityCenter onOpenItem={(id, focus, queueIds) => {
+              setEditorInitialFocus(focus);
+              setEditorQueueIds(queueIds || []);
               const item = items.find((entry) => entry.id === id);
-              if (item) void openItemDetail(item);
+              if (item) {
+                setSelected(item);
+                void getItem(id).then(setSelected).catch((err) => setError(err instanceof Error ? err.message : "載入資料失敗"));
+              }
               else void getItem(id).then(setSelected).catch((err) => setError(err instanceof Error ? err.message : "載入資料失敗"));
             }} />
           )}
@@ -1024,7 +1035,7 @@ export default function App() {
           onOpenExisting={(id) => void openPrivateItemById(id)}
         />
       )}
-      {selected && <ItemEditor key={selected.id} item={selected} privateMode={privateActive} knownTags={privateActive || isPrivateItem(selected) ? privateTagSuggestions : publicTagSuggestions} initialFocus={filters.qualityView === "missing_tags" ? "tags" : filters.unrated ? "rating" : filters.missingPeople ? "people" : filters.qualityView === "incomplete_metadata" ? "metadata" : undefined} onClose={() => setSelected(null)} onSave={saveItem} onSaveAndNext={tab === "log" && privateActive && items.length > 1 ? saveItemAndOpenNext : undefined} onDelete={removeItem} />}
+      {selected && <ItemEditor key={selected.id} item={selected} privateMode={privateActive} knownTags={privateActive || isPrivateItem(selected) ? privateTagSuggestions : publicTagSuggestions} initialFocus={editorInitialFocus || (filters.qualityView === "missing_tags" ? "tags" : filters.unrated ? "rating" : filters.missingPeople ? "people" : filters.qualityView === "incomplete_metadata" ? "metadata" : undefined)} onClose={() => { setSelected(null); setEditorInitialFocus(undefined); setEditorQueueIds([]); }} onSave={saveItem} onSaveAndNext={privateActive && ((tab === "log" && items.length > 1) || (tab === "quality" && editorQueueIds.length > 1)) ? saveItemAndOpenNext : undefined} onDelete={removeItem} />}
       {metadataTarget && (
         <MetadataLookupModal
           item={metadataTarget}

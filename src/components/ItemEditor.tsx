@@ -11,7 +11,7 @@ import type { ItemInput, MediaItem, WatchStatus } from "../types";
 import { PRIVATE_DEFAULT_ACTRESS, privateCollectionLevel, privateCollectionLevelLabels, privateCollectionLevels, privateCollectionPatch, type PrivateCollectionLevel } from "../../shared/privateModel";
 
 const platformOptions = ["Netflix", "Disney+", "Prime Video", "Apple TV+", "HBO Max", "YouTube", "Crunchyroll", "電影院", "DVD / BD", "其他"];
-export type PrivateEditorInitialFocus = "tags" | "rating" | "people" | "metadata";
+export type PrivateEditorInitialFocus = "tags" | "rating" | "people" | "metadata" | "collection";
 
 export function ItemEditor({
   item,
@@ -283,7 +283,7 @@ function PrivateForm({
         <h3>私密紀錄</h3>
         <div className="form-grid nested">
           <label className="private-star-field">評分<PrivateStarRating value={numberOrNull(form.rating)} label="私密評分" autoFocus={initialFocus === "rating"} onChange={(rating) => setForm({ ...form, rating: rating === null ? "" : String(rating) })} /></label>
-          <CollectionLevelField value={form.collection_level as PrivateCollectionLevel} onChange={(value) => setForm({ ...form, collection_level: value })} />
+          <CollectionLevelField value={form.collection_level as PrivateCollectionLevel} autoFocus={initialFocus === "collection"} onChange={(value) => setForm({ ...form, collection_level: value })} />
           <Field label="發行日期" value={form.release_date} onChange={(value) => setForm({ ...form, release_date: value })} type="date" />
           <Field label="紀錄日" value={form.watched_at} onChange={(value) => setForm({ ...form, watched_at: value })} type="date" />
           <TagEditor tags={form.tags} knownTags={knownTags} autoFocus={initialFocus === "tags"} onChange={(tags) => setForm({ ...form, tags })} />
@@ -303,13 +303,13 @@ function Field({ label, value, onChange, required, type = "text", inputMode, aut
   );
 }
 
-export function CollectionLevelField({ value, onChange }: { value: PrivateCollectionLevel; onChange: (value: PrivateCollectionLevel) => void }) {
+export function CollectionLevelField({ value, onChange, autoFocus = false }: { value: PrivateCollectionLevel; onChange: (value: PrivateCollectionLevel) => void; autoFocus?: boolean }) {
   return (
     <fieldset className="collection-level-control">
       <legend>收藏等級</legend>
       {privateCollectionLevels.map((level) => (
         <label key={level} className={value === level ? "active" : ""}>
-          <input type="radio" name="collection-level" value={level} checked={value === level} onChange={() => onChange(level)} />
+          <input autoFocus={autoFocus && value === level} type="radio" name="collection-level" value={level} checked={value === level} onChange={() => onChange(level)} />
           <span>{privateCollectionLevelLabels[level]}</span>
         </label>
       ))}

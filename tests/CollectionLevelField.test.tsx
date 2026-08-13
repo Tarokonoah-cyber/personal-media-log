@@ -12,4 +12,10 @@ describe("CollectionLevelField", () => {
     await userEvent.click(screen.getByRole("radio", { name: "神作" }));
     expect(onChange).toHaveBeenCalledWith("masterpiece");
   });
+
+  it("can receive keyboard-first focus from Organization Inbox", () => {
+    render(<CollectionLevelField value="normal" autoFocus onChange={vi.fn()} />);
+
+    expect(screen.getByRole("radio", { name: "一般" })).toHaveFocus();
+  });
 });

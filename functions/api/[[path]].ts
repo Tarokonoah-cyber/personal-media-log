@@ -4,6 +4,7 @@ import { parseCsv, parseJsonItems, toCsv } from "../_lib/importExport";
 import { batchUpdateItems, createItem, exportItems, findNormalizedCodeConflict, getItem, getPrivateFacetsForFilters, getPublicAggregate, getStats, importItems, isLikelyDuplicate, listItems, quickUpdateItem, searchPrivateFacet, softDeleteItem, updateItem } from "../_lib/items";
 import { applyMetadataSuggestions, decideMetadataSuggestions, isMetadataSuggestionStatus, listMetadataSuggestions, previewMetadataSuggestions, refreshMetadataSuggestions } from "../_lib/metadataSuggestions";
 import { applyEntityMerge, getNormalizationOverview, isEntityType, previewEntityMerge, registerEntityAlias, rollbackEntityMerge } from "../_lib/normalization";
+import { getOrganizationInboxSummary, isOrganizationInboxCategory, listOrganizationInbox, setOrganizationInboxState } from "../_lib/organizationInbox";
 import { parseSmartAdd } from "../_lib/smartAdd";
 import { applyTmdbMetadata, searchTmdb } from "../_lib/tmdb";
 import { getPrivateQuality, ignorePrivateIssue, isPrivateIssueType, unignorePrivateIssue } from "../_lib/privateQuality";
@@ -155,6 +156,26 @@ export const onRequest: PagesFunction<Env, "path"> = async (context) => {
         const body = await readJson<{ mergeId?: string; confirmed?: unknown }>(context.request);
         if (!body.mergeId?.trim()) return error(400, "mergeId is required");
         return json(await rollbackEntityMerge(context.env, actor, body.mergeId.trim(), body.confirmed));
+      }
+    }
+
+    if (path[0] === "private" && path[1] === "inbox") {
+      if (method === "GET" && path[2] === "summary") {
+        return json(await getOrganizationInboxSummary(context.env), { headers: { "cache-control": "private, no-store" } });
+      }
+      if (method === "GET" && path.length === 2) {
+        const category = url.searchParams.get("category") || "missing_metadata";
+        if (!isOrganizationInboxCategory(category)) return error(400, "Invalid inbox category");
+        return json(await listOrganizationInbox(
+          context.env,
+          category,
+          optionalNumber(url.searchParams.get("page")) || 1,
+          optionalNumber(url.searchParams.get("pageSize")) || 50
+        ), { headers: { "cache-control": "private, no-store" } });
+      }
+      if (method === "POST" && path[2] === "state") {
+        const body = await readJson<{ itemIds?: unknown; state?: unknown }>(context.request);
+        return json(await setOrganizationInboxState(context.env, actor, body.itemIds, body.state));
       }
     }
 

@@ -134,6 +134,21 @@ export interface EntityMergePreview {
   mergeId?: string; applied?: boolean; recoveryAvailable?: boolean;
 }
 
+export type OrganizationInboxCategory = "new" | "missing_metadata" | "missing_tags" | "missing_people" | "duplicate_suspected" | "normalization_needed" | "metadata_conflict" | "ready" | "skipped";
+export type OrganizationInboxState = "active" | "skipped" | "ready";
+export interface OrganizationInboxSummary {
+  needsAttention: number;
+  categories: Record<OrganizationInboxCategory, number>;
+}
+export interface OrganizationInboxEntry {
+  item: MediaItem;
+  state: OrganizationInboxState;
+  reasons: Array<{ code: Exclude<OrganizationInboxCategory, "ready" | "skipped">; label: string }>;
+}
+export interface OrganizationInboxResponse {
+  category: OrganizationInboxCategory; page: number; pageSize: number; total: number; items: OrganizationInboxEntry[];
+}
+
 export interface PrivateFacets {
   source: PrivateFacetItem[];
   maker: PrivateFacetItem[];

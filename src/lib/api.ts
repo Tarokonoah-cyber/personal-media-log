@@ -1,4 +1,4 @@
-import type { BackupJob, BatchUpdateOperation, BatchUpdateResponse, EntityMergePreview, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, MetadataSuggestionListResponse, MetadataSuggestionPreviewResponse, MetadataSuggestionStatus, NormalizationEntityType, NormalizationOverview, PrivateCodeConflictResponse, PrivateFacetSearchResponse, PrivateFacets, PrivateIssueType, PrivateQualityResponse, PublicAggregateResponse, SmartAddResponse, StatsResponse, TmdbSearchResponse } from "../types";
+import type { BackupJob, BatchUpdateOperation, BatchUpdateResponse, EntityMergePreview, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, MetadataSuggestionListResponse, MetadataSuggestionPreviewResponse, MetadataSuggestionStatus, NormalizationEntityType, NormalizationOverview, OrganizationInboxCategory, OrganizationInboxResponse, OrganizationInboxState, OrganizationInboxSummary, PrivateCodeConflictResponse, PrivateFacetSearchResponse, PrivateFacets, PrivateIssueType, PrivateQualityResponse, PublicAggregateResponse, SmartAddResponse, StatsResponse, TmdbSearchResponse } from "../types";
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -137,6 +137,22 @@ export function rollbackEntityMerge(mergeId: string) {
   return request<{ mergeId: string; rolledBack: true }>("/api/private/normalization/merge/rollback", {
     method: "POST",
     body: JSON.stringify({ mergeId, confirmed: true })
+  });
+}
+
+export function getOrganizationInboxSummary() {
+  return request<OrganizationInboxSummary>("/api/private/inbox/summary");
+}
+
+export function listOrganizationInbox(category: OrganizationInboxCategory, page = 1, pageSize = 50) {
+  const params = new URLSearchParams({ category, page: String(page), pageSize: String(pageSize) });
+  return request<OrganizationInboxResponse>(`/api/private/inbox?${params}`);
+}
+
+export function setOrganizationInboxState(itemIds: string[], state: OrganizationInboxState) {
+  return request<{ state: OrganizationInboxState; requested: number; changed: number; itemIds: string[] }>("/api/private/inbox/state", {
+    method: "POST",
+    body: JSON.stringify({ itemIds, state })
   });
 }
 
