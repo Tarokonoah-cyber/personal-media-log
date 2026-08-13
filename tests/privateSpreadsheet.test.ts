@@ -76,9 +76,11 @@ describe("private spreadsheet data flow", () => {
     } as MediaItem;
 
     expect(privateCellValue(item, "actress")).toBe("Performer A");
+    expect(privateCellValue(item, "source")).toBe(item.platform || "");
     expect(privateCellPatch(item, "tags", "plot, outdoor, plot")).toEqual({ tags: ["plot", "outdoor"] });
     expect(privateCellPatch(item, "maker", " Studio ")).toEqual({ maker: "Studio" });
     expect(privateCellPatch(item, "actress", "")).toEqual({ people: ["素人"] });
+    expect(privateCellPatch(item, "source", "JAV")).toEqual({ platform: "JAV" });
     expect(privateCellValue(item, "releaseDate")).toBe("2026-06-15");
     expect(privateCellPatch(item, "releaseDate", "2025-03-12")).toEqual({ release_date: "2025-03-12", release_year: 2025 });
   });

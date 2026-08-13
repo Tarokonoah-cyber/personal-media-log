@@ -966,6 +966,46 @@
   gap: 5px;
 }
 
+.private-app-shell .private-workbench-v4 .private-sort-control {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.private-app-shell .private-workbench-v4 .private-sort-control > span {
+  padding-left: 8px;
+  color: var(--faint);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.private-app-shell .private-workbench-v4 .private-sort-control select {
+  width: 104px;
+  height: 30px;
+  min-height: 30px;
+  border: 0;
+  border-radius: 0;
+  padding: 0 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.private-app-shell .private-workbench-v4 .private-toolbar-actions .private-sort-control button {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+}
+
 .private-app-shell .private-workbench-v4 .private-toolbar-actions button {
   height: 32px;
   min-height: 32px;
@@ -1189,6 +1229,70 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: cell;
+}
+
+.private-app-shell .private-workbench-v4 .private-sheet-value.is-readonly {
+  color: var(--muted);
+  cursor: default;
+}
+
+.private-app-shell .private-workbench-v4 .private-used-toggle {
+  width: 100%;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--faint);
+  font-size: 11.5px;
+}
+
+.private-app-shell .private-workbench-v4 .private-used-toggle svg {
+  opacity: 0.35;
+}
+
+.private-app-shell .private-workbench-v4 .private-used-toggle.is-used {
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.private-app-shell .private-workbench-v4 .private-used-toggle.is-used svg {
+  opacity: 1;
+}
+
+.private-app-shell .private-workbench-v4 .private-used-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.private-app-shell .private-workbench-v4 .private-new-used {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.private-app-shell .private-workbench-v4 .private-new-used input {
+  width: 14px;
+  height: 14px;
+  min-height: 14px;
+  padding: 0;
+}
+
+.private-app-shell .private-workbench-v4 .private-new-readonly {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 7px;
+  color: var(--faint);
+  font-size: 11px;
 }
 
 .private-app-shell .private-workbench-v4 .private-sheet-value:focus-visible {

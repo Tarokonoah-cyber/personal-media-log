@@ -28,7 +28,7 @@ import { privateSmartViews } from "./lib/privateSmartViews";
 import { PRIVATE_DEFAULT_ACTRESS, isPrivateCollectionLevel, normalizePlatform, privateCollectionLevel, privateCollectionLevelLabels, privateCollectionLevels, privateCollectionPatch, privateRatingFromStars, privateStarsFromRating, type PrivateCollectionLevel } from "../shared/privateModel";
 import { createSavedView, readSavedViews, savedViewSignature, writeSavedViews, type SavedPrivateView } from "./lib/savedViews";
 import { toItemInput } from "./lib/itemTransforms";
-import { emptyPrivateRowDraft, privateCellPatch, privateCellValue, privateIdentityLabel, privateIdentityPatch, privateIdentityValue, privateRowDraftToInput, type PrivateEditableColumn, type PrivateIdentityDraft, type PrivateRowDraft } from "./lib/privateSpreadsheet";
+import { emptyPrivateRowDraft, isPrivateEditableColumn, privateCellPatch, privateCellValue, privateIdentityLabel, privateIdentityPatch, privateIdentityValue, privateRowDraftToInput, type PrivateEditableColumn, type PrivateIdentityDraft, type PrivateRowDraft } from "./lib/privateSpreadsheet";
 import { movePrivateCell, privateCellKey, privateClipboardUpdate, privateClipboardValue, type PrivateCellMovement, type PrivateCellPosition } from "./lib/privateSpreadsheetKeyboard";
 import { isPrivateStatus, privateStatusToFields } from "./lib/privateStatus";
 import {
@@ -45,7 +45,7 @@ import {
   removeStalePrivateSimpleAddHistoryEntry
 } from "./lib/privateSimpleAddHistory";
 import { privateAddDefaultsForCode } from "./lib/privateQuickAdd";
-import { nextPrivateSort, privateSortFieldForColumn } from "./lib/privateSorting";
+import { nextPrivateSort, privateSortFieldForColumn, privateSortFirstOrder, privateSortOptions, type PrivateSortField } from "./lib/privateSorting";
 import {
   defaultPrivateTablePreferences,
   normalizePrivateTablePreferences,
@@ -1698,6 +1698,8 @@ function PrivateWorkbenchV3({
   const savedViewDirty = activeView ? savedViewSignature(filters, columnPreferences) !== savedViewSignature(activeView.filters, activeView.tablePreferences) : false;
   const visibleStart = total === 0 || items.length === 0 ? 0 : (filters.page - 1) * filters.pageSize + 1;
   const visibleEnd = items.length === 0 ? 0 : Math.min(total, (filters.page - 1) * filters.pageSize + items.length);
+  const toolbarSort = (filters.sort === "displayName" ? "title" : filters.sort || "updated") as PrivateSortField;
+  const toolbarOrder = filters.order || privateSortFirstOrder(toolbarSort);
   const commandActions: CommandPaletteAction[] = [
     {
       id: "focus-search", label: "聚焦資料搜尋", description: "不離開鍵盤直接搜尋番號、片名、人物或 Tag", group: "搜尋與檢視", keywords: ["search", "搜尋", "/"], shortcut: "/",
@@ -1767,6 +1769,27 @@ function PrivateWorkbenchV3({
           {searchDraft && <button type="button" className="private-search-clear" onClick={() => { setSearchDraft(""); searchInputRef.current?.focus(); }} aria-label="清除搜尋" title="清除搜尋（Esc）"><X size={14} /></button>}
         </div>
         <div className="private-toolbar-actions">
+          <div className="private-sort-control" role="group" aria-label="資料排序">
+            <span>排序</span>
+            <select
+              value={toolbarSort}
+              aria-label="排序欄位"
+              onChange={(event) => {
+                const field = event.target.value as PrivateSortField;
+                onPatchFilters({ sort: field, order: privateSortFirstOrder(field), page: 1 });
+              }}
+            >
+              {privateSortOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            <button
+              type="button"
+              onClick={() => onPatchFilters({ sort: toolbarSort, order: toolbarOrder === "asc" ? "desc" : "asc", page: 1 })}
+              aria-label={toolbarOrder === "asc" ? "目前升冪，切換為降冪" : "目前降冪，切換為升冪"}
+              title={toolbarOrder === "asc" ? "升冪" : "降冪"}
+            >
+              {toolbarOrder === "asc" ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
+            </button>
+          </div>
           <button className="filter-toggle command-palette-trigger" onClick={() => setCommandPaletteOpen(true)} aria-keyshortcuts="Control+K Meta+K"><span>指令</span><kbd>Ctrl K</kbd></button>
           <button className="filter-toggle advanced-filter" onClick={onOpenAdvanced}><SlidersHorizontal size={16} />進階篩選</button>
           {hasPrivateFilters(filters) && <button className="filter-chip-clear" onClick={onClearFilters}>清除篩選</button>}
@@ -2014,7 +2037,7 @@ function PrivateDataTable({
     window.requestAnimationFrame(() => {
       const cell = cellRefs.current.get(privateCellKey(position));
       if (!cell) return;
-      const target = position.column === "rating" || position.column === "favorite"
+      const target = position.column === "rating" || position.column === "favorite" || position.column === "used"
         ? cell.querySelector<HTMLElement>('[data-private-cell-control] [tabindex="0"], [data-private-cell-control], select') || cell
         : cell;
       target.focus({ preventScroll: true });
@@ -2076,7 +2099,8 @@ function PrivateDataTable({
     setFailedCell(null);
     setActiveCell(position);
     if (column === "identity") setIdentityDraft(privateIdentityValue(item));
-    else if (column !== "rating" && column !== "favorite") setEditDraft(privateCellValue(item, column));
+    else if (isPrivateEditableColumn(column)) setEditDraft(privateCellValue(item, column));
+    else return;
     setEditing(position);
   }
 
@@ -2229,7 +2253,7 @@ function PrivateDataTable({
     void commitIdentityEdit(item, nextDraft);
   }
 
-  async function commitQuick(item: MediaItem, field: "collection_level" | "rating", value: unknown) {
+  async function commitQuick(item: MediaItem, field: "collection_level" | "rating" | "used", value: unknown) {
     const key = `${item.id}:${field}`; if (quickPending) return;
     if (savingCellRef.current) return;
     savingCellRef.current = key;
@@ -2400,7 +2424,7 @@ function PrivateDataTable({
                   const position = { itemId: item.id, column: column.id } satisfies PrivateCellPosition;
                   const key = privateCellKey(position);
                   const isActive = resolvedActiveCell?.itemId === item.id && resolvedActiveCell.column === column.id;
-                  const isDirectSelect = column.id === "rating" || column.id === "favorite";
+                   const isDirectSelect = column.id === "rating" || column.id === "favorite" || column.id === "used";
                   const className = [
                     column.id === "identity" ? "private-sticky-column" : "",
                     isActive ? "is-active-cell" : "",
@@ -2427,7 +2451,7 @@ function PrivateDataTable({
                         editing={editing?.itemId === item.id && editing.column === column.id}
                         draft={editDraft}
                         identityDraft={identityDraft}
-                        pending={quickPending === `${item.id}:${column.id === "favorite" ? "collection_level" : column.id}`}
+                         pending={quickPending === `${item.id}:${column.id === "favorite" ? "collection_level" : column.id}`}
                         error={editing?.itemId === item.id && editing.column === column.id ? quickError : ""}
                         onBeginEdit={() => beginCellEdit(item, column.id)}
                         onDraftChange={setEditDraft}
@@ -2489,7 +2513,7 @@ function PrivateTableCell({
   onIdentityBlur: (event: React.FocusEvent<HTMLSpanElement>) => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
   onIdentityKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => void;
-  onCommit: (field: "collection_level" | "rating", value: unknown) => void;
+  onCommit: (field: "collection_level" | "rating" | "used", value: unknown) => void;
   onFilter: (patch: Partial<ListFilters>) => void;
 }) {
   if (column === "identity") {
@@ -2556,6 +2580,27 @@ function PrivateTableCell({
       </span>
     );
   }
+  if (column === "used") {
+    return (
+      <button
+        type="button"
+        data-private-cell-control
+        className={`private-used-toggle${item.used ? " is-used" : ""}`}
+        tabIndex={active ? 0 : -1}
+        disabled={pending}
+        aria-pressed={item.used}
+        aria-label={`${privateItemDetails(item).code} ${item.used ? "已使用" : "未使用"}`}
+        onClick={() => onCommit("used", !item.used)}
+      >
+        <Check size={13} aria-hidden="true" />
+        <span>{item.used ? "已使用" : "未使用"}</span>
+      </button>
+    );
+  }
+  if (column === "updated") {
+    const value = privateUpdatedLabel(item.updated_at);
+    return <time className="private-sheet-value private-sheet-updated is-readonly" dateTime={item.updated_at} title={item.updated_at}>{value}</time>;
+  }
 
   const editableColumn = column as PrivateEditableColumn;
   const value = privateCellValue(item, editableColumn);
@@ -2592,10 +2637,18 @@ function estimatePrivateColumnWidth(column: PrivateColumnId, items: MediaItem[])
     if (column === "identity") return privateIdentityLabel(item) || "-";
     if (column === "rating") return item.rating ? `${privateStarsFromRating(item.rating)} 星` : "-";
     if (column === "favorite") return privateFavoriteLevel(item);
+    if (column === "used") return item.used ? "已使用" : "未使用";
+    if (column === "updated") return privateUpdatedLabel(item.updated_at);
     return privateCellValue(item, column) || "-";
   });
   const maxLength = Math.max(privateColumnMap[column].label.length, ...sample.map((value) => value.length));
   return maxLength * 8 + 34;
+}
+
+function privateUpdatedLabel(value: string) {
+  const normalized = value.trim();
+  if (!normalized) return "";
+  return normalized.replace("T", " ").replace(/\.\d{3}Z$/u, "").replace(/Z$/u, "").slice(0, 16);
 }
 
 function emptyPrivateRowDraftForMode(mode: PrivateTableMode): PrivateRowDraft {
@@ -2666,10 +2719,13 @@ function PrivateNewSpreadsheetRow({ tableMode, columns, draft, busy, error, know
     if (column === "identity") return <span className={`private-new-identity-editor${tableMode === "fc2" ? " is-code-only" : ""}`}><input autoFocus value={draft.code} onChange={(event) => changeCode(event.target.value)} onBlur={(event) => changeCode(event.target.value, true)} onKeyDown={handleKeyDown} placeholder="輸入番號" aria-label="新資料番號" />{tableMode !== "fc2" && <input value={draft.title} onChange={(event) => patch({ title: event.target.value })} onKeyDown={handleKeyDown} placeholder="片名可留空" aria-label="新資料片名" />}</span>;
     if (column === "rating") return <PrivateStarRating value={privateRatingFromStars(draft.rating)} compact label="新資料評分" onChange={(rating) => patch({ rating: rating === null ? "" : String(privateStarsFromRating(rating)) })} onKeyDown={handleKeyDown} />;
     if (column === "favorite") return <select value={draft.collection} onChange={(event) => patch({ collection: event.target.value as PrivateCollectionLevel })} onKeyDown={handleKeyDown} aria-label="新資料收藏">{privateCollectionLevels.map((value) => <option key={value} value={value}>{privateCollectionLevelLabels[value]}</option>)}</select>;
+    if (column === "used") return <label className="private-new-used"><input type="checkbox" checked={draft.collection === "used"} onChange={(event) => patch({ collection: event.target.checked ? "used" : "unset" })} onKeyDown={handleKeyDown} /><span>已使用</span></label>;
     if (column === "actress") return <input value={draft.actress} onChange={(event) => { setTouchedAutofill((current) => ({ ...current, actress: true })); patch({ actress: event.target.value }); }} onKeyDown={handleKeyDown} placeholder="多人用逗號分隔" aria-label="新資料女優" />;
+    if (column === "source") return <input value={draft.platform} onChange={(event) => patch({ platform: event.target.value })} onKeyDown={handleKeyDown} placeholder="來源" aria-label="新資料來源" />;
     if (column === "maker") return <input value={draft.maker} onChange={(event) => { setTouchedAutofill((current) => ({ ...current, maker: true })); patch({ maker: event.target.value }); }} onKeyDown={handleKeyDown} placeholder="片商" aria-label="新資料片商" />;
     if (column === "tags") return <PrivateNewRowTagEditor value={draft.tags} knownTags={knownTags} onChange={(tags) => patch({ tags })} onKeyDown={handleKeyDown} />;
     if (column === "releaseDate") return <input type="date" value={draft.releaseDate} onChange={(event) => patch({ releaseDate: event.target.value })} onKeyDown={handleKeyDown} aria-label="新資料發行日期" />;
+    if (column === "updated") return <span className="private-new-readonly">儲存後產生</span>;
     return <input value={draft.summary} onChange={(event) => patch({ summary: event.target.value })} onKeyDown={handleKeyDown} placeholder="快速筆記" aria-label="新資料快速筆記" />;
   }
 

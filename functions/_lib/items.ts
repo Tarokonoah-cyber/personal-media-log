@@ -736,15 +736,49 @@ export async function searchPrivateFacet(env: Env, facet: "actress" | "tag" | "s
 
 export function listOrderSql(params: ItemListParams) {
   const direction = params.order === "asc" ? "ASC" : "DESC";
+  const codeSql = "coalesce(nullif(trim(items.normalized_code), ''), nullif(trim(items.code), ''), '')";
+  const titleSql = "coalesce(nullif(trim(items.official_title), ''), nullif(trim(items.raw_title), ''), '')";
+  const codePrefixSql = `lower(rtrim(${codeSql}, '0123456789'))`;
+  const codeNumberSql = `CAST(nullif(substr(${codeSql}, length(rtrim(${codeSql}, '0123456789')) + 1), '') AS INTEGER)`;
+  const stable = `items.id ${direction}`;
+  if (params.sort === "code") {
+    return `ORDER BY ${codeSql} = '' ASC, ${codePrefixSql} COLLATE NOCASE ${direction}, ${codeNumberSql} ${direction}, lower(${codeSql}) COLLATE NOCASE ${direction}, ${stable}`;
+  }
+  if (params.sort === "title") {
+    return `ORDER BY ${titleSql} = '' ASC, lower(${titleSql}) COLLATE NOCASE ${direction}, ${codePrefixSql} COLLATE NOCASE ${direction}, ${codeNumberSql} ${direction}, ${stable}`;
+  }
   if (params.sort === "rating") {
-    return `ORDER BY items.rating IS NULL ASC, items.rating ${direction}, datetime(items.updated_at) DESC, items.id DESC`;
+    return `ORDER BY items.rating IS NULL ASC, items.rating ${direction}, datetime(items.updated_at) ${direction}, ${stable}`;
+  }
+  if (params.sort === "people") {
+    const peopleSql = `(SELECT min(lower(trim(people.name))) FROM item_people JOIN people ON people.id = item_people.person_id WHERE item_people.item_id = items.id)`;
+    return `ORDER BY ${peopleSql} IS NULL ASC, ${peopleSql} COLLATE NOCASE ${direction}, ${stable}`;
+  }
+  if (params.sort === "source") {
+    const sourceSql = "coalesce(nullif(trim(items.platform), ''), nullif(trim(items.source_url), ''), '')";
+    return `ORDER BY ${sourceSql} = '' ASC, lower(${sourceSql}) COLLATE NOCASE ${direction}, ${codePrefixSql} COLLATE NOCASE ASC, ${codeNumberSql} ASC, items.id ASC`;
+  }
+  if (params.sort === "favorite") {
+    const favoriteRankSql = `CASE
+      WHEN items.used = 1 THEN 4
+      WHEN items.collection_level = 'masterpiece' THEN 3
+      WHEN items.collection_level = 'normal' THEN 2
+      WHEN items.collection_level = 'unset' THEN 1
+      ELSE 0
+    END`;
+    return `ORDER BY ${favoriteRankSql} ${direction}, items.rating IS NULL ASC, items.rating ${direction}, ${stable}`;
+  }
+  if (params.sort === "used") {
+    return `ORDER BY items.used ${direction}, datetime(items.updated_at) ${direction}, ${stable}`;
+  }
+  if (params.sort === "updated") {
+    return `ORDER BY datetime(items.updated_at) ${direction}, ${stable}`;
   }
   if (params.sort === "releaseDate") {
-    return `ORDER BY nullif(trim(items.release_date), '') IS NULL ASC, date(items.release_date) ${direction}, datetime(items.updated_at) DESC, items.id DESC`;
+    return `ORDER BY nullif(trim(items.release_date), '') IS NULL ASC, date(items.release_date) ${direction}, ${stable}`;
   }
   if (params.sort === "displayName") {
     const nameDirection = params.order === "desc" ? "DESC" : "ASC";
-    const codeSql = "coalesce(nullif(trim(items.normalized_code), ''), nullif(trim(items.code), ''), '')";
     const rawTitleSql = "coalesce(nullif(trim(json_extract(items.metadata_json, '$.title')), ''), nullif(trim(items.official_title), ''), nullif(trim(items.raw_title), ''), '')";
     const displaySql = `CASE
       WHEN ${rawTitleSql} = '' THEN ${codeSql}
@@ -752,8 +786,6 @@ export function listOrderSql(params: ItemListParams) {
       WHEN lower(replace(replace(${rawTitleSql}, '-', ''), ' ', '')) = lower(replace(replace(${codeSql}, '-', ''), ' ', '')) THEN ${codeSql}
       ELSE ${rawTitleSql}
     END`;
-    const codePrefixSql = `lower(rtrim(${codeSql}, '0123456789'))`;
-    const codeNumberSql = `CAST(nullif(substr(${codeSql}, length(rtrim(${codeSql}, '0123456789')) + 1), '') AS INTEGER)`;
     return `ORDER BY lower(trim(${displaySql})) COLLATE NOCASE ${nameDirection}, ${codePrefixSql} COLLATE NOCASE ${nameDirection}, ${codeNumberSql} ${nameDirection}, lower(${codeSql}) COLLATE NOCASE ${nameDirection}, items.id ${nameDirection}`;
   }
   if (params.mediaStatus === "待觀看") return "ORDER BY datetime(coalesce(planned_at, created_at)) DESC, id DESC";

@@ -404,7 +404,7 @@ function getListParams(url: URL): ItemListParams {
     viewedTo: optional(url.searchParams.get("viewedTo")),
     updatedFrom: optional(url.searchParams.get("updatedFrom")),
     updatedTo: optional(url.searchParams.get("updatedTo")),
-    sort: sort === "displayName" || sort === "rating" || sort === "releaseDate" ? sort : undefined,
+    sort: isItemSort(sort) ? sort : undefined,
     order: isSortOrder(order) ? order as "asc" | "desc" : undefined,
     page: optionalNumber(url.searchParams.get("page")) || 1,
     pageSize: optionalNumber(url.searchParams.get("pageSize")) || 50
@@ -462,4 +462,10 @@ function isMediaStatusFilter(value: string | null): value is MediaStatus | "all"
 
 function isSortOrder(value: string | null): value is "asc" | "desc" {
   return value === "asc" || value === "desc";
+}
+
+function isItemSort(value: string | null): value is NonNullable<ItemListParams["sort"]> {
+  return value === "displayName" || value === "code" || value === "title" || value === "rating"
+    || value === "people" || value === "source" || value === "favorite" || value === "used"
+    || value === "updated" || value === "releaseDate";
 }

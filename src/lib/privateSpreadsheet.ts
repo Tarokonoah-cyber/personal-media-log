@@ -3,7 +3,11 @@ import { privateItemDetails, PRIVATE_LIBRARY_LABEL } from "./privacy";
 import { normalizeTags, parseTagInput } from "./tags";
 import type { ItemInput, MediaItem } from "../types";
 
-export type PrivateEditableColumn = "actress" | "maker" | "tags" | "releaseDate" | "summary";
+export type PrivateEditableColumn = "actress" | "source" | "maker" | "tags" | "releaseDate" | "summary";
+
+export function isPrivateEditableColumn(value: string): value is PrivateEditableColumn {
+  return value === "actress" || value === "source" || value === "maker" || value === "tags" || value === "releaseDate" || value === "summary";
+}
 
 export type PrivateIdentityDraft = {
   code: string;
@@ -71,6 +75,7 @@ export function privateRowDraftToInput(draft: PrivateRowDraft): ItemInput {
 export function privateCellValue(item: MediaItem, column: PrivateEditableColumn) {
   const details = privateItemDetails(item);
   if (column === "actress") return details.performers === "-" ? PRIVATE_DEFAULT_ACTRESS : details.performers;
+  if (column === "source") return item.platform || "";
   if (column === "maker") return item.maker || "";
   if (column === "tags") return item.tags.join(", ");
   if (column === "releaseDate") return item.release_date?.slice(0, 10) || "";
@@ -83,6 +88,7 @@ export function privateCellPatch(_item: MediaItem, column: PrivateEditableColumn
     const people = splitPeople(value);
     return { people: people.length ? people : [PRIVATE_DEFAULT_ACTRESS] };
   }
+  if (column === "source") return { platform: clean || null };
   if (column === "maker") return { maker: clean || null };
   if (column === "tags") return { tags: normalizeTags(parseTagInput(value)) };
   if (column === "releaseDate") return { release_date: clean || null, release_year: yearFromDate(clean) };

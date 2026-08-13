@@ -18,7 +18,7 @@ export type PrivateCellMovement = "left" | "right" | "up" | "down" | "tabForward
 
 export type PrivateClipboardUpdate =
   | { kind: "patch"; patch: Partial<ItemInput> }
-  | { kind: "quick"; field: "rating" | "collection_level"; value: number | PrivateCollectionLevel | null };
+  | { kind: "quick"; field: "rating" | "collection_level" | "used"; value: number | PrivateCollectionLevel | boolean | null };
 
 export function privateCellKey(position: PrivateCellPosition) {
   return `${position.itemId}:${position.column}`;
@@ -61,6 +61,8 @@ export function privateClipboardValue(item: MediaItem, column: PrivateColumnId) 
   if (column === "identity") return privateIdentityLabel(item);
   if (column === "rating") return item.rating === null || item.rating === undefined ? "" : String(privateStarsFromRating(item.rating));
   if (column === "favorite") return privateCollectionLevelLabels[privateCollectionLevel(item)];
+  if (column === "used") return item.used ? "是" : "否";
+  if (column === "updated") return item.updated_at;
   return privateCellValue(item, column as PrivateEditableColumn);
 }
 
@@ -80,6 +82,12 @@ export function privateClipboardUpdate(item: MediaItem, column: PrivateColumnId,
   if (column === "favorite") {
     return { kind: "quick", field: "collection_level", value: parseCollectionLevel(value) };
   }
+  if (column === "used") {
+    if (["是", "true", "1", "yes", "used"].includes(value.toLocaleLowerCase())) return { kind: "quick", field: "used", value: true };
+    if (["否", "false", "0", "no", "unused", ""].includes(value.toLocaleLowerCase())) return { kind: "quick", field: "used", value: false };
+    throw new Error("已使用欄位必須是是／否");
+  }
+  if (column === "updated") throw new Error("更新時間是唯讀欄位");
   if (column === "releaseDate" && value && !isValidIsoDate(value)) {
     throw new Error("發行日期格式必須是 YYYY-MM-DD");
   }

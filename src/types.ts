@@ -223,7 +223,7 @@ export interface ListFilters {
   viewedTo?: string;
   updatedFrom: string;
   updatedTo: string;
-  sort?: "displayName" | "rating" | "releaseDate" | "";
+  sort?: "displayName" | "code" | "title" | "rating" | "people" | "source" | "favorite" | "used" | "updated" | "releaseDate" | "";
   order?: "asc" | "desc" | "";
   page: number;
   pageSize: number;

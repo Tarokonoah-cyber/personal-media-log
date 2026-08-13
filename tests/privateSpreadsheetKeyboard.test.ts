@@ -49,6 +49,8 @@ describe("private spreadsheet clipboard", () => {
     expect(privateClipboardValue(item, "rating")).toBe("5");
     expect(privateClipboardValue(item, "favorite")).toBe("神作");
     expect(privateClipboardValue(item, "actress")).toBe("Performer A, Performer B");
+    expect(privateClipboardValue(item, "used")).toBe("否");
+    expect(privateClipboardValue(item, "updated")).toBe(item.updated_at);
   });
 
   it("parses combined, tab-separated, and code-only identities", () => {
@@ -80,6 +82,8 @@ describe("private spreadsheet clipboard", () => {
 
   it("uses existing normalization for people and tags", () => {
     expect(privateClipboardUpdate(item, "actress", "Performer A、Performer B、Performer A")).toEqual({ kind: "patch", patch: { people: ["Performer A", "Performer B"] } });
+    expect(privateClipboardUpdate(item, "used", "是")).toEqual({ kind: "quick", field: "used", value: true });
+    expect(() => privateClipboardUpdate(item, "updated", "2026-08-13")).toThrow("更新時間是唯讀欄位");
     expect(privateClipboardUpdate(item, "tags", "#plot, outdoor, plot")).toEqual({ kind: "patch", patch: { tags: ["plot", "outdoor"] } });
   });
 });

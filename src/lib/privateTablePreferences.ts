@@ -1,4 +1,4 @@
-export type PrivateColumnId = "identity" | "rating" | "favorite" | "actress" | "maker" | "tags" | "releaseDate" | "summary";
+export type PrivateColumnId = "identity" | "rating" | "favorite" | "used" | "actress" | "source" | "maker" | "tags" | "releaseDate" | "updated" | "summary";
 export type PrivateTableMode = "all" | "fc2" | "jav";
 
 export type PrivateColumnDefinition = {
@@ -31,7 +31,8 @@ type PrivateTablePreferenceProfilesInput = {
   profiles?: Partial<Record<PrivateTableMode, PrivateTablePreferencesInput>>;
 };
 
-export const PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v6";
+export const PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v7";
+export const LEGACY_V6_PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v6";
 export const LEGACY_V5_PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v5";
 export const LEGACY_V4_PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v4";
 export const LEGACY_V3_PRIVATE_TABLE_PREFERENCES_KEY = "private-library-table-preferences-v3";
@@ -41,10 +42,13 @@ export const privateColumnDefinitions: PrivateColumnDefinition[] = [
   { id: "identity", label: "作品代號 / 標題", width: 520, minWidth: 320, maxWidth: 900, required: true },
   { id: "rating", label: "評分", width: 112, minWidth: 106, maxWidth: 138 },
   { id: "favorite", label: "收藏", width: 96, minWidth: 84, maxWidth: 138 },
-  { id: "actress", label: "女優", width: 176, minWidth: 110, maxWidth: 360 },
+  { id: "used", label: "已使用", width: 82, minWidth: 76, maxWidth: 108 },
+  { id: "actress", label: "人物", width: 176, minWidth: 110, maxWidth: 360 },
+  { id: "source", label: "來源", width: 96, minWidth: 82, maxWidth: 220 },
   { id: "maker", label: "片商", width: 108, minWidth: 88, maxWidth: 300 },
   { id: "tags", label: "標籤", width: 168, minWidth: 128, maxWidth: 420 },
   { id: "releaseDate", label: "發行日期", width: 112, minWidth: 104, maxWidth: 150 },
+  { id: "updated", label: "更新時間", width: 142, minWidth: 122, maxWidth: 210 },
   { id: "summary", label: "快速筆記", width: 280, minWidth: 160, maxWidth: 520 }
 ];
 
@@ -52,14 +56,14 @@ export const privateColumnMap = Object.fromEntries(privateColumnDefinitions.map(
 
 const privateColumnIds = privateColumnDefinitions.map((column) => column.id);
 const privateModeOrder: Record<PrivateTableMode, PrivateColumnId[]> = {
-  all: ["identity", "rating", "favorite", "tags", "releaseDate", "summary", "actress", "maker"],
-  fc2: ["identity", "rating", "favorite", "tags", "releaseDate", "summary", "actress", "maker"],
-  jav: ["identity", "rating", "favorite", "actress", "maker", "releaseDate", "tags", "summary"]
+  all: ["identity", "rating", "favorite", "used", "actress", "source", "tags", "updated", "releaseDate", "maker", "summary"],
+  fc2: ["identity", "rating", "favorite", "used", "actress", "source", "tags", "updated", "releaseDate", "maker", "summary"],
+  jav: ["identity", "rating", "favorite", "used", "actress", "source", "maker", "updated", "releaseDate", "tags", "summary"]
 };
 const privateModeVisible: Record<PrivateTableMode, PrivateColumnId[]> = {
-  all: ["identity", "rating", "favorite", "tags", "releaseDate", "summary"],
-  fc2: ["identity", "rating", "favorite", "tags", "releaseDate", "summary"],
-  jav: ["identity", "rating", "favorite", "actress", "maker", "releaseDate", "tags", "summary"]
+  all: ["identity", "rating", "favorite", "used", "actress", "source", "tags", "updated", "releaseDate"],
+  fc2: ["identity", "rating", "favorite", "used", "actress", "source", "tags", "updated", "releaseDate"],
+  jav: ["identity", "rating", "favorite", "used", "actress", "source", "maker", "updated", "releaseDate", "tags"]
 };
 const legacySeparatedDefaults = {
   v3: { code: 168, title: 260 },
@@ -172,6 +176,24 @@ export function readPrivateTablePreferenceProfiles(storage: Pick<Storage, "getIt
   try {
     const current = storage.getItem(PRIVATE_TABLE_PREFERENCES_KEY);
     if (current) return normalizePrivateTablePreferenceProfiles(JSON.parse(current));
+    const legacyV6 = storage.getItem(LEGACY_V6_PRIVATE_TABLE_PREFERENCES_KEY);
+    if (legacyV6) {
+      const profiles = normalizePrivateTablePreferenceProfiles(JSON.parse(legacyV6));
+      for (const mode of ["all", "fc2", "jav"] as const) {
+        profiles[mode] = normalizePrivateTablePreferences({
+          ...profiles[mode],
+          visible: {
+            ...profiles[mode].visible,
+            actress: true,
+            source: true,
+            used: true,
+            updated: true
+          }
+        }, mode);
+      }
+      storage.setItem(PRIVATE_TABLE_PREFERENCES_KEY, JSON.stringify({ profiles }));
+      return profiles;
+    }
     const legacyV5 = storage.getItem(LEGACY_V5_PRIVATE_TABLE_PREFERENCES_KEY);
     const legacyV4 = storage.getItem(LEGACY_V4_PRIVATE_TABLE_PREFERENCES_KEY);
     const legacyV3 = storage.getItem(LEGACY_V3_PRIVATE_TABLE_PREFERENCES_KEY);

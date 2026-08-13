@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   LEGACY_PRIVATE_TABLE_PREFERENCES_KEY,
+  LEGACY_V6_PRIVATE_TABLE_PREFERENCES_KEY,
   LEGACY_V5_PRIVATE_TABLE_PREFERENCES_KEY,
   LEGACY_V3_PRIVATE_TABLE_PREFERENCES_KEY,
   LEGACY_V4_PRIVATE_TABLE_PREFERENCES_KEY,
@@ -29,13 +30,13 @@ describe("private table preference migration", () => {
   it("provides separate compact FC2, full JAV, and compact mixed templates", () => {
     const profiles = defaultPrivateTablePreferenceProfiles();
     expect(profiles.fc2.widths.identity).toBe(360);
-    expect(profiles.fc2.visible.actress).toBe(false);
+    expect(profiles.fc2.visible.actress).toBe(true);
     expect(profiles.fc2.visible.maker).toBe(false);
     expect(profiles.jav.visible.actress).toBe(true);
     expect(profiles.jav.visible.maker).toBe(true);
-    expect(profiles.all.visible.actress).toBe(false);
+    expect(profiles.all.visible.actress).toBe(true);
     expect(profiles.all.visible.maker).toBe(false);
-    expect(profiles.jav.order.slice(0, 5)).toEqual(["identity", "rating", "favorite", "actress", "maker"]);
+    expect(profiles.jav.order.slice(0, 6)).toEqual(["identity", "rating", "favorite", "used", "actress", "source"]);
   });
 
   it("selects a platform template only for one exact platform filter", () => {
@@ -51,7 +52,7 @@ describe("private table preference migration", () => {
       widths: { identity: 600, watchedAt: 120 },
       pageSize: 100
     });
-    expect(migrated.order).toEqual(["identity", "rating", "releaseDate", "summary", "favorite", "tags", "actress", "maker"]);
+    expect(migrated.order).toEqual(["identity", "rating", "releaseDate", "summary", "favorite", "used", "actress", "source", "tags", "updated", "maker"]);
     expect(migrated.order).not.toContain("watchedAt");
     expect(migrated.widths.identity).toBe(600);
     expect(migrated.visible.releaseDate).toBe(true);
@@ -134,6 +135,26 @@ describe("private table preference migration", () => {
     expect(profiles.jav.widths.identity).toBe(640);
     expect(profiles.jav.visible.maker).toBe(true);
     expect(profiles.jav.pageSize).toBe(200);
+    expect(storage.setItem).toHaveBeenCalledWith(PRIVATE_TABLE_PREFERENCES_KEY, expect.any(String));
+  });
+
+  it("migrates v6 profile storage and adds the new scan columns", () => {
+    const legacyV6 = JSON.stringify({
+      profiles: {
+        all: { order: ["identity", "rating", "favorite", "tags"], widths: { identity: 610 }, visible: { tags: true }, pageSize: 100 }
+      }
+    });
+    const storage = {
+      getItem: vi.fn((key: string) => key === LEGACY_V6_PRIVATE_TABLE_PREFERENCES_KEY ? legacyV6 : null),
+      setItem: vi.fn()
+    };
+
+    const profiles = readPrivateTablePreferenceProfiles(storage);
+
+    expect(profiles.all.widths.identity).toBe(610);
+    expect(profiles.all.order).toEqual(expect.arrayContaining(["source", "used", "updated"]));
+    expect(profiles.all.visible.actress).toBe(true);
+    expect(profiles.all.visible.source).toBe(true);
     expect(storage.setItem).toHaveBeenCalledWith(PRIVATE_TABLE_PREFERENCES_KEY, expect.any(String));
   });
 });
