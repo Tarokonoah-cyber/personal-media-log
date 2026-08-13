@@ -1,5 +1,5 @@
 ﻿import { Bookmark, Check, CircleSlash2, Columns3, Home, Menu, Moon, Plus, Save, Search, SlidersHorizontal, Star, Sun, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, CircleAlert, Pencil, X } from "lucide-react";
 import { FilterSheet } from "./components/FilterSheet";
 import { HomeDashboard } from "./components/HomeDashboard";
@@ -69,6 +69,7 @@ import { addTags, normalizeTags, parseTagInput } from "./lib/tags";
 import { canonicalizeTagInput, rememberRecentTags, saveTagAlias } from "./lib/tagWorkflow";
 import { classifyItem, libraryTree } from "./lib/taxonomy";
 import { readStorageEnum, readStorageItem, writeStorageItem } from "./lib/storage";
+import { captureScrollPositions, restoreScrollPositions } from "./lib/scrollPosition";
 import { getWatchStatus, updateWatchProgress } from "./lib/watch";
 import type { ItemInput, ListFilters, MediaItem, PrivateFacets, PrivateSummary, PublicAggregateResponse, SmartAddResponse, TmdbCandidate } from "./types";
 
@@ -180,6 +181,8 @@ export default function App() {
   const loading = initialLoading || refreshing || actionLoading;
   const itemsRef = useRef(items);
   const loadAbortRef = useRef<AbortController | null>(null);
+  const privateTableScrollRef = useRef<HTMLDivElement>(null);
+  const privateMobileScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     itemsRef.current = items;
@@ -379,11 +382,19 @@ export default function App() {
   }
 
   async function refreshPrivateWorkspaceData(includeFacets = true) {
-    const [facets] = await Promise.all([
-      includeFacets ? getPrivateFacets(privateFacetFilters) : Promise.resolve(null),
-      loadItems()
+    const scrollPositions = captureScrollPositions([
+      privateTableScrollRef.current,
+      privateMobileScrollRef.current
     ]);
-    if (facets) setPrivateFacets(facets);
+    try {
+      const [facets] = await Promise.all([
+        includeFacets ? getPrivateFacets(privateFacetFilters) : Promise.resolve(null),
+        loadItems()
+      ]);
+      if (facets) setPrivateFacets(facets);
+    } finally {
+      restoreScrollPositions(scrollPositions);
+    }
   }
 
   async function submitQuick() {
@@ -857,6 +868,8 @@ export default function App() {
                   error={error}
                   batchBusy={actionLoading}
                   knownTags={privateTagSuggestions}
+                  tableScrollRef={privateTableScrollRef}
+                  mobileScrollRef={privateMobileScrollRef}
                   onPatchFilters={patchFilters}
                   onClearFilters={resetFilters}
                   onRetry={() => void loadItems()}
@@ -1366,6 +1379,8 @@ function PrivateWorkbenchV3({
   error,
   batchBusy,
   knownTags,
+  tableScrollRef,
+  mobileScrollRef,
   onPatchFilters,
   onClearFilters,
   onRetry,
@@ -1389,6 +1404,8 @@ function PrivateWorkbenchV3({
   error: string;
   batchBusy: boolean;
   knownTags: string[];
+  tableScrollRef: RefObject<HTMLDivElement>;
+  mobileScrollRef: RefObject<HTMLDivElement>;
   onPatchFilters: (patch: Partial<ListFilters>) => void;
   onClearFilters: () => void;
   onRetry: () => void;
@@ -1814,8 +1831,9 @@ function PrivateWorkbenchV3({
           <>
             {refreshing && <div className="private-refresh-indicator" role="status">更新中...</div>}
             {error && <div className="notice danger private-refresh-error" role="alert">{error}</div>}
-            <PrivateMobileCards items={items} selectedIds={selectedIds} onToggleSelected={(id) => setSelectedIds((current) => togglePageItemSelection(current, id))} onSelect={onSelect} onQuickUpdate={onQuickUpdate} />
+            <PrivateMobileCards scrollRef={mobileScrollRef} items={items} selectedIds={selectedIds} onToggleSelected={(id) => setSelectedIds((current) => togglePageItemSelection(current, id))} onSelect={onSelect} onQuickUpdate={onQuickUpdate} />
             <PrivateDataTable
+              scrollRef={tableScrollRef}
               items={items}
               tableMode={tableMode}
               columns={visibleColumns}
@@ -1884,6 +1902,7 @@ type PrivateSheetFeedback = {
 };
 
 function PrivateDataTable({
+  scrollRef,
   items,
   tableMode,
   columns,
@@ -1910,6 +1929,7 @@ function PrivateDataTable({
   onNewRowCancel,
   onStatusChange
 }: {
+  scrollRef: RefObject<HTMLDivElement>;
   items: MediaItem[];
   tableMode: PrivateTableMode;
   columns: PrivateColumnDefinition[];
@@ -2294,7 +2314,7 @@ function PrivateDataTable({
   }
 
   return (
-    <div className="private-data-table-wrap">
+    <div ref={scrollRef} className="private-data-table-wrap">
       <table className="private-data-table private-dense-table" aria-busy={refreshing} style={{ "--private-table-width": `${Math.max(totalWidth, 760)}px` } as CSSProperties}>
         <colgroup>
           <col className="private-select-column" />
@@ -2706,9 +2726,9 @@ function PrivateNewRowTagEditor({
   );
 }
 
-function PrivateMobileCards({ items, selectedIds, onToggleSelected, onSelect, onQuickUpdate }: { items: MediaItem[]; selectedIds: string[]; onToggleSelected: (id: string) => void; onSelect: (item: MediaItem) => void; onQuickUpdate: (item: MediaItem, field: "collection_level" | "rating" | "used" | "private_status", value: unknown) => Promise<void> }) {
+function PrivateMobileCards({ scrollRef, items, selectedIds, onToggleSelected, onSelect, onQuickUpdate }: { scrollRef: RefObject<HTMLDivElement>; items: MediaItem[]; selectedIds: string[]; onToggleSelected: (id: string) => void; onSelect: (item: MediaItem) => void; onQuickUpdate: (item: MediaItem, field: "collection_level" | "rating" | "used" | "private_status", value: unknown) => Promise<void> }) {
   return (
-    <div className="private-mobile-list">
+    <div ref={scrollRef} className="private-mobile-list">
       {items.map((item) => <PrivateMobileCard key={item.id} item={item} selected={selectedIds.includes(item.id)} onToggleSelected={onToggleSelected} onSelect={onSelect} onQuickUpdate={onQuickUpdate} />)}
     </div>
   );
