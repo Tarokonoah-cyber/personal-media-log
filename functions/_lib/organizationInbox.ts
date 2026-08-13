@@ -141,8 +141,16 @@ export async function setOrganizationInboxState(env: Env, actor: Actor, itemIds:
 }
 
 function inboxCte() {
-  const normalizedTitle = "lower(replace(replace(replace(coalesce(nullif(trim(items.official_title), ''), nullif(trim(items.raw_title), ''), ''), ' ', ''), '-', ''), '_', ''))";
-  return `WITH inbox_base AS (
+  return `WITH tagged AS (
+    SELECT DISTINCT item_id FROM item_tags
+  ), personed AS (
+    SELECT DISTINCT item_id FROM item_people
+  ), duplicate_codes AS (
+    SELECT normalized_code
+    FROM items
+    WHERE is_private = 1 AND status != 'deleted' AND normalized_code IS NOT NULL AND normalized_code != ''
+    GROUP BY normalized_code HAVING COUNT(*) > 1
+  ), inbox_base AS (
     SELECT
       items.id,
       items.updated_at,
@@ -153,13 +161,9 @@ function inboxCte() {
         OR coalesce(nullif(trim(items.platform), ''), '') = ''
         OR (lower(trim(coalesce(items.platform, ''))) = 'jav' AND coalesce(nullif(trim(items.maker), ''), '') = '')
       THEN 1 ELSE 0 END AS missing_metadata,
-      CASE WHEN NOT EXISTS (SELECT 1 FROM item_tags WHERE item_tags.item_id = items.id) THEN 1 ELSE 0 END AS missing_tags,
-      CASE WHEN NOT EXISTS (SELECT 1 FROM item_people WHERE item_people.item_id = items.id) THEN 1 ELSE 0 END AS missing_people,
-      CASE WHEN coalesce(items.normalized_code, '') != '' AND EXISTS (
-        SELECT 1 FROM items duplicate_items
-        WHERE duplicate_items.id != items.id AND duplicate_items.is_private = 1 AND duplicate_items.status != 'deleted'
-          AND duplicate_items.normalized_code = items.normalized_code
-      ) THEN 1 ELSE 0 END AS duplicate_suspected,
+      CASE WHEN tagged.item_id IS NULL THEN 1 ELSE 0 END AS missing_tags,
+      CASE WHEN personed.item_id IS NULL THEN 1 ELSE 0 END AS missing_people,
+      CASE WHEN duplicate_codes.normalized_code IS NOT NULL THEN 1 ELSE 0 END AS duplicate_suspected,
       CASE WHEN coalesce(nullif(trim(items.code), ''), '') != ''
         AND coalesce(nullif(trim(items.normalized_code), ''), '') != ''
         AND items.code != items.normalized_code THEN 1 ELSE 0 END AS normalization_needed,
@@ -167,9 +171,11 @@ function inboxCte() {
         (items.release_year IS NOT NULL AND items.year IS NOT NULL AND items.release_year != items.year)
         OR (coalesce(items.normalized_code, '') LIKE 'FC2-PPV-%' AND lower(coalesce(items.platform, '')) != 'fc2')
         OR (lower(coalesce(items.platform, '')) = 'fc2' AND coalesce(items.normalized_code, '') NOT LIKE 'FC2-PPV-%')
-      THEN 1 ELSE 0 END AS metadata_conflict,
-      ${normalizedTitle} AS normalized_title
+      THEN 1 ELSE 0 END AS metadata_conflict
     FROM items
+    LEFT JOIN tagged ON tagged.item_id = items.id
+    LEFT JOIN personed ON personed.item_id = items.id
+    LEFT JOIN duplicate_codes ON duplicate_codes.normalized_code = items.normalized_code
     LEFT JOIN organization_inbox_state inbox ON inbox.item_id = items.id
     WHERE items.is_private = 1 AND items.status != 'deleted'
   ), inbox_items AS (

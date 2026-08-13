@@ -52,6 +52,7 @@ export async function refreshDuplicateSignatures(env: Env) {
           signatures.item_id IS NULL
           OR dirty.item_id IS NOT NULL
           OR signatures.item_updated_at != items.updated_at
+          OR signatures.signature_version != 2
         )
     ),
     people_signatures AS (
@@ -63,13 +64,14 @@ export async function refreshDuplicateSignatures(env: Env) {
     )
     INSERT INTO duplicate_item_signatures (
       item_id, normalized_code, normalized_title, title_block, maker_key, platform_key,
-      collection_key, source_identity, people_key, item_updated_at, signature_updated_at
+      collection_key, source_identity, people_key, item_updated_at, signature_updated_at, signature_version
     )
     SELECT
-      items.id, nullif(trim(items.normalized_code), ''), ${normalizedTitle}, substr(${normalizedTitle}, 1, 12),
+      items.id, nullif(trim(items.normalized_code), ''), ${normalizedTitle},
+      substr(${normalizedTitle}, 1, 6) || ':' || substr(${normalizedTitle}, max(1, length(${normalizedTitle}) - 5), 6),
       lower(trim(coalesce(items.maker, ''))), lower(trim(coalesce(items.platform, ''))),
       lower(trim(coalesce(items.collection_level, ''))), lower(trim(coalesce(items.source_url, ''))),
-      coalesce(people_signatures.people_key, ''), items.updated_at, datetime('now')
+      coalesce(people_signatures.people_key, ''), items.updated_at, datetime('now'), 2
     FROM targets
     JOIN items ON items.id = targets.id
     LEFT JOIN people_signatures ON people_signatures.item_id = items.id
@@ -83,7 +85,8 @@ export async function refreshDuplicateSignatures(env: Env) {
       source_identity = excluded.source_identity,
       people_key = excluded.people_key,
       item_updated_at = excluded.item_updated_at,
-      signature_updated_at = excluded.signature_updated_at
+      signature_updated_at = excluded.signature_updated_at,
+      signature_version = excluded.signature_version
   `),
     env.MEDIA_LOG_DB.prepare(`
       DELETE FROM duplicate_item_signatures
@@ -107,13 +110,15 @@ export async function listDuplicateCandidates(env: Env, page = 1, pageSize = 50)
   const freshness = await env.MEDIA_LOG_DB.batch([
     env.MEDIA_LOG_DB.prepare("SELECT COUNT(*) AS count FROM duplicate_signature_dirty"),
     env.MEDIA_LOG_DB.prepare("SELECT COUNT(*) AS count FROM duplicate_item_signatures"),
-    env.MEDIA_LOG_DB.prepare("SELECT COUNT(*) AS count FROM items WHERE is_private = 1 AND status != 'deleted'")
+    env.MEDIA_LOG_DB.prepare("SELECT COUNT(*) AS count FROM items WHERE is_private = 1 AND status != 'deleted'"),
+    env.MEDIA_LOG_DB.prepare("SELECT COUNT(*) AS count FROM duplicate_item_signatures WHERE signature_version != 2")
   ]);
   const dirtyCount = Number((freshness[0]?.results?.[0] as { count?: number } | undefined)?.count || 0);
   const signatureCount = Number((freshness[1]?.results?.[0] as { count?: number } | undefined)?.count || 0);
   const privateCount = Number((freshness[2]?.results?.[0] as { count?: number } | undefined)?.count || 0);
-  if (dirtyCount > 0 || signatureCount !== privateCount) await refreshDuplicateSignatures(env);
-  const scanLimit = Math.min(2000, Math.max(250, safePage * safePageSize * 8));
+  const outdatedCount = Number((freshness[3]?.results?.[0] as { count?: number } | undefined)?.count || 0);
+  if (dirtyCount > 0 || signatureCount !== privateCount || outdatedCount > 0) await refreshDuplicateSignatures(env);
+  const scanLimit = Math.min(1000, Math.max(200, safePage * safePageSize * 4));
   const base = (condition: string) => `
     SELECT a.item_id AS a_id, b.item_id AS b_id
     FROM duplicate_item_signatures a
@@ -126,16 +131,24 @@ export async function listDuplicateCandidates(env: Env, page = 1, pageSize = 50)
     LIMIT ?
   `;
   const results = await env.MEDIA_LOG_DB.batch([
-    env.MEDIA_LOG_DB.prepare(base("((a.normalized_code != '' AND a.normalized_code = b.normalized_code) OR (a.source_identity != '' AND a.source_identity = b.source_identity))")).bind(scanLimit),
-    env.MEDIA_LOG_DB.prepare(base("a.normalized_title != '' AND a.normalized_title = b.normalized_title AND a.platform_key = b.platform_key AND ((a.maker_key != '' AND a.maker_key = b.maker_key) OR (a.people_key != '' AND a.people_key = b.people_key))")).bind(scanLimit),
-    env.MEDIA_LOG_DB.prepare(base("length(a.title_block) >= 6 AND a.title_block = b.title_block AND ((a.platform_key != '' AND a.platform_key = b.platform_key) OR (a.maker_key != '' AND a.maker_key = b.maker_key) OR (a.people_key != '' AND a.people_key = b.people_key))")).bind(scanLimit)
+    env.MEDIA_LOG_DB.prepare(base("a.normalized_code != '' AND a.normalized_code = b.normalized_code")).bind(scanLimit),
+    env.MEDIA_LOG_DB.prepare(base("a.source_identity != '' AND a.source_identity = b.source_identity")).bind(scanLimit),
+    env.MEDIA_LOG_DB.prepare(base("a.normalized_title != '' AND a.normalized_title = b.normalized_title AND a.platform_key = b.platform_key AND a.maker_key != '' AND a.maker_key = b.maker_key")).bind(scanLimit),
+    env.MEDIA_LOG_DB.prepare(base("a.normalized_title != '' AND a.normalized_title = b.normalized_title AND a.platform_key = b.platform_key AND a.people_key != '' AND a.people_key = b.people_key")).bind(scanLimit),
+    env.MEDIA_LOG_DB.prepare(base("length(a.title_block) >= 6 AND a.title_block = b.title_block AND a.platform_key != '' AND a.platform_key = b.platform_key")).bind(scanLimit),
+    env.MEDIA_LOG_DB.prepare(base("length(a.title_block) >= 6 AND a.title_block = b.title_block AND a.maker_key != '' AND a.maker_key = b.maker_key")).bind(scanLimit),
+    env.MEDIA_LOG_DB.prepare(base("length(a.title_block) >= 6 AND a.title_block = b.title_block AND a.people_key != '' AND a.people_key = b.people_key")).bind(scanLimit)
   ]);
   const pairMap = new Map<string, CandidateRow>();
   for (const result of results) {
     for (const row of result.results as CandidateRow[] || []) pairMap.set(pairKey(row.a_id, row.b_id), row);
   }
   const rows = Array.from(pairMap.values());
-  const items = await getItemsByIds(env, Array.from(new Set(rows.flatMap((row) => [row.a_id, row.b_id]))));
+  const candidateIds = Array.from(new Set(rows.flatMap((row) => [row.a_id, row.b_id])));
+  const items: ItemRecord[] = [];
+  for (let index = 0; index < candidateIds.length; index += 200) {
+    items.push(...await getItemsByIds(env, candidateIds.slice(index, index + 200)));
+  }
   const itemById = new Map(items.map((item) => [item.id, item]));
   const candidates = rows.flatMap((row) => {
     const itemA = itemById.get(row.a_id);

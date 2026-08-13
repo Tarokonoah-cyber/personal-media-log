@@ -383,18 +383,11 @@ export function buildItemWhere(params: ItemListParams) {
     const like = `%${params.query.trim().toLowerCase()}%`;
     const fts = toFtsQuery(params.query);
     where.push(`(
-      ${fts ? `EXISTS (
-        SELECT 1 FROM items_search_fts
-        WHERE items_search_fts.item_id = items.id
-          AND items_search_fts MATCH ?
+      ${fts ? `items.id IN (
+        SELECT items_search_fts.item_id FROM items_search_fts
+        WHERE items_search_fts MATCH ?
       ) OR` : ""}
-      lower(coalesce(items.raw_title, '')) LIKE ?
-      OR lower(coalesce(items.official_title, '')) LIKE ?
-      OR lower(coalesce(items.original_title, '')) LIKE ?
-      OR lower(coalesce(items.code, '')) LIKE ?
-      OR lower(coalesce(items.quick_note, '')) LIKE ?
-      OR lower(coalesce(items.platform, '')) LIKE ?
-      OR lower(coalesce(items.maker, '')) LIKE ?
+      lower(coalesce(items.search_text, '')) LIKE ?
       OR EXISTS (
         SELECT 1 FROM item_tags it
         JOIN tags t ON t.id = it.tag_id
@@ -407,7 +400,7 @@ export function buildItemWhere(params: ItemListParams) {
       )
     )`);
     if (fts) bind.push(fts);
-    bind.push(like, like, like, like, like, like, like, like, like);
+    bind.push(like, like, like);
   }
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
