@@ -1699,7 +1699,7 @@ export async function batchUpdateItems(
   env: Env,
   actor: Actor,
   input: unknown,
-  options: { includeDeleted?: boolean } = {}
+  options: { includeDeleted?: boolean; additionalStatements?: D1PreparedStatement[]; allowDuplicateNormalizedCodes?: boolean } = {}
 ): Promise<BatchUpdateResult> {
   const operations = validateBatchUpdateOperations(input);
   const requestBytes = new TextEncoder().encode(JSON.stringify(operations)).byteLength;
@@ -1725,7 +1725,7 @@ export async function batchUpdateItems(
     normalized.status = operation.input.status || inferStatus(normalized);
     return { id: operation.id, input: operation.input, normalized };
   });
-  await validateBatchNormalizedCodes(env, desired, currentById);
+  if (!options.allowDuplicateNormalizedCodes) await validateBatchNormalizedCodes(env, desired, currentById);
 
   const changed = desired.filter(({ id, normalized }) => !batchItemMatches(currentById.get(id)!, normalized));
   const changedIds = changed.map(({ id }) => id);
@@ -1778,6 +1778,7 @@ export async function batchUpdateItems(
         metadata_json = payload.metadata_json,
         progress_json = payload.progress_json,
         search_text = payload.search_text,
+        deleted_at = CASE WHEN payload.status = 'deleted' THEN coalesce(target.deleted_at, payload.updated_at) ELSE NULL END,
         updated_at = payload.updated_at
       FROM payload WHERE target.id = payload.id`).bind(JSON.stringify(itemPayload)),
     env.MEDIA_LOG_DB.prepare("DELETE FROM item_tags WHERE item_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))").bind(JSON.stringify(changedIds)),
@@ -1788,6 +1789,7 @@ export async function batchUpdateItems(
   appendBulkRelationStatements(env, statements, "tag", tagNames, tagLinks);
   appendBulkRelationStatements(env, statements, "person", peopleNames, peopleLinks);
   appendBulkRelationStatements(env, statements, "collection", collectionNames, collectionLinks);
+  if (options.additionalStatements?.length) statements.push(...options.additionalStatements);
   statements.push(env.MEDIA_LOG_DB.prepare(`
     INSERT INTO audit_logs (id, actor_email, action, entity_type, entity_id, metadata_json)
     SELECT

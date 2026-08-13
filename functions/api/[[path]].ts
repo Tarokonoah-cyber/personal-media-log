@@ -5,6 +5,7 @@ import { batchUpdateItems, createItem, exportItems, findNormalizedCodeConflict, 
 import { applyMetadataSuggestions, decideMetadataSuggestions, isMetadataSuggestionStatus, listMetadataSuggestions, previewMetadataSuggestions, refreshMetadataSuggestions } from "../_lib/metadataSuggestions";
 import { applyEntityMerge, getNormalizationOverview, isEntityType, previewEntityMerge, registerEntityAlias, rollbackEntityMerge } from "../_lib/normalization";
 import { getOrganizationInboxSummary, isOrganizationInboxCategory, listOrganizationInbox, setOrganizationInboxState } from "../_lib/organizationInbox";
+import { applyDuplicateMerge, decideDuplicatePair, isDuplicateDecision, listDuplicateCandidates, previewDuplicateMerge, refreshDuplicateSignatures, rollbackDuplicateMerge } from "../_lib/duplicates";
 import { parseSmartAdd } from "../_lib/smartAdd";
 import { applyTmdbMetadata, searchTmdb } from "../_lib/tmdb";
 import { getPrivateQuality, ignorePrivateIssue, isPrivateIssueType, unignorePrivateIssue } from "../_lib/privateQuality";
@@ -176,6 +177,33 @@ export const onRequest: PagesFunction<Env, "path"> = async (context) => {
       if (method === "POST" && path[2] === "state") {
         const body = await readJson<{ itemIds?: unknown; state?: unknown }>(context.request);
         return json(await setOrganizationInboxState(context.env, actor, body.itemIds, body.state));
+      }
+    }
+
+    if (path[0] === "private" && path[1] === "duplicates") {
+      if (method === "GET" && path.length === 2) {
+        return json(await listDuplicateCandidates(
+          context.env,
+          optionalNumber(url.searchParams.get("page")) || 1,
+          optionalNumber(url.searchParams.get("pageSize")) || 50
+        ), { headers: { "cache-control": "private, no-store" } });
+      }
+      if (method === "POST" && path[2] === "refresh") return json(await refreshDuplicateSignatures(context.env));
+      if (method === "POST" && path[2] === "decision") {
+        const body = await readJson<{ itemAId?: unknown; itemBId?: unknown; decision?: unknown; metadata?: unknown }>(context.request);
+        if (!isDuplicateDecision(body.decision)) return error(400, "Invalid duplicate decision");
+        return json(await decideDuplicatePair(context.env, actor, body.itemAId, body.itemBId, body.decision, body.metadata));
+      }
+      if (method === "POST" && path[2] === "merge" && path[3] === "preview") {
+        const body = await readJson<{ targetItemId?: unknown; sourceItemId?: unknown }>(context.request);
+        return json(await previewDuplicateMerge(context.env, body.targetItemId, body.sourceItemId));
+      }
+      if (method === "POST" && path[2] === "merge" && path[3] === "apply") {
+        return json(await applyDuplicateMerge(context.env, actor, await readJson(context.request)));
+      }
+      if (method === "POST" && path[2] === "merge" && path[3] === "rollback") {
+        const body = await readJson<{ mergeId?: unknown; confirmed?: unknown }>(context.request);
+        return json(await rollbackDuplicateMerge(context.env, actor, body.mergeId, body.confirmed));
       }
     }
 

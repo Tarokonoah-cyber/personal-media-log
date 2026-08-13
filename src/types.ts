@@ -149,6 +149,24 @@ export interface OrganizationInboxResponse {
   category: OrganizationInboxCategory; page: number; pageSize: number; total: number; items: OrganizationInboxEntry[];
 }
 
+export type DuplicateDecision = "not_duplicate" | "ignored" | "keep_both";
+export type DuplicateConfidence = "high" | "medium" | "low";
+export interface DuplicateEvidence { code: string; label: string; weight: number; }
+export interface DuplicateCandidate {
+  pairKey: string; itemA: MediaItem; itemB: MediaItem; score: number; confidence: DuplicateConfidence; evidence: DuplicateEvidence[];
+}
+export interface DuplicateCandidateResponse {
+  page: number; pageSize: number; total: number; truncated: boolean; candidates: DuplicateCandidate[];
+}
+export interface DuplicateMergeConflict {
+  field: string; label: string; targetValue: unknown; sourceValue: unknown;
+}
+export interface DuplicateMergePreview {
+  target: MediaItem; source: MediaItem; suggestedInput: ItemInput; conflicts: DuplicateMergeConflict[];
+  expectedTargetUpdatedAt: string; expectedSourceUpdatedAt: string;
+  union: { tags: string[]; people: string[]; collections: string[] }; requiresConfirmation: true;
+}
+
 export interface PrivateFacets {
   source: PrivateFacetItem[];
   maker: PrivateFacetItem[];

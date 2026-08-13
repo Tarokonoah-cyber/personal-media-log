@@ -1,4 +1,4 @@
-import type { BackupJob, BatchUpdateOperation, BatchUpdateResponse, EntityMergePreview, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, MetadataSuggestionListResponse, MetadataSuggestionPreviewResponse, MetadataSuggestionStatus, NormalizationEntityType, NormalizationOverview, OrganizationInboxCategory, OrganizationInboxResponse, OrganizationInboxState, OrganizationInboxSummary, PrivateCodeConflictResponse, PrivateFacetSearchResponse, PrivateFacets, PrivateIssueType, PrivateQualityResponse, PublicAggregateResponse, SmartAddResponse, StatsResponse, TmdbSearchResponse } from "../types";
+import type { BackupJob, BatchUpdateOperation, BatchUpdateResponse, DuplicateCandidateResponse, DuplicateDecision, DuplicateMergePreview, EntityMergePreview, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, MetadataSuggestionListResponse, MetadataSuggestionPreviewResponse, MetadataSuggestionStatus, NormalizationEntityType, NormalizationOverview, OrganizationInboxCategory, OrganizationInboxResponse, OrganizationInboxState, OrganizationInboxSummary, PrivateCodeConflictResponse, PrivateFacetSearchResponse, PrivateFacets, PrivateIssueType, PrivateQualityResponse, PublicAggregateResponse, SmartAddResponse, StatsResponse, TmdbSearchResponse } from "../types";
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -153,6 +153,50 @@ export function setOrganizationInboxState(itemIds: string[], state: Organization
   return request<{ state: OrganizationInboxState; requested: number; changed: number; itemIds: string[] }>("/api/private/inbox/state", {
     method: "POST",
     body: JSON.stringify({ itemIds, state })
+  });
+}
+
+export function listDuplicateCandidates(page = 1, pageSize = 50) {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  return request<DuplicateCandidateResponse>(`/api/private/duplicates?${params}`);
+}
+
+export function refreshDuplicateSignatures() {
+  return request<{ indexed: number }>("/api/private/duplicates/refresh", { method: "POST", body: "{}" });
+}
+
+export function decideDuplicatePair(itemAId: string, itemBId: string, decision: DuplicateDecision, metadata?: unknown) {
+  return request<{ pairKey: string; decision: DuplicateDecision; dataChanged: false }>("/api/private/duplicates/decision", {
+    method: "POST",
+    body: JSON.stringify({ itemAId, itemBId, decision, metadata })
+  });
+}
+
+export function previewDuplicateMerge(targetItemId: string, sourceItemId: string) {
+  return request<DuplicateMergePreview>("/api/private/duplicates/merge/preview", {
+    method: "POST",
+    body: JSON.stringify({ targetItemId, sourceItemId })
+  });
+}
+
+export function applyDuplicateMerge(preview: DuplicateMergePreview, resolutions: Record<string, "target" | "source">) {
+  return request<{ mergeId: string; merged: true; recoveryAvailable: true }>("/api/private/duplicates/merge/apply", {
+    method: "POST",
+    body: JSON.stringify({
+      targetItemId: preview.target.id,
+      sourceItemId: preview.source.id,
+      expectedTargetUpdatedAt: preview.expectedTargetUpdatedAt,
+      expectedSourceUpdatedAt: preview.expectedSourceUpdatedAt,
+      resolutions,
+      confirmed: true
+    })
+  });
+}
+
+export function rollbackDuplicateMerge(mergeId: string) {
+  return request<{ mergeId: string; rolledBack: true; restoredItemIds: string[] }>("/api/private/duplicates/merge/rollback", {
+    method: "POST",
+    body: JSON.stringify({ mergeId, confirmed: true })
   });
 }
 
