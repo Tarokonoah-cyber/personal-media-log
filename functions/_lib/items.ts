@@ -779,6 +779,20 @@ export async function getItem(env: Env, id: string) {
   return item;
 }
 
+export async function getItemsByIds(env: Env, ids: string[], includeDeleted = false) {
+  const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+  if (uniqueIds.length === 0) return [];
+  if (uniqueIds.length > 200) throw new HttpError(400, "A maximum of 200 items can be loaded at once");
+  const rows = await env.MEDIA_LOG_DB.prepare(`
+    SELECT ${itemColumns} FROM items
+    WHERE id IN (SELECT CAST(value AS TEXT) FROM json_each(?))
+      ${includeDeleted ? "" : "AND status != 'deleted'"}
+  `).bind(JSON.stringify(uniqueIds)).all<Row>();
+  const hydrated = await hydrateItems(env, rows.results || []);
+  const byId = new Map(hydrated.map((item) => [item.id, item]));
+  return uniqueIds.map((id) => byId.get(id)).filter((item): item is ItemRecord => Boolean(item));
+}
+
 export async function createItem(env: Env, actor: Actor, input: ItemInput) {
   const rawTitle = cleanString(input.raw_title);
   if (!rawTitle) throw new HttpError(400, "raw_title is required");
@@ -1681,14 +1695,19 @@ export async function quickUpdateItem(env: Env, actor: Actor, id: string, field:
   return getItem(env, id);
 }
 
-export async function batchUpdateItems(env: Env, actor: Actor, input: unknown): Promise<BatchUpdateResult> {
+export async function batchUpdateItems(
+  env: Env,
+  actor: Actor,
+  input: unknown,
+  options: { includeDeleted?: boolean } = {}
+): Promise<BatchUpdateResult> {
   const operations = validateBatchUpdateOperations(input);
   const requestBytes = new TextEncoder().encode(JSON.stringify(operations)).byteLength;
   if (requestBytes > 1_500_000) throw new HttpError(413, "Batch payload is too large", { maxBytes: 1_500_000, actualBytes: requestBytes });
 
   const ids = operations.map((operation) => operation.id);
   const rows = await env.MEDIA_LOG_DB
-    .prepare(`SELECT ${itemColumns} FROM items WHERE status != 'deleted' AND id IN (SELECT CAST(value AS TEXT) FROM json_each(?))`)
+    .prepare(`SELECT ${itemColumns} FROM items WHERE ${options.includeDeleted ? "1 = 1" : "status != 'deleted'"} AND id IN (SELECT CAST(value AS TEXT) FROM json_each(?))`)
     .bind(JSON.stringify(ids))
     .all<Row>();
   const currentItems = await hydrateItems(env, rows.results || []);

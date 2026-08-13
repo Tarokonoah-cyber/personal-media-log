@@ -2,6 +2,8 @@ import { createBackup, listBackups, restoreBackup } from "../_lib/backup";
 import { error, handleError, json, noContent, notFound, readJson, requireAccess } from "../_lib/http";
 import { parseCsv, parseJsonItems, toCsv } from "../_lib/importExport";
 import { batchUpdateItems, createItem, exportItems, findNormalizedCodeConflict, getItem, getPrivateFacetsForFilters, getPublicAggregate, getStats, importItems, isLikelyDuplicate, listItems, quickUpdateItem, searchPrivateFacet, softDeleteItem, updateItem } from "../_lib/items";
+import { applyMetadataSuggestions, decideMetadataSuggestions, isMetadataSuggestionStatus, listMetadataSuggestions, previewMetadataSuggestions, refreshMetadataSuggestions } from "../_lib/metadataSuggestions";
+import { applyEntityMerge, getNormalizationOverview, isEntityType, previewEntityMerge, registerEntityAlias, rollbackEntityMerge } from "../_lib/normalization";
 import { parseSmartAdd } from "../_lib/smartAdd";
 import { applyTmdbMetadata, searchTmdb } from "../_lib/tmdb";
 import { getPrivateQuality, ignorePrivateIssue, isPrivateIssueType, unignorePrivateIssue } from "../_lib/privateQuality";
@@ -91,6 +93,68 @@ export const onRequest: PagesFunction<Env, "path"> = async (context) => {
           await unignorePrivateIssue(context.env, body.itemId || "", body.issueType, body.issueKey || "");
           return noContent();
         }
+      }
+    }
+
+    if (path[0] === "private" && path[1] === "suggestions") {
+      if (method === "GET" && path.length === 2) {
+        const status = url.searchParams.get("status") || "pending";
+        if (!isMetadataSuggestionStatus(status)) return error(400, "Invalid suggestion status");
+        return json(await listMetadataSuggestions(
+          context.env,
+          status,
+          optionalNumber(url.searchParams.get("page")) || 1,
+          optionalNumber(url.searchParams.get("pageSize")) || 50,
+          optional(url.searchParams.get("itemId"))
+        ), { headers: { "cache-control": "private, no-store" } });
+      }
+      if (method === "POST" && path[2] === "refresh") {
+        return json(await refreshMetadataSuggestions(context.env));
+      }
+      if (method === "POST" && path[2] === "preview") {
+        const body = await readJson<{ ids?: unknown }>(context.request);
+        return json(await previewMetadataSuggestions(context.env, body.ids));
+      }
+      if (method === "POST" && path[2] === "apply") {
+        const body = await readJson<{ ids?: unknown; confirmed?: unknown }>(context.request);
+        return json(await applyMetadataSuggestions(context.env, actor, body.ids, body.confirmed));
+      }
+      if (method === "POST" && path[2] === "decision") {
+        const body = await readJson<{ ids?: unknown; decision?: unknown }>(context.request);
+        return json(await decideMetadataSuggestions(context.env, actor, body.ids, body.decision));
+      }
+    }
+
+    if (path[0] === "private" && path[1] === "normalization") {
+      if (method === "GET" && path.length === 2) {
+        const entityType = url.searchParams.get("entityType");
+        if (!isEntityType(entityType)) return error(400, "Invalid entity type");
+        return json(await getNormalizationOverview(
+          context.env,
+          entityType,
+          optional(url.searchParams.get("q")) || "",
+          optionalNumber(url.searchParams.get("limit")) || 500
+        ), { headers: { "cache-control": "private, no-store" } });
+      }
+      if (method === "POST" && path[2] === "aliases") {
+        const body = await readJson<{ entityType?: unknown; canonicalValue?: unknown; aliasValue?: unknown }>(context.request);
+        if (!isEntityType(body.entityType)) return error(400, "Invalid entity type");
+        return json(await registerEntityAlias(context.env, actor, body.entityType, body.canonicalValue, body.aliasValue), { status: 201 });
+      }
+      if (method === "POST" && path[2] === "merge" && path[3] === "preview") {
+        const body = await readJson<{ entityType?: unknown; sourceValue?: unknown; targetValue?: unknown }>(context.request);
+        if (body.entityType !== "tag" && body.entityType !== "person") return error(400, "Only tags and people can be merged");
+        return json(await previewEntityMerge(context.env, body.entityType, body.sourceValue, body.targetValue));
+      }
+      if (method === "POST" && path[2] === "merge" && path[3] === "apply") {
+        const body = await readJson<{ entityType?: unknown; sourceValue?: unknown; targetValue?: unknown; confirmed?: unknown }>(context.request);
+        if (body.entityType !== "tag" && body.entityType !== "person") return error(400, "Only tags and people can be merged");
+        return json(await applyEntityMerge(context.env, actor, body.entityType, body.sourceValue, body.targetValue, body.confirmed));
+      }
+      if (method === "POST" && path[2] === "merge" && path[3] === "rollback") {
+        const body = await readJson<{ mergeId?: string; confirmed?: unknown }>(context.request);
+        if (!body.mergeId?.trim()) return error(400, "mergeId is required");
+        return json(await rollbackEntityMerge(context.env, actor, body.mergeId.trim(), body.confirmed));
       }
     }
 

@@ -2,6 +2,8 @@ import { AlertTriangle, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getPrivateQuality, ignorePrivateQualityIssue, unignorePrivateQualityIssue } from "../lib/api";
 import type { PrivateIssueType, PrivateQualityIssue, PrivateQualitySummaryItem } from "../types";
+import { MetadataSuggestionsPanel } from "./MetadataSuggestionsPanel";
+import { NormalizationPanel } from "./NormalizationPanel";
 
 export function PrivateQualityCenter({ onOpenItem }: { onOpenItem: (id: string) => void }) {
   const centerRef = useRef<HTMLElement>(null);
@@ -65,10 +67,12 @@ export function PrivateQualityCenter({ onOpenItem }: { onOpenItem: (id: string) 
       <div className="quality-summary-grid">
         {summary.map((item) => <button key={item.type} className={selected === item.type ? "active" : ""} onClick={() => { setSelected(item.type); setPage(1); }}><AlertTriangle size={16}/><span>{item.label}</span><b>{item.count}</b></button>)}
       </div>
+      <MetadataSuggestionsPanel onOpenItem={onOpenItem}/>
+      <NormalizationPanel/>
       <div className="quality-list-head"><strong>{selected ? `${summary.find((item) => item.type === selected)?.label} ${total}` : "選擇問題類型"}</strong><div><button disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>上一頁</button><span>{page}</span><button disabled={page * 50 >= total} onClick={() => setPage((value) => value + 1)}>下一頁</button><button onClick={() => { setPage(1); setShowIgnored((value) => !value); }}>{showIgnored ? <Eye size={15}/> : <EyeOff size={15}/>} {showIgnored ? "查看未忽略" : "已忽略問題"}</button></div></div>
       {(selected === "duplicate_code" || selected === "duplicate_metadata") && <p className="quality-review-note">重複項目只提供 review 與忽略，不會自行刪除或合併。</p>}
       {loading ? <p className="quality-state">檢查中...</p> : selected && issues.length === 0 ? <p className="quality-state">目前沒有這類問題</p> : (
-        <div className="quality-issue-list" role="listbox" aria-label="待 review 資料">{issues.map((issue, index) => <article role="option" aria-selected={index === activeIndex} className={index === activeIndex ? "is-active" : ""} onMouseEnter={() => setActiveIndex(index)} key={`${issue.item_id}:${issue.issue_key}`}><div><button className="quality-code" onClick={() => onOpenItem(issue.item_id)}>{issue.code || issue.item_id}</button><strong>{issue.title || "—"}</strong></div><span>{issue.original_value || "—"}</span><em>{issue.suggestion}</em><button onClick={() => void toggleIgnore(issue)}>{showIgnored ? "取消忽略" : "忽略"}</button></article>)}</div>
+        <div className="quality-issue-list" role="listbox" aria-label="待 review 資料">{issues.map((issue, index) => <article role="option" aria-selected={index === activeIndex} className={index === activeIndex ? "is-active" : ""} onMouseEnter={() => setActiveIndex(index)} key={`${issue.item_id}:${issue.issue_key}`}><div><button className="quality-code" onClick={() => onOpenItem(issue.item_id)}>{issue.code || issue.item_id}</button><strong>{issue.title || "—"}</strong><small title={issue.reasons?.map((reason) => reason.label).join("、")}>{issue.completeness_score}% · {issue.completeness_profile}</small></div><span>{issue.original_value || "—"}</span><em>{issue.suggestion}</em><button onClick={() => void toggleIgnore(issue)}>{showIgnored ? "取消忽略" : "忽略"}</button></article>)}</div>
       )}
     </section>
   );

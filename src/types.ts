@@ -90,15 +90,48 @@ export interface PrivateCodeConflictResponse {
   conflict: PrivateCodeConflict | null;
 }
 
-export type PrivateIssueType = "duplicate_code" | "duplicate_metadata" | "unknown_platform" | "missing_title" | "incomplete_metadata" | "missing_people" | "missing_tags" | "unrated" | "unset_collection" | "invalid_collection" | "invalid_code";
+export type PrivateIssueType = "duplicate_code" | "duplicate_metadata" | "metadata_conflict" | "normalization_needed" | "unknown_platform" | "missing_title" | "suspicious_title" | "missing_maker" | "incomplete_metadata" | "missing_people" | "missing_tags" | "too_few_tags" | "missing_cover" | "unrated" | "unset_collection" | "invalid_collection" | "invalid_code";
 export interface PrivateQualitySummaryItem { type: PrivateIssueType; label: string; count: number; }
+export interface CompletenessReason {
+  code: string; label: string; field: string; weight: number; severity: "high" | "medium" | "low";
+}
 export interface PrivateQualityIssue {
   item_id: string; code: string; title: string; platform: string | null; collection_level: string;
   original_value: string; suggestion: string; issue_key: string;
+  completeness_score: number; completeness_profile: "fc2" | "jav" | "private"; reasons: CompletenessReason[];
 }
 export interface PrivateQualityResponse {
   summary?: PrivateQualitySummaryItem[]; ignoredCount?: number; issueType?: PrivateIssueType; label?: string;
   page?: number; pageSize?: number; total?: number; issues?: PrivateQualityIssue[];
+}
+
+export type MetadataSuggestionStatus = "pending" | "accepted" | "rejected" | "ignored";
+export type MetadataSuggestionField = "official_title" | "platform" | "maker";
+export interface MetadataSuggestion {
+  id: string; item_id: string; field: MetadataSuggestionField; current_value: string | null; suggested_value: string;
+  source: string; reason: string; status: MetadataSuggestionStatus; created_at: string; code: string | null; title: string | null;
+}
+export interface MetadataSuggestionListResponse {
+  page: number; pageSize: number; total: number; suggestions: MetadataSuggestion[];
+}
+export interface MetadataSuggestionPreviewChange {
+  suggestionId: string; itemId: string; field: MetadataSuggestionField; before: string | null; after: string; source: string; reason: string;
+}
+export interface MetadataSuggestionPreviewResponse { atomic: true; changes: MetadataSuggestionPreviewChange[]; }
+
+export type NormalizationEntityType = "tag" | "person" | "maker" | "platform";
+export interface NormalizationCluster {
+  normalizedKey: string; canonical: string; canonicalId: string | null; aliases: string[];
+  variants: Array<{ value: string; count: number }>; affectedItems: number; needsReview: boolean;
+}
+export interface NormalizationOverview {
+  entityType: NormalizationEntityType; scanned: number; clusters: NormalizationCluster[];
+}
+export interface EntityMergePreview {
+  entityType: "tag" | "person"; source: { id: string; name: string }; target: { id: string; name: string };
+  affectedItems: number; sourceRelations: number; targetRelations: number; duplicateRelationsAvoided: number;
+  before: { source: string; target: string }; after: { canonical: string; aliasAdded: string }; requiresConfirmation: true;
+  mergeId?: string; applied?: boolean; recoveryAvailable?: boolean;
 }
 
 export interface PrivateFacets {

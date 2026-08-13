@@ -1,4 +1,4 @@
-import type { BackupJob, BatchUpdateOperation, BatchUpdateResponse, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, PrivateCodeConflictResponse, PrivateFacetSearchResponse, PrivateFacets, PrivateIssueType, PrivateQualityResponse, PublicAggregateResponse, SmartAddResponse, StatsResponse, TmdbSearchResponse } from "../types";
+import type { BackupJob, BatchUpdateOperation, BatchUpdateResponse, EntityMergePreview, ImportPreview, ItemInput, ItemListResponse, ListFilters, MediaItem, MetadataSuggestionListResponse, MetadataSuggestionPreviewResponse, MetadataSuggestionStatus, NormalizationEntityType, NormalizationOverview, PrivateCodeConflictResponse, PrivateFacetSearchResponse, PrivateFacets, PrivateIssueType, PrivateQualityResponse, PublicAggregateResponse, SmartAddResponse, StatsResponse, TmdbSearchResponse } from "../types";
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -77,6 +77,67 @@ export function ignorePrivateQualityIssue(itemId: string, issueType: PrivateIssu
 
 export function unignorePrivateQualityIssue(itemId: string, issueType: PrivateIssueType, issueKey: string) {
   return request<void>("/api/private/quality/ignores", { method: "DELETE", body: JSON.stringify({ itemId, issueType, issueKey }) });
+}
+
+export function refreshMetadataSuggestions() {
+  return request<{ generated: number }>("/api/private/suggestions/refresh", { method: "POST", body: "{}" });
+}
+
+export function listMetadataSuggestions(status: MetadataSuggestionStatus = "pending", page = 1, pageSize = 50, itemId?: string) {
+  const params = new URLSearchParams({ status, page: String(page), pageSize: String(pageSize) });
+  if (itemId) params.set("itemId", itemId);
+  return request<MetadataSuggestionListResponse>(`/api/private/suggestions?${params}`);
+}
+
+export function previewMetadataSuggestions(ids: string[]) {
+  return request<MetadataSuggestionPreviewResponse>("/api/private/suggestions/preview", { method: "POST", body: JSON.stringify({ ids }) });
+}
+
+export function applyMetadataSuggestions(ids: string[]) {
+  return request<BatchUpdateResponse & { acceptedSuggestionIds: string[] }>("/api/private/suggestions/apply", {
+    method: "POST",
+    body: JSON.stringify({ ids, confirmed: true })
+  });
+}
+
+export function decideMetadataSuggestions(ids: string[], decision: "rejected" | "ignored") {
+  return request<{ decision: string; requested: number; changed: number }>("/api/private/suggestions/decision", {
+    method: "POST",
+    body: JSON.stringify({ ids, decision })
+  });
+}
+
+export function getNormalizationOverview(entityType: NormalizationEntityType, query = "", limit = 500) {
+  const params = new URLSearchParams({ entityType, q: query, limit: String(limit) });
+  return request<NormalizationOverview>(`/api/private/normalization?${params}`);
+}
+
+export function registerEntityAlias(entityType: NormalizationEntityType, canonicalValue: string, aliasValue: string) {
+  return request<{ canonical: string; alias: string; dataChanged: false }>("/api/private/normalization/aliases", {
+    method: "POST",
+    body: JSON.stringify({ entityType, canonicalValue, aliasValue })
+  });
+}
+
+export function previewEntityMerge(entityType: "tag" | "person", sourceValue: string, targetValue: string) {
+  return request<EntityMergePreview>("/api/private/normalization/merge/preview", {
+    method: "POST",
+    body: JSON.stringify({ entityType, sourceValue, targetValue })
+  });
+}
+
+export function applyEntityMerge(entityType: "tag" | "person", sourceValue: string, targetValue: string) {
+  return request<EntityMergePreview & { mergeId: string; applied: true; recoveryAvailable: true }>("/api/private/normalization/merge/apply", {
+    method: "POST",
+    body: JSON.stringify({ entityType, sourceValue, targetValue, confirmed: true })
+  });
+}
+
+export function rollbackEntityMerge(mergeId: string) {
+  return request<{ mergeId: string; rolledBack: true }>("/api/private/normalization/merge/rollback", {
+    method: "POST",
+    body: JSON.stringify({ mergeId, confirmed: true })
+  });
 }
 
 export function createItem(input: ItemInput) {
