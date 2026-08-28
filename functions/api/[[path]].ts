@@ -356,7 +356,7 @@ function getPath(path?: string | string[]) {
   return path.split("/").filter(Boolean);
 }
 
-function getListParams(url: URL): ItemListParams {
+export function getListParams(url: URL): ItemListParams {
   const status = url.searchParams.get("status");
   const sort = url.searchParams.get("sort");
   const order = url.searchParams.get("order");
@@ -383,6 +383,12 @@ function getListParams(url: URL): ItemListParams {
     personFilters: csvValues(url.searchParams.get("personFilters")),
     missingPeople: url.searchParams.get("missingPeople") === "true",
     qualityView: isPrivateQualityView(url.searchParams.get("qualityView")) ? url.searchParams.get("qualityView") as ItemListParams["qualityView"] : undefined,
+    includeTags: csvValues(url.searchParams.get("includeTags")),
+    excludeTags: csvValues(url.searchParams.get("excludeTags")),
+    metadataQualityBelow: boundedOptionalNumber(url.searchParams.get("metadataQualityBelow"), 1, 101),
+    missingTags: url.searchParams.get("missingTags") === "true",
+    incompleteMetadata: url.searchParams.get("incompleteMetadata") === "true",
+    duplicateCandidate: url.searchParams.get("duplicateCandidate") === "true",
     hasNote: isTriState(url.searchParams.get("hasNote")) ? url.searchParams.get("hasNote") as "all" | "yes" | "no" : "all",
     hasCover: isTriState(url.searchParams.get("hasCover")) ? url.searchParams.get("hasCover") as "all" | "yes" | "no" : "all",
     watchStatus: isWatchStatusFilter(url.searchParams.get("watchStatus")) ? url.searchParams.get("watchStatus") as WatchStatus | "all" : "all",
@@ -430,6 +436,11 @@ function csvValues(value: string | null) {
 function optionalNumber(value: string | null) {
   const number = Number(value);
   return Number.isFinite(number) && value !== null && value !== "" ? number : undefined;
+}
+
+function boundedOptionalNumber(value: string | null, min: number, max: number) {
+  const number = optionalNumber(value);
+  return number !== undefined && number >= min && number <= max ? number : undefined;
 }
 
 function isStatusFilter(value: string | null): value is ItemStatus | "all" | "inbox" | "organized" {

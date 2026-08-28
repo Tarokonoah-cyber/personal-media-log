@@ -39,3 +39,31 @@ export function resetFiltersPreservingTableState(current: ListFilters, next: Lis
     order: current.order
   };
 }
+
+export function privateFilterValues(value?: string) {
+  const seen = new Set<string>();
+  return (value || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => {
+      const key = entry.toLocaleLowerCase();
+      if (!entry || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+export function mergePrivateFilterValues(...values: Array<string | undefined>) {
+  return privateFilterValues(values.filter(Boolean).join(",")).join(",");
+}
+
+export function reconcilePrivateTagFilters(includeTags: string, excludeTags: string, changed: "include" | "exclude") {
+  const included = privateFilterValues(includeTags);
+  const excluded = privateFilterValues(excludeTags);
+  if (changed === "include") {
+    const includedKeys = new Set(included.map((value) => value.toLocaleLowerCase()));
+    return { includeTags: included.join(","), excludeTags: excluded.filter((value) => !includedKeys.has(value.toLocaleLowerCase())).join(",") };
+  }
+  const excludedKeys = new Set(excluded.map((value) => value.toLocaleLowerCase()));
+  return { includeTags: included.filter((value) => !excludedKeys.has(value.toLocaleLowerCase())).join(","), excludeTags: excluded.join(",") };
+}

@@ -24,9 +24,10 @@ import { usePrivateCodeConflict } from "./hooks/usePrivateCodeConflict";
 import { applyMetadata, batchUpdateItems, createItem, deleteItem, getItem, getPrivateFacets, getPublicAggregate, listItems, listPrivateItems, parseSmartAdd, quickUpdateItem as quickUpdateItemApi, searchMetadata, updateItem } from "./lib/api";
 import { privateBatchPeoplePatch, privateBatchTagPatch, retainVisibleSelection, runLimitedBatch, togglePageItemSelection, togglePageSelection, type BatchOperationResult } from "./lib/privateBatch";
 import { mergePrivateFilters, resetFiltersPreservingTableState } from "./lib/privateFilters";
+import { buildPrivateFilterUrl, hasPrivateFilterNavigation, privateFilterHistoryState, privateFilterNavigationSignature, readPrivateFilterNavigation, writePrivateFilterNavigation } from "./lib/privateFilterNavigation";
 import { privateSmartViews } from "./lib/privateSmartViews";
 import { PRIVATE_DEFAULT_ACTRESS, isPrivateCollectionLevel, normalizePlatform, privateCollectionLevel, privateCollectionLevelLabels, privateCollectionLevels, privateCollectionPatch, privateRatingFromStars, privateStarsFromRating, type PrivateCollectionLevel } from "../shared/privateModel";
-import { createSavedView, readSavedViews, savedViewSignature, writeSavedViews, type SavedPrivateView } from "./lib/savedViews";
+import { createSavedView, deleteSavedViewEntry, readSavedViews, renameSavedViewEntry, savedViewSignature, updateSavedViewEntry, writeSavedViews, type SavedPrivateView } from "./lib/savedViews";
 import { toItemInput } from "./lib/itemTransforms";
 import { emptyPrivateRowDraft, isPrivateEditableColumn, privateCellPatch, privateCellValue, privateIdentityLabel, privateIdentityPatch, privateIdentityValue, privateRowDraftToInput, type PrivateEditableColumn, type PrivateIdentityDraft, type PrivateRowDraft } from "./lib/privateSpreadsheet";
 import { movePrivateCell, privateCellKey, privateClipboardUpdate, privateClipboardValue, type PrivateCellMovement, type PrivateCellPosition } from "./lib/privateSpreadsheetKeyboard";
@@ -92,6 +93,12 @@ const defaultFilters: ListFilters = {
   personFilters: "",
   missingPeople: false,
   qualityView: "",
+  includeTags: "",
+  excludeTags: "",
+  metadataQualityBelow: "",
+  missingTags: false,
+  incompleteMetadata: false,
+  duplicateCandidate: false,
   hasNote: "all",
   hasCover: "all",
   watchStatus: "all",
@@ -135,8 +142,8 @@ export default function App() {
   const [displayDensity, setDisplayDensity] = useState<DisplayDensity>(() => readStorageEnum("displayDensity", displayDensities, "standard"));
   const [safeMode, setSafeMode] = useState(() => readStorageItem("safeMode") !== "false");
   const [quickText, setQuickText] = useState("");
-  const [filters, setFilters] = useState<ListFilters>(defaultFilters);
-  const [activeView, setActiveView] = useState("home");
+  const [filters, setFilters] = useState<ListFilters>(() => readPrivateFilterNavigation(defaultFilters));
+  const [activeView, setActiveView] = useState(() => hasPrivateFilterNavigation() && readStorageItem("safeMode") === "false" ? PRIVATE_LIBRARY_LABEL : "home");
   const [activeCategory, setActiveCategory] = useState("");
   const [items, setItems] = useState<MediaItem[]>([]);
   const [publicAggregate, setPublicAggregate] = useState<PublicAggregateResponse | null>(null);
@@ -163,6 +170,8 @@ export default function App() {
   const loadRequestId = useRef(0);
   const loadScopeRef = useRef("");
   const facetRequestId = useRef(0);
+  const privateNavigationSignatureRef = useRef(privateFilterNavigationSignature(filters));
+  const restoringPrivateNavigationRef = useRef(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [columnManagerOpen, setColumnManagerOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -268,6 +277,51 @@ export default function App() {
 
   useEffect(() => {
     if (!privateActive) return;
+    const timer = window.setTimeout(() => {
+      writePrivateFilterNavigation(filters);
+      const nextUrl = buildPrivateFilterUrl(window.location.href, filters);
+      const nextHref = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+      const currentHref = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      const nextSignature = privateFilterNavigationSignature(filters);
+      const state = privateFilterHistoryState(window.history.state, filters);
+      if (restoringPrivateNavigationRef.current) {
+        window.history.replaceState(state, "", nextHref);
+        restoringPrivateNavigationRef.current = false;
+      } else if (nextHref !== currentHref || nextSignature !== privateNavigationSignatureRef.current) {
+        window.history.pushState(state, "", nextHref);
+      } else {
+        window.history.replaceState(state, "", nextHref);
+      }
+      privateNavigationSignatureRef.current = nextSignature;
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [filters, privateActive]);
+
+  useEffect(() => {
+    const restoreNavigation = (event: PopStateEvent) => {
+      if (!hasPrivateFilterNavigation(window.location.href)) {
+        setTab("log");
+        setActiveView("home");
+        setActiveCategory("");
+        setFilters({ ...defaultFilters });
+        return;
+      }
+      const restored = readPrivateFilterNavigation(defaultFilters, window.location.href, event.state);
+      privateNavigationSignatureRef.current = privateFilterNavigationSignature(restored);
+      restoringPrivateNavigationRef.current = true;
+      setFilters(restored);
+      if (!safeMode) {
+        setTab("log");
+        setActiveView(PRIVATE_LIBRARY_LABEL);
+        setActiveCategory("");
+      }
+    };
+    window.addEventListener("popstate", restoreNavigation);
+    return () => window.removeEventListener("popstate", restoreNavigation);
+  }, [safeMode]);
+
+  useEffect(() => {
+    if (!privateActive) return;
     const privatePageSize = initialPrivatePageSize();
     setFilters((current) => current.pageSize === privatePageSize ? current : { ...current, pageSize: privatePageSize, page: 1 });
   }, [privateActive]);
@@ -326,6 +380,11 @@ export default function App() {
       ...tagPresetsForScope("private")
     ]).slice(0, 20);
   }, [items, privateFacets?.tags]);
+  const privateFilterSuggestions = useMemo(() => ({
+    platforms: (privateFacets?.source || []).map((entry) => entry.value),
+    people: (privateFacets?.actress || []).map((entry) => entry.value),
+    tags: privateTagSuggestions
+  }), [privateFacets?.actress, privateFacets?.source, privateTagSuggestions]);
   const libraryTypes = useMemo(() => new Set<string>(libraryTree.map((entry) => entry.label)), []);
   const visibleItems = useMemo(() => {
     const scopedItems = includePrivate ? items : items.filter((item) => !isPrivateItem(item));
@@ -337,12 +396,17 @@ export default function App() {
   const privateFacetFilters = useMemo<ListFilters>(() => ({
     ...defaultFilters,
     query: filters.query,
+    favorite: filters.favorite,
     platformFilters: filters.platformFilters,
     makerFilters: filters.makerFilters,
     favoriteLevelFilters: filters.favoriteLevelFilters,
     personFilters: filters.personFilters,
     missingPeople: filters.missingPeople,
     qualityView: filters.qualityView,
+    includeTags: filters.includeTags,
+    excludeTags: filters.excludeTags,
+    missingTags: filters.missingTags,
+    incompleteMetadata: filters.incompleteMetadata,
     ratingMin: filters.ratingMin,
     ratingMax: filters.ratingMax,
     unrated: filters.unrated,
@@ -350,11 +414,12 @@ export default function App() {
     privateStatus: filters.privateStatus,
     mediaStatus: filters.mediaStatus,
     tag: filters.tag,
+    excludeTag: filters.excludeTag,
     hasNote: filters.hasNote,
     hasCover: filters.hasCover,
     page: 1,
     pageSize: 1
-  }), [filters.query, filters.platformFilters, filters.makerFilters, filters.favoriteLevelFilters, filters.personFilters, filters.missingPeople, filters.qualityView, filters.ratingMin, filters.ratingMax, filters.unrated, filters.usedFilter, filters.privateStatus, filters.mediaStatus, filters.tag, filters.hasNote, filters.hasCover]);
+  }), [filters.query, filters.favorite, filters.platformFilters, filters.makerFilters, filters.favoriteLevelFilters, filters.personFilters, filters.missingPeople, filters.qualityView, filters.includeTags, filters.excludeTags, filters.missingTags, filters.incompleteMetadata, filters.ratingMin, filters.ratingMax, filters.unrated, filters.usedFilter, filters.privateStatus, filters.mediaStatus, filters.tag, filters.excludeTag, filters.hasNote, filters.hasCover]);
 
   useEffect(() => {
     if (!privateActive) return;
@@ -1021,7 +1086,7 @@ export default function App() {
         </section>
       </main>
 
-      <FilterSheet open={filtersOpen} filters={filters} privateMode={privateActive} suggestions={publicFilterSuggestions} onChange={patchFilters} onClose={() => setFiltersOpen(false)} />
+      <FilterSheet open={filtersOpen} filters={filters} privateMode={privateActive} suggestions={privateActive ? privateFilterSuggestions : publicFilterSuggestions} onChange={patchFilters} onClose={() => setFiltersOpen(false)} />
 
       {simpleAddOpen && (
         <SimpleAddModal
@@ -1659,9 +1724,6 @@ function PrivateWorkbenchV3({
     const preferences = normalizePrivateTablePreferences(view.tablePreferences, savedMode);
     const restoredFilters = {
       ...view.filters,
-      privateStatus: "all",
-      usedFilter: "all",
-      mediaStatus: "all",
       sort: view.filters.sort ?? (view.sorting?.field === "displayName" ? "displayName" : ""),
       order: view.filters.order ?? (view.sorting?.field === "displayName" ? view.sorting.direction : ""),
       page: 1,
@@ -1677,21 +1739,15 @@ function PrivateWorkbenchV3({
   }
 
   function updateSavedView(view: SavedPrivateView<PrivateTablePreferences>) {
-    const now = new Date().toISOString();
-    const persisted = persistViews(savedViews.map((entry) => entry.id === view.id ? {
-      ...entry,
-      filters: { ...filters, page: 1 },
-      sorting: { field: filters.sort || "updated_at", direction: filters.order === "asc" ? "asc" : "desc" },
-      tablePreferences: columnPreferences,
-      updatedAt: now
-    } : entry));
+    const persisted = persistViews(savedViews.map((entry) => entry.id === view.id ? updateSavedViewEntry(entry, filters, columnPreferences) : entry));
     if (persisted) setActiveSavedView(view.id);
   }
 
   function renameSavedView(view: SavedPrivateView<PrivateTablePreferences>) {
     const name = window.prompt("新的檢視名稱", view.name)?.trim();
-    if (!name || (savedViews.some((entry) => entry.id !== view.id && entry.name.toLocaleLowerCase() === name.toLocaleLowerCase()))) { if (name) setSavedViewError("已有同名檢視"); return; }
-    persistViews(savedViews.map((entry) => entry.id === view.id ? { ...entry, name, updatedAt: new Date().toISOString() } : entry));
+    if (!name) return;
+    try { persistViews(renameSavedViewEntry(savedViews, view.id, name)); }
+    catch (err) { setSavedViewError(err instanceof Error ? err.message : "無法重新命名檢視"); }
   }
 
   const activeView = savedViews.find((view) => view.id === activeSavedView);
@@ -1767,6 +1823,7 @@ function PrivateWorkbenchV3({
             aria-keyshortcuts="/"
           />
           {searchDraft && <button type="button" className="private-search-clear" onClick={() => { setSearchDraft(""); searchInputRef.current?.focus(); }} aria-label="清除搜尋" title="清除搜尋（Esc）"><X size={14} /></button>}
+          <span className="private-result-count" aria-live="polite">{total} 筆結果</span>
         </div>
         <div className="private-toolbar-actions">
           <div className="private-sort-control" role="group" aria-label="資料排序">
@@ -1825,7 +1882,7 @@ function PrivateWorkbenchV3({
               <strong>{activeView ? `${activeView.name}${savedViewDirty ? "（已有未儲存變更）" : ""}` : "儲存目前檢視"}</strong>
               <div className="saved-view-create"><input value={savedViewName} onChange={(event) => setSavedViewName(event.target.value)} placeholder="檢視名稱"/><button onClick={addSavedView}>新增</button></div>
               {savedViewError && <em role="alert">{savedViewError}</em>}
-              {savedViews.map((view) => <div className="saved-view-row" key={view.id}><button onClick={() => applySavedView(view)}>{view.name}</button><button title="覆蓋更新" onClick={() => updateSavedView(view)}>更新</button><button title="重新命名" onClick={() => renameSavedView(view)}>改名</button><button title="刪除" onClick={() => { if (window.confirm(`刪除檢視「${view.name}」？`)) { persistViews(savedViews.filter((entry) => entry.id !== view.id)); if (activeSavedView === view.id) setActiveSavedView(null); } }}>刪除</button></div>)}
+              {savedViews.map((view) => <div className="saved-view-row" key={view.id}><button onClick={() => applySavedView(view)}>{view.name}</button><button title="覆蓋更新" onClick={() => updateSavedView(view)}>更新</button><button title="重新命名" onClick={() => renameSavedView(view)}>改名</button><button title="刪除" onClick={() => { if (window.confirm(`刪除檢視「${view.name}」？`)) { persistViews(deleteSavedViewEntry(savedViews, view.id)); if (activeSavedView === view.id) setActiveSavedView(null); } }}>刪除</button></div>)}
             </div>}
           </div>
           <button className="primary" onClick={beginNewRow} disabled={addingRow}><Plus size={16} />新增資料列</button>
@@ -3046,6 +3103,14 @@ function hasPrivateFilters(filters: ListFilters) {
     filters.personFilters?.trim() ||
     filters.missingPeople ||
     filters.qualityView ||
+    filters.includeTags?.trim() ||
+    filters.excludeTags?.trim() ||
+    filters.metadataQualityBelow?.trim() ||
+    filters.missingTags ||
+    filters.incompleteMetadata ||
+    filters.duplicateCandidate ||
+    filters.favorite ||
+    filters.usedFilter !== "all" ||
     (filters.hasNote && filters.hasNote !== "all") ||
     (filters.hasCover && filters.hasCover !== "all") ||
     filters.tag.trim() ||

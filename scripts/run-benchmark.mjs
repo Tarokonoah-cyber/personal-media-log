@@ -50,6 +50,9 @@ const itemInput = (item, quickNote = item.quick_note) => {
 };
 
 const metrics = [];
+const smartIncludeTags = encodeURIComponent("測試標籤 2,測試標籤 9");
+const smartExcludeTags = encodeURIComponent("測試標籤 3,測試標籤 10");
+const smartPeople = encodeURIComponent("測試人物 2,測試人物 3");
 const endpoints = [
   ["initial_library", "/api/items?page=1&pageSize=100"],
   ["private_library", "/api/private/items?page=1&pageSize=100&sort=updated&order=desc"],
@@ -58,6 +61,11 @@ const endpoints = [
   ["sort_people", "/api/private/items?page=1&pageSize=100&sort=people&order=asc"],
   ["pagination", "/api/private/items?page=10&pageSize=100&sort=code&order=asc"],
   ["filter", "/api/private/items?page=1&pageSize=100&platformFilters=FC2"],
+  ["smart_tags_include_exclude", `/api/private/items?page=1&pageSize=100&includeTags=${smartIncludeTags}&excludeTags=${smartExcludeTags}`],
+  ["smart_rating_favorite_used", "/api/private/items?page=1&pageSize=100&ratingMin=8&ratingMax=10&favorite=true&usedFilter=unused"],
+  ["smart_people", `/api/private/items?page=1&pageSize=100&personFilters=${smartPeople}`],
+  ["smart_metadata_quality", "/api/private/items?page=1&pageSize=100&metadataQualityBelow=60"],
+  ["smart_combined", `/api/private/items?page=1&pageSize=100&platformFilters=JAV&ratingMin=6&usedFilter=unused&includeTags=${encodeURIComponent("測試標籤 2")}&excludeTags=${encodeURIComponent("測試標籤 3")}&personFilters=${encodeURIComponent("測試人物 2")}&metadataQualityBelow=80`],
   ["aggregate", "/api/public/aggregate?timezoneOffsetMinutes=-480"],
   ["data_quality", "/api/private/quality?page=1&pageSize=50"],
   ["missing_tags", "/api/private/quality?issueType=missing_tags&page=1&pageSize=50"],

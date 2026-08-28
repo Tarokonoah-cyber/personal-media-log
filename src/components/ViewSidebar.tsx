@@ -2,7 +2,7 @@ import { BarChart3, Building2, ChevronDown, ChevronLeft, ChevronRight, Clapperbo
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isPrivateLibraryLabel } from "../lib/privacy";
 import { searchPrivateFacet } from "../lib/api";
-import { clearPrivateSidebarFilters } from "../lib/privateFilters";
+import { clearPrivateSidebarFilters, privateFilterValues } from "../lib/privateFilters";
 import { libraryTree } from "../lib/taxonomy";
 import type { ListFilters, PrivateFacets, PrivateSummary, PublicAggregateResponse } from "../types";
 import { HomeDashboard } from "./HomeDashboard";
@@ -181,7 +181,11 @@ export function ViewSidebar({
   };
 
   const selectTagFacet = (tag: string) => {
-    applyPrivateFilter({ tag, excludeTag: "" });
+    applyPrivateFilter({
+      tag,
+      excludeTag: "",
+      excludeTags: privateFilterValues(filters.excludeTags).filter((value) => value.toLocaleLowerCase() !== tag.toLocaleLowerCase()).join(",")
+    });
   };
 
   if (privateMode) {

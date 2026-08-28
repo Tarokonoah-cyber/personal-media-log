@@ -1,5 +1,6 @@
-import { collectionLevelLabels, isCollectionLevel, isPrivateCollectionLevel, privateCollectionLevelLabels, privateStarsFromRating } from "../../shared/privateModel";
+import { collectionLevelLabels, isCollectionLevel, isPrivateCollectionLevel, privateCollectionLevelLabels } from "../../shared/privateModel";
 import type { ListFilters } from "../types";
+import { privateFilterValues } from "./privateFilters";
 
 export type PrivateFilterChip = {
   key: string;
@@ -18,8 +19,10 @@ export function privateFilterChips(filters: ListFilters): PrivateFilterChip[] {
   };
 
   if (filters.query.trim()) add("query", `搜尋：${filters.query.trim()}`, { query: "" });
-  if (filters.ratingMin || filters.ratingMax) add("rating", `評分：${privateStarLabel(filters.ratingMin)}～${privateStarLabel(filters.ratingMax)}`, { ratingMin: "", ratingMax: "" });
+  if (filters.ratingMin || filters.ratingMax) add("rating", `評分：${privateRatingLabel(filters.ratingMin)}～${privateRatingLabel(filters.ratingMax)}`, { ratingMin: "", ratingMax: "" });
   if (filters.unrated) add("unrated", "未評分", { unrated: false });
+  if (filters.favorite) add("favorite", "收藏：是", { favorite: false });
+  if (filters.usedFilter && filters.usedFilter !== "all") add("usedFilter", filters.usedFilter === "used" ? "已使用：是" : "已使用：否", { usedFilter: "all" });
   if (filters.collectionLevel.trim()) {
     const value = filters.collectionLevel.trim();
     add("collectionLevel", `收藏：${isCollectionLevel(value) ? collectionLevelLabels[value] : value}`, { collectionLevel: "" });
@@ -29,7 +32,10 @@ export function privateFilterChips(filters: ListFilters): PrivateFilterChip[] {
   addCsv("makerFilters", "片商");
   addCsv("favoriteLevelFilters", "收藏");
   addCsv("personFilters", "女優");
-  if (filters.tag.trim()) add("tag", `#${filters.tag.trim()}`, { tag: "" });
+  if (filters.tag.trim()) add("tag", `包含：#${filters.tag.trim()}`, { tag: "" });
+  if (filters.excludeTag?.trim()) add("excludeTag", `排除：#${filters.excludeTag.trim()}`, { excludeTag: "" });
+  for (const tag of privateFilterValues(filters.includeTags)) add(`includeTags:${tag}`, `包含：#${tag}`, { includeTags: removeCsv(filters.includeTags, tag) });
+  for (const tag of privateFilterValues(filters.excludeTags)) add(`excludeTags:${tag}`, `排除：#${tag}`, { excludeTags: removeCsv(filters.excludeTags, tag) });
   if (filters.platform.trim()) add("platform", `平台：${filters.platform.trim()}`, { platform: "" });
   if (filters.maker.trim()) add("maker", `片商：${filters.maker.trim()}`, { maker: "" });
   if (filters.series.trim()) add("series", `系列：${filters.series.trim()}`, { series: "" });
@@ -39,6 +45,10 @@ export function privateFilterChips(filters: ListFilters): PrivateFilterChip[] {
   if (filters.person.trim()) add("person", `人物：${filters.person.trim()}`, { person: "" });
   if (filters.studio.trim()) add("studio", `片商：${filters.studio.trim()}`, { studio: "" });
   if (filters.missingPeople) add("missingPeople", "未填女優", { missingPeople: false });
+  if (filters.metadataQualityBelow) add("metadataQualityBelow", `Metadata < ${filters.metadataQualityBelow}`, { metadataQualityBelow: "" });
+  if (filters.missingTags) add("missingTags", "無 Tag", { missingTags: false });
+  if (filters.incompleteMetadata) add("incompleteMetadata", "Metadata 不完整", { incompleteMetadata: false });
+  if (filters.duplicateCandidate) add("duplicateCandidate", "Duplicate candidate：有", { duplicateCandidate: false });
   if (filters.qualityView) {
     const labels = { missing_tags: "無 Tag", incomplete_metadata: "Metadata 不完整", suspected_duplicate: "疑似重複" } as const;
     add("qualityView", labels[filters.qualityView], { qualityView: "" });
@@ -49,13 +59,13 @@ export function privateFilterChips(filters: ListFilters): PrivateFilterChip[] {
 }
 
 function splitCsv(value?: string) {
-  return (value || "").split(",").map((entry) => entry.trim()).filter(Boolean);
+  return privateFilterValues(value);
 }
 
 function removeCsv(current: string | undefined, value: string) {
   return splitCsv(current).filter((entry) => entry !== value).join(",");
 }
 
-function privateStarLabel(value: string) {
-  return value ? `${privateStarsFromRating(Number(value))} 星` : "不限";
+function privateRatingLabel(value: string) {
+  return value ? `${value} 分` : "不限";
 }

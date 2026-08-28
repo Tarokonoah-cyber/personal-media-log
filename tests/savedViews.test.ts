@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createSavedView, readSavedViews, SAVED_VIEWS_KEY } from "../src/lib/savedViews";
+import { createSavedView, deleteSavedViewEntry, readSavedViews, renameSavedViewEntry, SAVED_VIEWS_KEY, updateSavedViewEntry } from "../src/lib/savedViews";
 import type { ListFilters } from "../src/types";
 
 const filters = { query: "FC2", page: 7, pageSize: 100, platformFilters: "FC2", favoriteLevelFilters: "normal" } as ListFilters;
@@ -24,6 +24,15 @@ describe("saved private views", () => {
     expect(() => createSavedView(" ", filters, {}, [])).toThrow("不可為空");
     const existing = [createSavedView("常用", filters, {}, [])];
     expect(() => createSavedView("常用", filters, {}, existing)).toThrow("同名");
+  });
+  it("updates, renames, loads, and deletes a view without losing Smart Filter or sort state", () => {
+    const created = createSavedView("常用", { ...filters, includeTags: "Tag A,Tag B", excludeTags: "Tag C", usedFilter: "unused", sort: "rating", order: "desc" }, { order: ["title"] }, []);
+    const updated = updateSavedViewEntry(created, { ...filters, metadataQualityBelow: "60", sort: "rating", order: "asc" }, { order: ["rating"] }, "2026-08-27T00:00:00.000Z");
+    expect(updated).toMatchObject({ filters: { metadataQualityBelow: "60", sort: "rating", order: "asc", page: 1 }, sorting: { field: "rating", direction: "asc" }, updatedAt: "2026-08-27T00:00:00.000Z" });
+    const renamed = renameSavedViewEntry([updated], updated.id, "高分未使用", "2026-08-27T01:00:00.000Z");
+    expect(renamed[0]?.name).toBe("高分未使用");
+    expect(readSavedViews({ getItem: () => JSON.stringify(renamed) })[0]?.filters.metadataQualityBelow).toBe("60");
+    expect(deleteSavedViewEntry(renamed, updated.id)).toEqual([]);
   });
   it("falls back safely for corrupted or old storage", () => {
     expect(readSavedViews({ getItem: (key) => key === SAVED_VIEWS_KEY ? "broken" : null })).toEqual([]);

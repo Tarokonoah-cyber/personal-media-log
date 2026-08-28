@@ -226,20 +226,20 @@ export function buildItemWhere(params: ItemListParams) {
       WHERE missing_ip.item_id = items.id
     )`);
   }
-  if (params.qualityView === "missing_tags") {
+  if (params.qualityView === "missing_tags" || params.missingTags) {
     where.push(`NOT EXISTS (
       SELECT 1 FROM item_tags missing_tag
       WHERE missing_tag.item_id = items.id
     )`);
   }
-  if (params.qualityView === "incomplete_metadata") {
+  if (params.qualityView === "incomplete_metadata" || params.incompleteMetadata) {
     where.push(`(
       coalesce(nullif(trim(items.official_title), ''), '') = ''
       OR coalesce(nullif(trim(items.maker), ''), '') = ''
       OR coalesce(nullif(trim(items.release_date), ''), '') = ''
     )`);
   }
-  if (params.qualityView === "suspected_duplicate") {
+  if (params.qualityView === "suspected_duplicate" || params.duplicateCandidate) {
     const currentTitle = normalizedTitleSql("items");
     const groupedTitle = normalizedTitleSql("grouped_items");
     const currentPlatform = "lower(trim(coalesce(items.platform, '')))";
@@ -283,6 +283,10 @@ export function buildItemWhere(params: ItemListParams) {
         )
       )
     )`);
+  }
+  if (params.metadataQualityBelow !== undefined) {
+    where.push(`${metadataCompletenessScoreSql("items")} < ?`);
+    bind.push(params.metadataQualityBelow);
   }
   if (params.hasNote === "yes") {
     where.push("(coalesce(nullif(trim(items.quick_note), ''), nullif(trim(items.long_note), '')) IS NOT NULL)");
@@ -379,6 +383,22 @@ export function buildItemWhere(params: ItemListParams) {
     )`);
     bind.push(params.excludeTag);
   }
+  for (const tag of params.includeTags || []) {
+    where.push(`EXISTS (
+      SELECT 1 FROM item_tags included_it
+      JOIN tags included_t ON included_t.id = included_it.tag_id
+      WHERE included_it.item_id = items.id AND included_t.name = ? COLLATE NOCASE
+    )`);
+    bind.push(tag);
+  }
+  for (const tag of params.excludeTags || []) {
+    where.push(`NOT EXISTS (
+      SELECT 1 FROM item_tags excluded_smart_it
+      JOIN tags excluded_smart_t ON excluded_smart_t.id = excluded_smart_it.tag_id
+      WHERE excluded_smart_it.item_id = items.id AND excluded_smart_t.name = ? COLLATE NOCASE
+    )`);
+    bind.push(tag);
+  }
   if (params.query) {
     const like = `%${params.query.trim().toLowerCase()}%`;
     const fts = toFtsQuery(params.query);
@@ -411,6 +431,56 @@ function normalizedTitleSql(alias: string) {
   return `lower(replace(replace(replace(replace(replace(replace(
     coalesce(nullif(trim(${alias}.official_title), ''), nullif(trim(${alias}.raw_title), ''), ''),
     ' ', ''), '　', ''), '-', ''), '_', ''), '：', ''), ':', ''))`;
+}
+
+export function metadataCompletenessScoreSql(alias: string) {
+  const code = `coalesce(nullif(trim(${alias}.code), ''), nullif(trim(${alias}.normalized_code), ''), '')`;
+  const title = `coalesce(nullif(trim(${alias}.official_title), ''), nullif(trim(${alias}.raw_title), ''), '')`;
+  const platform = `lower(trim(coalesce(${alias}.platform, '')))`;
+  const hasPeople = `EXISTS (SELECT 1 FROM item_people quality_people WHERE quality_people.item_id = ${alias}.id)`;
+  const hasTags = `EXISTS (SELECT 1 FROM item_tags quality_tags WHERE quality_tags.item_id = ${alias}.id)`;
+  const hasOnlyOneTag = `(${hasTags} AND NOT EXISTS (
+    SELECT 1 FROM item_tags quality_second_tag WHERE quality_second_tag.item_id = ${alias}.id LIMIT 1 OFFSET 1
+  ))`;
+  const profile = `(CASE
+    WHEN ${platform} = 'fc2' OR lower(${code}) LIKE 'fc2%' THEN 'fc2'
+    WHEN ${platform} = 'jav' OR upper(${code}) GLOB '[A-Z]*-[0-9]*' THEN 'jav'
+    ELSE 'private'
+  END)`;
+  const expectedWeight = `(CASE ${profile} WHEN 'jav' THEN 12.75 WHEN 'fc2' THEN 11.0 ELSE 11.5 END)`;
+  const earnedWeight = `(
+    CASE WHEN ${code} != '' THEN 2.0 ELSE 0 END
+    + CASE WHEN ${title} != '' THEN 2.0 ELSE 0 END
+    + CASE WHEN ${platform} != '' THEN 1.0 ELSE 0 END
+    + CASE WHEN ${hasPeople} THEN 1.5 ELSE 0 END
+    + CASE WHEN ${hasTags} THEN 1.5 ELSE 0 END
+    + CASE WHEN coalesce(${alias}.collection_level, 'unset') != 'unset' THEN 0.75 ELSE 0 END
+    + CASE WHEN coalesce(trim(${alias}.cover_url), '') != '' THEN 0.5 ELSE 0 END
+    + CASE WHEN ${alias}.rating IS NOT NULL THEN 0.75 ELSE 0 END
+    + CASE WHEN coalesce(nullif(trim(${alias}.quick_note), ''), nullif(trim(${alias}.long_note), '')) IS NOT NULL THEN 0.5 ELSE 0 END
+    + CASE ${profile}
+        WHEN 'jav' THEN (CASE WHEN coalesce(trim(${alias}.maker), '') != '' THEN 1.25 ELSE 0 END)
+          + (CASE WHEN coalesce(trim(${alias}.release_date), '') != '' THEN 1.0 ELSE 0 END)
+        WHEN 'fc2' THEN CASE WHEN coalesce(trim(${alias}.release_date), '') != '' THEN 0.5 ELSE 0 END
+        ELSE (CASE WHEN coalesce(trim(${alias}.maker), '') != '' THEN 0.5 ELSE 0 END)
+          + (CASE WHEN coalesce(trim(${alias}.release_date), '') != '' THEN 0.5 ELSE 0 END)
+      END
+  )`;
+  const suspiciousTitle = `(
+    lower(${title}) IN ('unknown','untitled','test','temp','todo','tbd','待補','待整理','未命名','無標題','-','—','_')
+    OR (${code} != '' AND ${normalizedTitleSql(alias)} = lower(replace(replace(replace(replace(replace(replace(${code}, ' ', ''), '　', ''), '-', ''), '_', ''), '：', ''), ':', '')))
+  )`;
+  const platformConflict = `(
+    (lower(${code}) LIKE 'fc2%' AND ${platform} != 'fc2')
+    OR (lower(${code}) NOT LIKE 'fc2%' AND upper(${code}) GLOB '[A-Z]*-[0-9]*' AND ${platform} = 'fc2')
+  )`;
+  const deductions = `(
+    CASE WHEN ${hasOnlyOneTag} THEN 0.35 ELSE 0 END
+    + CASE WHEN ${title} != '' AND ${suspiciousTitle} THEN 0.75 ELSE 0 END
+    + CASE WHEN ${platform} != '' AND ${platformConflict} THEN 1.0 ELSE 0 END
+    + CASE WHEN ${platform} != '' AND ${platform} NOT IN ('fc2', 'jav', '糖心') THEN 0.25 ELSE 0 END
+  )`;
+  return `round((max(0.0, ${earnedWeight} - ${deductions}) / ${expectedWeight}) * 100.0)`;
 }
 
 async function getPrivateSummary(env: Env, whereSql: string, bind: unknown[]): Promise<PrivateSummary> {
@@ -656,7 +726,10 @@ export function filtersExcludingFacet(params: ItemListParams, facet: PrivateFace
     next.personFilters = [];
     next.missingPeople = false;
   }
-  if (facet === "tags") next.tag = undefined;
+  if (facet === "tags") {
+    next.tag = undefined;
+    next.includeTags = [];
+  }
   if (facet === "ratingBuckets") {
     next.ratingMin = undefined;
     next.ratingMax = undefined;

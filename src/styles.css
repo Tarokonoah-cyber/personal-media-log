@@ -9651,6 +9651,75 @@ h2 {
   background: color-mix(in srgb, var(--accent-soft) 50%, var(--panel));
 }
 
+.smart-multi-filter {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.smart-multi-filter legend {
+  padding: 0 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.smart-multi-values,
+.smart-multi-input {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.smart-multi-values {
+  flex-wrap: wrap;
+}
+
+.smart-multi-values button {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 1px solid var(--private-soft-line);
+  border-radius: 5px;
+  background: var(--panel-soft);
+  color: var(--text);
+  font-size: 11px;
+}
+
+.smart-multi-values button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smart-multi-input input {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.smart-multi-input button {
+  flex: 0 0 auto;
+}
+
+.smart-filter-conflict-note {
+  margin: 8px 0 0;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.private-result-count {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .private-batch-toolbar {
   position: sticky;
   top: calc(var(--private-toolbar-height) + 8px);

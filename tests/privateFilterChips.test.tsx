@@ -21,7 +21,7 @@ describe("private filter shortcuts", () => {
     const chips = privateFilterChips({ ...filters(), platformFilters: "FC2,JAV", privateStatus: "rewatch", collectionLevel: "masterpiece", tag: "戶外", titleQuery: "測試" });
     expect(chips.find((chip) => chip.key === "platformFilters:FC2")?.patch).toEqual({ platformFilters: "JAV", page: 1 });
     expect(chips.find((chip) => chip.key === "privateStatus")).toBeUndefined();
-    expect(chips.find((chip) => chip.key === "tag")?.label).toBe("#戶外");
+    expect(chips.find((chip) => chip.key === "tag")?.label).toBe("包含：#戶外");
     expect(chips.find((chip) => chip.key === "collectionLevel")?.label).toBe("收藏：神作");
     expect(chips.find((chip) => chip.key === "title")?.patch).toEqual({ titleQuery: "", page: 1 });
   });
@@ -33,10 +33,24 @@ describe("private filter shortcuts", () => {
     expect(onPatch).toHaveBeenCalledWith({ platformFilters: "JAV", page: 1 });
   });
 
+  it("clears every active filter from the compact chip row", async () => {
+    const onClear = vi.fn();
+    render(<PrivateFilterChips filters={{ ...filters(), includeTags: "Tag A", excludeTags: "Tag C" }} onPatch={vi.fn()} onClear={onClear} />);
+    await userEvent.click(screen.getByRole("button", { name: "全部清除" }));
+    expect(onClear).toHaveBeenCalledOnce();
+  });
+
   it("does not expose status controls in private advanced filters", () => {
     const { container } = render(<FilterSheet open filters={filters()} privateMode onChange={vi.fn()} onClose={vi.fn()} />);
     const statusLabels = Array.from(container.querySelectorAll("label")).filter((label) => label.firstChild?.textContent?.trim() === "狀態");
     expect(statusLabels).toHaveLength(0);
     expect(screen.queryByRole("option", { name: "待處理" })).not.toBeInTheDocument();
+  });
+
+  it("closes the advanced filter panel with Escape", async () => {
+    const onClose = vi.fn();
+    render(<FilterSheet open filters={filters()} privateMode onChange={vi.fn()} onClose={onClose} />);
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledOnce();
   });
 });

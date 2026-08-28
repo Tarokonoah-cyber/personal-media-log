@@ -46,6 +46,27 @@ export function savedViewSignature(filters: Partial<ListFilters>, tablePreferenc
   return JSON.stringify({ filters: { ...filters, page: 1 }, tablePreferences });
 }
 
+export function updateSavedViewEntry<TPreferences>(view: SavedPrivateView<TPreferences>, filters: ListFilters, tablePreferences: TPreferences, now = new Date().toISOString()) {
+  return {
+    ...view,
+    filters: { ...filters, page: 1 },
+    sorting: { field: filters.sort || "updated_at", direction: filters.order === "asc" ? "asc" as const : "desc" as const },
+    tablePreferences,
+    updatedAt: now
+  };
+}
+
+export function renameSavedViewEntry<TPreferences>(views: SavedPrivateView<TPreferences>[], id: string, name: string, now = new Date().toISOString()) {
+  const cleanName = name.trim();
+  if (!cleanName) throw new Error("檢視名稱不可為空");
+  if (views.some((view) => view.id !== id && view.name.toLocaleLowerCase() === cleanName.toLocaleLowerCase())) throw new Error("已有同名檢視");
+  return views.map((view) => view.id === id ? { ...view, name: cleanName, updatedAt: now } : view);
+}
+
+export function deleteSavedViewEntry<TPreferences>(views: SavedPrivateView<TPreferences>[], id: string) {
+  return views.filter((view) => view.id !== id);
+}
+
 function browserStorage() {
   try {
     return typeof window === "undefined" ? undefined : window.localStorage;

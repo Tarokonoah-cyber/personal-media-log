@@ -14,7 +14,7 @@ export const privateSmartViews: PrivateSmartView[] = [
     label: "無 Tag",
     description: "直接列出尚未加上任何標籤的資料",
     keywords: ["tag", "標籤", "待整理"],
-    filters: { qualityView: "missing_tags" }
+    filters: { missingTags: true }
   },
   {
     id: "unrated",
@@ -28,7 +28,7 @@ export const privateSmartViews: PrivateSmartView[] = [
     label: "Metadata 不完整",
     description: "缺正式標題、片商或發行日期",
     keywords: ["metadata", "資料", "片商", "日期", "標題"],
-    filters: { qualityView: "incomplete_metadata" }
+    filters: { incompleteMetadata: true }
   },
   {
     id: "missing_people",
@@ -42,7 +42,7 @@ export const privateSmartViews: PrivateSmartView[] = [
     label: "疑似重複",
     description: "作品代號或標題與 metadata 高度相似，只供人工 review",
     keywords: ["duplicate", "重複", "番號", "作品代號", "標題"],
-    filters: { qualityView: "suspected_duplicate" }
+    filters: { duplicateCandidate: true }
   },
   {
     id: "unset_collection",

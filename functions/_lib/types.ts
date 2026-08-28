@@ -141,6 +141,12 @@ export interface ItemListParams {
   personFilters?: string[];
   missingPeople?: boolean;
   qualityView?: "missing_tags" | "incomplete_metadata" | "suspected_duplicate";
+  includeTags?: string[];
+  excludeTags?: string[];
+  metadataQualityBelow?: number;
+  missingTags?: boolean;
+  incompleteMetadata?: boolean;
+  duplicateCandidate?: boolean;
   hasNote?: "all" | "yes" | "no";
   hasCover?: "all" | "yes" | "no";
   watchStatus?: WatchStatus | "all";

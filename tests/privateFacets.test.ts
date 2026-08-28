@@ -10,6 +10,8 @@ const base: ItemListParams = {
   favoriteLevelFilters: ["normal"],
   personFilters: ["Actor"],
   tag: "劇情",
+  includeTags: ["戶外", "主觀視角"],
+  excludeTags: ["排除"],
   usedFilter: "used",
   privateStatus: "rewatch",
   page: 3,
@@ -42,6 +44,8 @@ describe("private facet filter exclusion", () => {
   it("ignores tag filters only for tag counts", () => {
     const next = filtersExcludingFacet(base, "tags");
     expect(next.tag).toBeUndefined();
+    expect(next.includeTags).toEqual([]);
+    expect(next.excludeTags).toEqual(["排除"]);
     expect(next.platformFilters).toEqual(["FC2"]);
     expect(next.favoriteLevelFilters).toEqual(["normal"]);
   });
